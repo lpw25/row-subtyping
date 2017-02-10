@@ -837,15 +837,12 @@ Proof.
   introv He Hf Hlk.
   lets Hlx : (eq_sym (fresh_length _ _ _ Hf)).
   gen Ks n.
-  induction Xs.
-  - induction Ks; intros; subst; tryfalse.
-    rew_kinds*.
-  - induction Ks; intros; subst; tryfalse.
-    rew_kinds.
-    apply environment_kind.
-    + eapply IHXs; intuition.
-      destruct* Hf.
-    + eapply fresh_kinds; auto.
+  induction Xs; destruct Ks;
+    intros; subst; tryfalse; rew_kinds*.
+  apply environment_kind.
+  - eapply IHXs; intuition.
+    destruct* Hf.
+  - eapply fresh_kinds; auto.
 Qed.
 
 (** Binding substitution is identity on bind_kind. *)

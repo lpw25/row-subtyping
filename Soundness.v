@@ -168,20 +168,15 @@ Lemma kinding_typ_substs : forall E F Xs T Ss K Js n,
   kinding (E & (environment_substs Xs Ss F)) (typ_substs Xs Ss T) K.
 Proof.
   intros.
-  gen Xs Ss Js T F.
-  induction n; introv Hlx Hls Hks Hlj Hkt; subst;
-    destruct Xs; destruct Ss; destruct Js; tryfalse; auto; simpl.
-  - rew_kinds* in Hkt.
-  - inversion Hlx.
-    inversion Hls.
-    inversion Hlj.
-    inversion Hks.
-    eapply IHn; eauto.
-    rew_kinds in Hkt.
-    eapply kinding_typ_subst.
-    + apply Hkt.
-    + apply* kinding_weakening_l.
-      eauto using environment_concat_inv_l.
+  gen Ss Js T F n.
+  induction Xs; destruct Js; destruct Ss;
+    introv Hkt Hks; intros; subst; tryfalse; rew_kinds* in Hkt.
+  inversion Hks.
+  eapply IHXs; eauto.
+  eapply kinding_typ_subst.
+  - apply Hkt.
+  - apply* kinding_weakening_l.
+    eauto using environment_concat_inv_l.
 Qed.
 
 Lemma kinding_typ_substs_l : forall E Xs T Ss K Js n,
@@ -234,15 +229,12 @@ Proof.
   introv Hk Hf Hlk.
   lets Hlx : (eq_sym (fresh_length _ _ _ Hf)).
   gen Ks n.
-  induction Xs.
-  - induction Ks; intros; subst; tryfalse.
-    rew_kinds*.
-  - induction Ks; intros; subst; tryfalse.
-    rew_kinds.
-    apply kinding_env_kind.
-    + eapply IHXs; intuition.
-      destruct* Hf.
-    + eapply fresh_kinds; auto.
+  induction Xs; destruct Ks;
+    intros; subst; tryfalse; rew_kinds*.
+  apply kinding_env_kind.
+  - eapply IHXs; intuition.
+    destruct* Hf.
+  - eapply fresh_kinds; auto.
 Qed.
 
 Hint Resolve kinding_env_kinds.
