@@ -1448,6 +1448,17 @@ Ltac fsets_abstract_singleton v :=
          rewrite in_singleton;
          reflexivity ).
 
+Ltac fsets_specialise A y :=
+  repeat
+    match goal with
+    | [ H : ?S3 = ?S4 |- _ ] =>
+      apply fset_extens_inv with (x := y) in H;
+      autorewrite with rew_fset in H
+    | [ H : forall (_ : A), _ \in _ -> _ \in _ |- _ ] =>
+      specialize (H y);
+      autorewrite with rew_fset in H
+    end.
+
 Ltac fsets_core :=
   repeat
     match goal with
@@ -1459,49 +1470,41 @@ Ltac fsets_core :=
     | [ H : exists x, x \in ?S |- _] =>
       destruct H
     end;
+  try apply fset_extens;
   try unfold subset in *;
   match goal with
   | [ |- forall (_ : ?A), _ \in _ -> _ \in _ ] =>
     let fresh_x := fresh "x" in
     intro fresh_x;
-    repeat
-      match goal with
-      | [ H : ?S3 = ?S4 |- _ ] =>
-        apply fset_extens_inv with (x := fresh_x) in H;
-        autorewrite with rew_fset in H
-      | [ H : forall (_ : A), _ \in _ -> _ \in _ |- _ ] =>
-        specialize (H fresh_x);
-        autorewrite with rew_fset in H
-      end;
+    fsets_specialise A fresh_x;
     autorewrite with rew_fset;
+    unfold notin in *;
+    try solve [intuition eauto; tryfalse];
     fsets_decide_all fresh_x tt;
     unfold notin;
-    intuition eauto;
-    tryfalse
-  | [ |- ?S1 = ?S2 ] =>
-    apply fset_extens;
-    fsets_core
-  | [ |- exists x, x \in ?S ] =>
-    econstructor;
+    solve [intuition eauto; tryfalse]
+  | [ H : ?x \in _ |- exists y, y \in _ ] =>
+    let A := type of x in
+    exists x;
+    fsets_specialise A x;
     autorewrite with rew_fset;
+    autorewrite with rew_fset in H;
+    unfold notin in *;
+    try solve [intuition eauto; tryfalse];
+    fsets_decide_all x tt;
     unfold notin;
-    intuition eauto;
-    tryfalse
-  | [ H : ?y \in _ |- False ] =>
-    let A := type of y in
-    repeat
-      match goal with
-      | [ H : ?S3 = ?S4 |- _ ] =>
-        apply fset_extens_inv with (x := y) in H;
-        autorewrite with rew_fset in H
-      | [ H : forall (_ : A), _ \in _ -> _ \in _ |- _ ] =>
-        specialize (H y);
-        autorewrite with rew_fset in H
-      end;
-      autorewrite with rew_fset in H;
-      fsets_decide_all y tt;
-      unfold notin in H;
-      solve [intuition eauto]
+    unfold notin in H;
+    solve [ intuition eauto; tryfalse ]
+  | [ H : ?x \in _ |- False ] =>
+    let A := type of x in
+    fsets_specialise A x;
+    autorewrite with rew_fset in H;
+    unfold notin in *;
+    try solve [intuition eauto; tryfalse];
+    fsets_decide_all x tt;
+    unfold notin;
+    unfold notin in H;
+    solve [intuition eauto]
   end.
 
 Ltac fsets_get E :=
@@ -1515,10 +1518,6 @@ Ltac fsets_get E :=
 Ltac fsets :=
   try unfold disjoint in *;
   match goal with
-  | [ |- (subset _ _) ] =>
-    solve [ fsets_core ]
-  | [ |- exists x, x \in ?A ] =>
-    solve [ fsets_core ]
   | [ |- ?A = ?B] =>
     let cs := fsets_get A in
     let ds := fsets_get B in
@@ -1526,23 +1525,8 @@ Ltac fsets :=
     assert (cs = ds) as Heq by fsets_core;
     rewrite Heq at 1;
     reflexivity
-  | [ |- ?A -> ?B ] =>
-    let cs := fsets_get A in
-    let ds := fsets_get B in
-    let Heq := fresh "Heq" in
-    assert (cs = ds) as Heq by fsets_core;
-    rewrite Heq at 1;
-    intro;
-    assumption
-  | [ |- False ] =>
-    fsets_core
-  | [ H : ?A |- ?B ] =>
-    let cs := fsets_get A in
-    let ds := fsets_get B in
-    let Heq := fresh "Heq" in
-    assert (cs = ds) as Heq by fsets_core;
-    rewrite Heq in H at 1;
-    assumption
+  | _ =>
+    solve [ fsets_core ]
   end.
 
 Hint Extern 2 => fsets : fsets.

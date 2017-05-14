@@ -927,8 +927,10 @@ Proof.
     false.
     constrs.
   - inversion H3; subst.
-    replace T1' with T1 by auto with constrs.
-    replace T2' with T2 by auto with constrs.
+    replace T1' with T1
+      by auto with constrs.
+    replace T2' with T2
+      by auto with constrs.
     auto.
   - replace T3 with T1 by auto.
     replace T4 with T2 by auto.
@@ -986,10 +988,12 @@ Ltac equal_kinds :=
         let Heq := fresh "Heq" in
         assert ((knd_row cs1) = (knd_row cs2)) as Heq
             by apply (kinding_unique Hk1 Hk2);
-        inversion Heq
+        inversion Heq;
+        clear Heq;
+        clear Hk2
       end
     end;
-  subst.
+  substs.
 
 Lemma row_projection_unique : forall E cs T K T' T'',
     row_projection E T K cs T' ->
@@ -1055,15 +1059,15 @@ Proof.
   - inversion Hpr2; subst; auto.
 Qed.
 
-Lemma type_equal_project : forall E cs1 T1 T2 T1' K,
+Lemma type_equal_project : forall E cs T1 T2 T1' K,
     type_equal E T1 T2 K ->
-    row_projection E T1 K cs1 T1' ->
+    row_projection E T1 K cs T1' ->
     exists T2',
-    row_projection E T2 K cs1 T2' /\
-    type_equal E T1' T2' (knd_row cs1).
+    row_projection E T2 K cs T2' /\
+    type_equal E T1' T2' (knd_row cs).
 Proof.
   introv He Hpr.
-  gen T1'.
+  gen T1' cs.
   induction He; introv Hpr.
   - eauto using type_equal_refl with kinding.
   - inversion Hpr; subst.
@@ -1073,8 +1077,147 @@ Proof.
     + exists (typ_or T1' T2').
       auto with kinding.
     + equal_kinds.
-      destruct (IHHe1 _ H6).
-      
+      destruct (IHHe1 _ _ H6) as [T1'' ?].
+      exists T1''.
+      iauto.
+    + equal_kinds.
+      destruct (IHHe2 _ _ H9) as [T2'' ?].
+      exists T2''.
+      iauto.
+    + equal_kinds.
+      destruct (IHHe1 _ _ H8) as [T1'' ?].
+      destruct (IHHe2 _ _ H11) as [T2'' ?].
+      exists (typ_or T1'' T2'').
+      split; iauto.
+      replace cs
+        with (cons_union (cons_inter cs cs1) (cons_inter cs cs2))
+        by constrs.
+      intuition auto with constrs.
+  - inversion Hpr.
+  - inversion Hpr.
+  - inversion Hpr; subst; eauto with kinding.
+  - inversion Hpr; subst; eauto with kinding.
+  - inversion Hpr; subst.
+    + exists (typ_meet T1' T2').
+      auto with kinding.
+    + destruct (IHHe1 _ _ H2) as [T1'' ?].
+      destruct (IHHe2 _ _ H6) as [T2'' ?].
+      exists (typ_meet T1'' T2'').
+      iauto.
+  - inversion Hpr; subst.
+    + exists (typ_join T1' T2').
+      auto with kinding.
+    + destruct (IHHe1 _ _ H2) as [T1'' ?].
+      destruct (IHHe2 _ _ H6) as [T2'' ?].
+      exists (typ_join T1'' T2'').
+      iauto.
+  - destruct (IHHe1 _ _ Hpr) as [T2' [Hpr2 ?]].
+    destruct (IHHe2 _ _ Hpr2) as [T3' ?].
+    iauto.
+  - replace (cons_union cs1 cs2)
+        with (cons_union cs2 cs1) in * by constrs.
+    assert (cons_disjoint cs2 cs1) by constrs.
+    inversion Hpr; subst.
+    + exists (typ_or T2 T1).
+      intuition auto using type_equal_symm.
+    + equal_kinds.
+      exists T1'.
+      replace (cons_union cs3 cs4)
+        with (cons_union cs4 cs3) in * by constrs.
+      auto using type_equal_refl with kinding.
+    + equal_kinds.
+      exists T1'.
+      replace (cons_union cs3 cs4)
+        with (cons_union cs4 cs3) in * by constrs.
+      auto using type_equal_refl with kinding.
+    + equal_kinds.
+      exists (typ_or T2' T1'0).
+      replace (cons_union cs3 cs4)
+        with (cons_union cs4 cs3) in * by constrs.
+      split; auto.
+      replace cs
+        with (cons_union (cons_inter cs cs3) (cons_inter cs cs4))
+        by constrs.
+      auto with kinding constrs.
+  - inversion Hpr; subst.
+    + exists (typ_or (typ_or T1 T2) T3).
+      split; auto.
+      rewrite cons_union_associative.
+      auto with constrs.
+    + assert (kinding E (typ_or T2 T3) (knd_row (cons_union cs2 cs3)))
+        by auto.
+      equal_kinds.
+      exists T1'.
+      split; auto using type_equal_refl with kinding.
+      rewrite cons_union_associative.
+      apply row_projection_or_l; auto with kinding; constrs.
+    + { inversion H14; subst.
+        - assert
+            (kinding E (typ_or T2 T3) (knd_row (cons_union cs2 cs3)))
+            by auto.
+          equal_kinds.
+          assert (cons_non_empty cs2) by auto.
+          assert (cons_non_empty cs3) by auto.
+          exists (typ_or T2 T3).
+          split; auto using type_equal_refl with kinding.
+          rewrite cons_union_associative.
+          apply row_projection_or_both; auto with constrs.
+          + replace (cons_inter (cons_union cs2 cs3)
+                                (cons_union cs4 cs2))
+              with cs2 by constrs.
+            apply row_projection_or_r; auto; constrs.
+          + replace (cons_inter (cons_union cs2 cs3) cs3)
+              with cs3 by constrs.
+            apply row_projection_identity.
+            auto with kinding.
+        - equal_kinds.
+          exists T1'.
+          split; auto using type_equal_refl with kinding.
+          rewrite cons_union_associative.
+          apply row_projection_or_l; auto; constrs.
+        - equal_kinds.
+          exists T1'.
+          split; auto using type_equal_refl with kinding.
+          rewrite cons_union_associative.
+          apply row_projection_or_r; auto; constrs.
+        - equal_kinds.
+          exists (typ_or T1'0 T2').
+          split; auto using type_equal_refl with kinding.
+          rewrite cons_union_associative.
+          apply row_projection_or_both; auto with constrs.
+          apply row_projection_or_r; auto with constrs.
+          replace (cons_inter cs (cons_union cs4 cs6))
+            with (cons_inter cs cs6) by constrs.
+          auto. }
+      + { inversion H16; substs.
+          - assert
+              (kinding E (typ_or T2 T3)
+                       (knd_row (cons_union cs2 cs3)))
+              by auto.
+            rewrite <- H15 in H14.
+            equal_kinds.
+            exists (typ_or (typ_or T1'0 T2) T3).
+            split.
+            + { rewrite <- H15.
+                rewrite cons_union_associative.
+                apply row_projection_or_both.
+                - constrs.
+                - constrs.
+                - constrs.
+
+            + assert
+                (kinding E (typ_or T1'0 (typ_or T2 T3)) (knd_row cs))
+                by auto with kinding.
+              assert
+                (kinding E (typ_or T1'0 (typ_or T2 T3))
+                         (knd_row (cons_union (cons_inter cs cs4)
+                                              (cons_union cs2 cs3)))).
+              { apply row_projection_kinding in H13.
+                apply kinding_or; auto with constrs. }
+              equal_kinds.
+              apply type_equal_or_associative_l;
+                auto with constrs kinding.
+              
 
 Lemma subtype_or_project : forall E cs1 cs2 T1 T1' T2 T2',
     cons_disjoint cs1 cs2 ->
