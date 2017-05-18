@@ -1619,7 +1619,7 @@ Hint Resolve cons_non_empty_kind.
 Lemma kinding_regular : forall E T K,
   kinding E T K -> environment E /\ type T /\ kind K.
 Proof.
-  split; induction H;
+  split; induction H; subst;
     intuition eauto using kind_from_env with constrs.
   - inversion H3.
     inversion H5.
@@ -1788,6 +1788,7 @@ Ltac invert_all_kinds Hs :=
 Ltac kinds :=
   match goal with
   | [ |- kind (knd_row _) ] =>
+    subst;
     invert_all_kinds tt;
     subst; apply kind_row; constrs
   end.

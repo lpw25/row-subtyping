@@ -6,6 +6,31 @@
 Set Implicit Arguments.
 Require Import LibLN Definitions Infrastructure.
 
+(*
+(* TODO put this somewhere else *)
+Hint Extern 1 (kinding ?E ?T ?K) =>
+  match goal with
+  | H1: kinding ?E ?T1 (knd_row ?cons1),
+    H2: kinding ?E ?T2 (knd_row ?cons2) |-
+    kinding ?E (typ_or ?T1 ?T2) _ =>
+    apply kinding_or with (cs1 := cons1) (cs2 := cons2)
+  | H1: kinding ?E ?T1 (knd_row ?cons1),
+    H2: kinding ?E ?T2 (knd_row ?cons2),
+    H3: kinding ?E ?T3 (knd_row ?cons3) |- 
+    kinding ?E ?T _ =>
+    match T with
+    | typ_or ?T1 (typ_or ?T2 ?T3) =>
+      apply kinding_or with
+        (cs1 := cons1) (cs2 := cons_union cons2 cons3)
+    | typ_or (typ_or ?T1 ?T2) ?T3 =>
+      apply kinding_or with
+        (cs1 := cons_union cons1 cons2) (cs2 := cons3)
+    | _ => idtac
+    end
+  | _ => idtac
+  end.
+*)
+
 (* *************************************************************** *)
 (** * Properties of kinding *)
 
@@ -20,7 +45,7 @@ Lemma kinding_weakening : forall E F G T K,
    kinding (E & F & G) T K.
 Proof.
   introv Hk He.
-  inductions Hk; auto with weaken.
+  inductions Hk; eauto with weaken.
 Qed.
 
 Hint Resolve kinding_weakening : weaken.
@@ -182,7 +207,7 @@ Lemma kinding_typ_subst : forall E F X T S K J,
 Proof.
   introv Hkt Hks.
   gen_eq G : (E & X ~:: J & F).
-  induction Hkt; introv Heq; subst; simpl typ_subst; auto.
+  induction Hkt; introv Heq; subst; simpl typ_subst; eauto.
   - case_var.
     + lets Hb : (binds_middle_eq_inv H0 (ok_from_environment H)).
       inversion Hb; subst.
@@ -511,8 +536,8 @@ Proof.
   induction Hk1; introv Hk2; inversion Hk2; subst; auto.
   - lets Hke : (binds_func H0 H4).
     inversion Hke; auto.
-  - lets Hke1 : (IHHk1_1 _ H4).
-    lets Hke2 : (IHHk1_2 _ H6).
+  - lets Hke1 : (IHHk1_1 _ H3).
+    lets Hke2 : (IHHk1_2 _ H4).
     inversion Hke1.
     inversion Hke2.
     reflexivity.
@@ -573,10 +598,13 @@ Lemma type_equal_symm : forall E T1 T2 K,
 Proof.
   introv He.
   induction He; eauto.
-  - assert (cons_union cs1 cs2 = cons_union cs2 cs1)
-      as comm by constrs.
-    rewrite comm.
-    auto with constrs.
+  - subst.
+    debug eauto with constrs.
+    eapply type_equal_or_commutative; eauto with constrs.
+    + eauto.
+    + eauto.
+      with (cs1 := cs2) (cs2 := cs1);
+      auto with constrs.
 Qed.
 
 (* *************************************************************** *)
@@ -608,18 +636,14 @@ Hint Resolve type_equal_meet_idempotent.
 (* *************************************************************** *)
 (** Well-kindedness *)
 
+
 Lemma type_equal_kinding : forall E T1 T2 K,
     type_equal E T1 T2 K ->
     kinding E T1 K /\ kinding E T2 K.
 Proof.
   introv He.
-  induction He; split; intuition auto with constrs.
-  - rewrite cons_union_commutative.
-    auto with constrs.
-  - rewrite cons_union_associative.
-    auto with constrs.
-  - rewrite cons_union_associative.
-    auto with constrs.
+  induction He; split; subst;
+    intuition auto with constrs; eauto with constrs.
 Qed.
 
 Hint Extern 1 (kinding ?E ?T ?K) =>
@@ -822,82 +846,175 @@ Qed.
 Hint Resolve subtype_typ_subst : typ_subst.
 
 (* *************************************************************** *)
+(* Let's try projection as a function *)
+(*
+Fixpoint projection (env : env) (cs : constructors) (t : typ)
+  : option (option typ) :=
+  match t with
+  | typ_bvar _ => None
+  | typ_fvar v =>
+      match EnvOps.get v env with
+      | None => None
+      | Some (bind_typ _) => None
+      | Some (bind_knd knd_type) => None
+      | Some (bind_knd (knd_row cs')) =>
+          match cons_subset cs' cs with
+          | True => Some (Some t)
+          | False =>
+            let cs'' := cons_inter cs cs' in
+            match cons_non_empty cs'' with
+            | True => None
+            | False => Some None
+            end
+          end
+      end
+  | typ_constructor c _ =>
+      match mem c cs with
+      | True => Some (Some t)
+      | _ => Some None
+      end
+  | typ_or t1 t2 =>
+      match projection t1, projection t2 with
+      | Some (Some p1), Some (Some p2) => Some (Some (typ_or p1 p2))
+      | Some (Some p), Some None => Some (Some p)
+      | Some None, Some (Some p) => Some (Some p)
+      | Some None, Some None => Some None
+      | _, _ => None
+      end
+  | typ_variant _ _ => None
+  | typ_arrow _ _ => None
+  | typ_top cs' =>
+      let cs'' := cons_inter cs cs' in
+      match cons_non_empty cs'' with
+      | True => Some (Some (typ_top cs''))
+      | False => Some None
+      end
+  | typ_bot cs' =>
+      let cs'' := cons_inter cs cs' in
+      match cons_non_empty cs'' with
+      | True => Some (Some (typ_bot cs''))
+      | False => Some None
+      end
+  | typ_meet t1 t2 =>
+      match projection t1, projection t2 with
+      | Some (Some p1), Some (Some p2) => Some (Some (typ_meet p1 p2))
+      | Some None, Some None => Some None
+      | _, _ => None
+      end
+  | typ_join t1 t2 =>
+      match projection t1, projection t2 with
+      | Some (Some p1), Some (Some p2) => Some (Some (typ_join p1 p2))
+      | Some None, Some None => Some None
+      | _, _ => None
+      end
+  end.
+*)
+
+(* *************************************************************** *)
 (** TODO: Describe and rename these lemmas *)
 
-Inductive row_projection : env -> typ -> knd -> constructors -> typ -> Prop :=
-  | row_projection_identity : forall E cs T,
-      kinding E T (knd_row cs) ->
-      row_projection E T (knd_row cs) cs T
-  | row_projection_or_l : forall E cs1 cs2 cs3 T1 T2 T1',
-      cons_subset cs1 cs2 ->
-      cons_disjoint cs2 cs3 ->
-      row_projection E T1 (knd_row cs2) cs1 T1' ->
-      kinding E T2 (knd_row cs3) ->
-      row_projection E (typ_or T1 T2) (knd_row (cons_union cs2 cs3)) cs1 T1'
-  | row_projection_or_r : forall E cs1 cs2 cs3 T1 T2 T2',
-      cons_subset cs1 cs3 ->
-      cons_disjoint cs2 cs3 ->
-      kinding E T1 (knd_row cs2) ->
-      row_projection E T2 (knd_row cs3) cs1 T2' ->
-      row_projection E (typ_or T1 T2) (knd_row (cons_union cs2 cs3)) cs1 T2'
-  | row_projection_or_both : forall E cs1 cs2 cs3 T1 T1' T2 T2',
-      cons_subset cs1 (cons_union cs2 cs3) ->
-      cons_non_empty (cons_inter cs1 cs2) ->
-      cons_non_empty (cons_inter cs1 cs3) ->
-      cons_disjoint cs2 cs3 ->
-      row_projection E T1 (knd_row cs2) (cons_inter cs1 cs2) T1' ->
-      row_projection E T2 (knd_row cs3) (cons_inter cs1 cs3) T2' ->
-      row_projection E (typ_or T1 T2) (knd_row (cons_union cs2 cs3)) cs1 (typ_or T1' T2')
-  | row_projection_meet : forall E K cs T1 T2 T3 T4,
-      row_projection E T1 K cs T3 ->
-      row_projection E T2 K cs T4 ->
-      row_projection E (typ_meet T1 T2) K cs (typ_meet T3 T4)
-  | row_projection_join : forall E K cs T1 T2 T3 T4,
-      row_projection E T1 K cs T3 ->
-      row_projection E T2 K cs T4 ->
-      row_projection E (typ_join T1 T2) K cs (typ_join T3 T4)
+Inductive row_projection : env -> typ -> constructors ->
+                           typ -> constructors -> Prop :=
+  | row_projection_var : forall E cs X,
+      environment E ->
+      binds X (bind_knd (knd_row cs)) E ->
+      row_projection E (typ_fvar X) cs (typ_fvar X) cs
+  | row_projection_constructor : forall E c cs T,
+      kinding E T knd_type ->
+      cs = cons_finite \{c} ->
+      row_projection E (typ_constructor c T) cs
+                       (typ_constructor c T) cs
+  | row_projection_or : forall E cs1 cs2 cs3 cs4 T1 T2 T,
+      cons_disjoint cs3 cs4 ->
+      cs2 = cons_union cs3 cs4 ->
+      kinding E T1 (knd_row cs3) ->
+      kinding E T2 (knd_row cs4) ->
+      or_projection E T1 cs3 T2 cs4 T cs1 ->
+      row_projection E (typ_or T1 T2) cs2 T cs1
+  | row_projection_meet : forall E cs1 cs2 T1 T2 T3 T4,
+      row_projection E T1 cs2 T3 cs1 ->
+      row_projection E T2 cs2 T4 cs1 ->
+      row_projection E (typ_meet T1 T2) cs2 (typ_meet T3 T4) cs1
+  | row_projection_join : forall E cs1 cs2 T1 T2 T3 T4,
+      row_projection E T1 cs2 T3 cs1 ->
+      row_projection E T2 cs2 T4 cs1 ->
+      row_projection E (typ_join T1 T2) cs2 (typ_join T3 T4) cs1
   | row_projection_bot : forall E cs1 cs2,
       environment E ->
       cons_non_empty cs1 ->
       cons_subset cs1 cs2 ->
-      row_projection E (typ_bot cs2) (knd_row cs2) cs1 (typ_bot cs1)
+      row_projection E (typ_bot cs2) cs2 (typ_bot cs1) cs1
   | row_projection_top : forall E cs1 cs2,
       environment E ->
       cons_non_empty cs1 ->
       cons_subset cs1 cs2 ->
-      row_projection E (typ_top cs2) (knd_row cs2) cs1 (typ_top cs1).
+      row_projection E (typ_top cs2) cs2 (typ_top cs1) cs1
 
-Hint Constructors row_projection.
+with or_projection : env ->
+                     typ -> constructors ->
+                     typ -> constructors ->
+                     typ -> constructors -> Prop :=
+  | or_left : forall E T1 cs1 T2 cs2 T cs,
+      cons_subset cs cs1 ->
+      row_projection E T1 cs1 T cs ->
+      or_projection E T1 cs1 T2 cs2 T cs
+  | or_right : forall E T1 cs1 T2 cs2 T cs,
+      cons_subset cs cs2 ->
+      row_projection E T2 cs2 T cs ->
+      or_projection E T1 cs1 T2 cs2 T cs
+  | or_both : forall E T1 cs1 T2 cs2 T1' T2' cs,
+      cons_non_empty (cons_inter cs cs1) ->
+      cons_non_empty (cons_inter cs cs2) ->
+      cs = (cons_union (cons_inter cs cs1) (cons_inter cs cs2)) ->
+      row_projection E T1 cs1 T1' (cons_inter cs cs1) ->
+      row_projection E T2 cs2 T2' (cons_inter cs cs2) ->
+      or_projection E T1 cs1 T2 cs2 (typ_or T1' T2') cs.
 
-Lemma row_projection_kinding_ind : forall E cs T K T',
-    row_projection E T K cs T' ->
-    (exists cs', K = knd_row cs') /\ kinding E T K /\ kinding E T' (knd_row cs).
+Hint Constructors row_projection or_projection.
+
+Scheme row_projection_mut := Induction for row_projection Sort Prop
+  with or_projection_mut := Induction for or_projection Sort Prop.
+
+Combined Scheme projection_mut from
+         row_projection_mut, or_projection_mut.
+
+Lemma row_projection_identity : forall E cs T,
+    kinding E T (knd_row cs) ->
+    row_projection E T cs T cs.
 Proof.
-  introv Hr.
-  induction Hr; splits; iauto.
-  - replace cs1
-        with (cons_union (cons_inter cs1 cs2)
-                         (cons_inter cs1 cs3))
-    by constrs.
+  introv Hk.
+  gen_eq K : (knd_row cs).
+  gen cs.
+  induction Hk; introv Hknd; inversion Hknd; subst; auto with constrs.
+  - apply row_projection_or with (cs3 := cs1) (cs4 := cs2); auto.
+    apply or_both;
+      replace (cons_inter (cons_union cs1 cs2) cs1)
+        with cs1
+        by constrs;
+      replace (cons_inter (cons_union cs1 cs2) cs2)
+        with cs2
+        by constrs;
+      auto.
+Qed.    
+
+Lemma row_projection_kinding_mut :
+    (forall E T cs T' cs',
+    row_projection E T cs T' cs' ->
+    kinding E T (knd_row cs) /\ kinding E T' (knd_row cs'))
+/\ (forall E T1 cs1 T2 cs2 T' cs',
+    or_projection E T1 cs1 T2 cs2 T' cs' ->
+    cons_disjoint cs1 cs2 ->
+    kinding E T1 (knd_row cs1) ->
+    kinding E T2 (knd_row cs2) ->
+    kinding E T' (knd_row cs')).
+Proof.
+  apply projection_mut; intros; substs; intuition auto with constrs.
+  - rewrite e.
     auto with constrs.
-  - destruct IHHr1 as [[cs' Heq] ?].
-    rewrite Heq in *.
-    iauto.
-  - destruct IHHr1 as [[cs' Heq] ?].
-    rewrite Heq in *.
-    iauto.
-  - auto with constrs.
-  - auto with constrs.
 Qed.
 
-Lemma row_projection_kinding : forall E cs T K T',
-    row_projection E T K cs T' ->
-    kinding E T K /\ kinding E T' (knd_row cs).
-Proof.
-  introv Hpr.
-  apply row_projection_kinding_ind in Hpr.
-  iauto.
-Qed.
+Definition row_projection_kinding :=
+  proj1 row_projection_kinding_mut.
 
 Hint Extern 1 (kinding ?E ?T (knd_row ?cs)) =>
   match goal with
@@ -1218,142 +1335,6 @@ Proof.
               apply type_equal_or_associative_l;
                 auto with constrs kinding.
               
-
-Lemma subtype_or_project : forall E cs1 cs2 T1 T1' T2 T2',
-    cons_disjoint cs1 cs2 ->
-    kinding E T1 (knd_row cs1) ->
-    kinding E T2 (knd_row cs2) ->
-    kinding E T1' (knd_row cs1) ->
-    kinding E T2' (knd_row cs2) ->
-    type_equal E (typ_or T1 T2) (typ_or T1' T2')
-               (knd_row (cons_union cs1 cs2)) ->
-    type_equal E T1 T1' (knd_row cs1)
-    /\ type_equal E T2 T2' (knd_row cs2).
-Proof.
-  introv Hd Hk1 Hk2 Hk3 Hk4 He.
-  remember (typ_or T1 T2) as Tor1.
-  remember (typ_or T1' T2') as Tor2.
-  remember (knd_row cs1) as K1.
-  remember (knd_row cs2) as K2.
-  remember (knd_row (cons_union cs1 cs2)) as Ku.
-  induction He; subst; tryfalse.
-  - inversion HeqTor1.
-    inversion HeqTor2.
-    subst.
-    intuition eauto using type_equal_replace_kind.
-  - 
-  - inversion HeqTor1.
-    inversion HeqTor2.
-    rewrite <- H3 in *.
-    rewrite <- H6 in *.
-    assert (knd_row cs1 = knd_row cs2)
-      as Heq by eauto using kinding_unique.
-    inversion Heq.
-    subst.
-    skip.
-  - inversion HeqTor1.
-    inversion HeqTor2.
-    subst.
-    inversion Hk2; tryfalse.
-    subst.
-    assert (knd_row cs6 = knd_row (cons_union cs5 cs6))
-      as Heq by eauto using kinding_unique.
-    skip.
-  - inversion HeqTor1.
-    inversion HeqTor2.
-    subst.
-    inversion Hk4; tryfalse.
-    subst.
-    assert (knd_row cs6 = knd_row (cons_union cs5 cs6))
-      as Heq by eauto using kinding_unique.
-    skip.
-Foo.
-    
-Lemma subtype_or_split_l : forall E c cs T1 T2 T3,
-    kinding E T1 (knd_row (cons_finite cs)) ->
-    kinding E T2 (knd_row (cons_cofinite cs)) ->
-    kinding E T3 knd_type ->
-    mem c cs ->
-    subtype E (typ_or (typ_constructor c T3)
-                      (typ_bot (cons_cofinite \{c})))
-            (typ_or T1 T2) ->
-    subtype E (typ_or (typ_constructor c T3)
-                      (typ_bot (cons_cofinite \{c})))
-            (typ_or T1 (typ_bot (cons_cofinite cs))).
-Proof.
-  unfold subtype.
-  introv Hk1 Hk2 Hk3 Hin Hs.
-  assert (type_equal E
-            (typ_or (typ_constructor c T3)
-                    (typ_bot (cons_cofinite \{c})))
-            (typ_or (typ_or
-                       (typ_constructor c T3)
-                       (typ_bot (cons_finite (cs \- \{c}))))
-                    (typ_bot (cons_cofinite cs)))
-            (knd_row cons_universe)).
-  { apply type_equal_trans with
-      (typ_or (typ_constructor c T3)
-              (typ_or (typ_bot (cons_finite (cs \- \{c})))
-                      (typ_bot (cons_cofinite cs)))).
-    - rewrite <- cons_union_universe with \{c}.
-      apply type_equal_or; auto using type_equal_refl with constrs.
-      replace (cons_cofinite \{c})
-        with (cons_union (cons_finite (cs \- \{c}))
-                         (cons_cofinite cs))
-        by constrs.
-      apply type_equal_or_bot_r; auto with constrs.
-    - replace cons_universe
-        with (cons_union (cons_finite \{c})
-                (cons_union (cons_finite (cs \- \{c}))
-                            (cons_cofinite cs)))
-        by constrs.
-      apply type_equal_or_associative_l; auto with constrs. }
-  rewrite <- cons_union_universe with cs in *.
-  apply type_equal_trans with
-    (typ_or (typ_or (typ_constructor c T3)
-                    (typ_bot (cons_finite (cs \- \{c}))))
-            (typ_bot (cons_cofinite cs))); auto.
-  apply type_equal_trans with
-    (typ_meet
-       (typ_or (typ_or (typ_constructor c T3)
-                    (typ_bot (cons_finite (cs \- \{c}))))
-            (typ_bot (cons_cofinite cs)))
-       (typ_or T1 (typ_bot (cons_cofinite cs))));
-    auto using type_equal_symm, type_equal_refl with constrs.
-  apply type_equal_trans with
-    (typ_or
-       (typ_meet (typ_or (typ_constructor c T3)
-                    (typ_bot (cons_finite (cs \- \{c}))))
-                 T1)
-       (typ_meet (typ_bot (cons_cofinite cs))
-                 (typ_bot (cons_cofinite cs)))); auto.
-  - apply type_equal_or; auto with constrs.
-    +         
-    + eauto using type_equal_symm, type_equal_meet_idempotent.
-  - apply type_equal_or_meet_distribution_l; auto with constrs.
-    replace (cons_finite cs)
-        with (cons_union (cons_finite \{c})
-                (cons_finite (cs \- \{c})))
-        by auto with constrs.
-    apply kinding_or; auto with constrs. 
-Qed.
-
-Lemma subtype_or_split_r : forall E cs T1 T2,
-    kinding E T1 (knd_row (cons_finite cs)) ->
-    kinding E T2 (knd_row (cons_cofinite cs)) ->
-    subtype E (typ_or T1 T2) (typ_or (typ_bot (cons_finite cs)) T2).
-Proof.
-  unfold subtype.
-  introv Hk1 Hk2.
-  rewrite <- cons_union_universe with cs.
-  apply type_equal_trans with
-    (typ_or (typ_meet T1 (typ_bot (cons_finite cs)))
-            (typ_meet T2 T2)).
-  - apply type_equal_or;
-      auto using type_equal_meet_idempotent, type_equal_symm
-        with constrs.
-  - apply type_equal_or_meet_distribution_l; auto with constrs.
-Qed.
 
 (* *************************************************************** *)
 (** * Properties of typing *)
