@@ -1785,12 +1785,29 @@ Ltac invert_all_kinds Hs :=
     end
   end.
 
-Ltac kinds :=
-  match goal with
-  | [ |- kind (knd_row _) ] =>
-    subst;
-    invert_all_kinds tt;
-    subst; apply kind_row; constrs
+Ltac invert_all_types Hs :=
+  try match goal with
+  | [ H : type (typ_constructor _)  |- _ ] =>
+    invert_all_types_body H Hs
+  | [ H : type (typ_or _ _)  |- _ ] =>
+    invert_all_types_body H Hs
+  | [ H : type (typ_variant _ _)  |- _ ] =>
+    invert_all_types_body H Hs
+  | [ H : type (typ_arrow _ _)  |- _ ] =>
+    invert_all_types_body H Hs
+  | [ H : type (typ_meet _ _)  |- _ ] =>
+    invert_all_types_body H Hs
+  | [ H : type (typ_join _ _)  |- _ ] =>
+    invert_all_types_body H Hs
+  end
+
+with invert_all_types_body H Hs :=
+  let b := inList H Hs in
+  match b with
+  | true => fail 1
+  | false =>
+    try invert_all_types (H, Hs);
+    inversion H
   end.
 
 (** Type equality preserves regularity *)
@@ -1800,7 +1817,21 @@ Lemma type_equal_regular : forall E T1 T2 K,
     environment E /\ type T1 /\ type T2 /\ kind K.
 Proof.
   introv Ht.
-  induction Ht; intuition auto; try kinds.
+  induction Ht; intuition auto;
+    match goal with
+    | [ |- kind (knd_row _) ] =>
+      subst;
+      invert_all_kinds tt;
+      subst;
+      apply kind_row;
+      constrs
+    | [ |- type _ ] =>
+      subst;
+      invert_all_types tt;
+      invert_all_types tt;
+      subst;
+      auto
+    end.
 Qed.
 
 Lemma subtype_regular : forall E T1 T2,

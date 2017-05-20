@@ -6,31 +6,6 @@
 Set Implicit Arguments.
 Require Import LibLN Definitions Infrastructure.
 
-(*
-(* TODO put this somewhere else *)
-Hint Extern 1 (kinding ?E ?T ?K) =>
-  match goal with
-  | H1: kinding ?E ?T1 (knd_row ?cons1),
-    H2: kinding ?E ?T2 (knd_row ?cons2) |-
-    kinding ?E (typ_or ?T1 ?T2) _ =>
-    apply kinding_or with (cs1 := cons1) (cs2 := cons2)
-  | H1: kinding ?E ?T1 (knd_row ?cons1),
-    H2: kinding ?E ?T2 (knd_row ?cons2),
-    H3: kinding ?E ?T3 (knd_row ?cons3) |- 
-    kinding ?E ?T _ =>
-    match T with
-    | typ_or ?T1 (typ_or ?T2 ?T3) =>
-      apply kinding_or with
-        (cs1 := cons1) (cs2 := cons_union cons2 cons3)
-    | typ_or (typ_or ?T1 ?T2) ?T3 =>
-      apply kinding_or with
-        (cs1 := cons_union cons1 cons2) (cs2 := cons3)
-    | _ => idtac
-    end
-  | _ => idtac
-  end.
-*)
-
 (* *************************************************************** *)
 (** * Properties of kinding *)
 
@@ -581,6 +556,7 @@ Qed.
 (* *************************************************************** *)
 (** Reflexivity *)
 
+(*
 Lemma type_equal_refl : forall E T K,
     kinding E T K ->
     type_equal E T T K.
@@ -588,6 +564,7 @@ Proof.
   introv Hk.
   induction* Hk.
 Qed.
+*)
 
 (* *************************************************************** *)
 (** Symmetry *)
@@ -598,13 +575,81 @@ Lemma type_equal_symm : forall E T1 T2 K,
 Proof.
   introv He.
   induction He; eauto.
-  - subst.
-    debug eauto with constrs.
-    eapply type_equal_or_commutative; eauto with constrs.
-    + eauto.
-    + eauto.
-      with (cs1 := cs2) (cs2 := cs1);
-      auto with constrs.
+Qed.
+
+(* *************************************************************** *)
+(** Transitivity *)
+
+Lemma type_equal_trans_ind : forall E T2 T3 K,
+    type_equal E T2 T3 K ->
+    (forall T4, type_equal E T3 T4 K -> type_equal E T2 T4 K)
+    /\ (forall T1, type_equal E T1 T2 K -> type_equal E T1 T3 K).
+Proof.    
+  introv He1.
+  induction He1; split; introv He2; intuition auto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - 
+  - eauto.
+
+
+
+
+Lemma type_equal_trans : forall E T1 T2 T3 K,
+    type_equal E T1 T2 K ->
+    type_equal E T2 T3 K ->
+    type_equal E T1 T3 K.
+Proof.
+  introv He1.
+  gen T3.
+  induction He1; introv He2; auto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+    eapply IHHe1.
+    apply type_equal_symm.
+    apply type_equal_or_associative_r.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
+  - eauto.
 Qed.
 
 (* *************************************************************** *)
