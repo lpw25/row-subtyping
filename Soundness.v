@@ -10,6 +10,84 @@ Require Import LibLN Definitions Infrastructure.
 (** * Properties of kinding *)
 
 (* *************************************************************** *)
+(** Inverses *)
+
+Lemma kinding_constructor_inv : forall E c T K,
+    kinding E (typ_constructor c T) K ->
+    kinding E T knd_type /\
+    K = (knd_row (cons_finite \{c})).
+Proof.
+  introv Hk.
+  inversion Hk; subst.
+  auto.
+Qed.
+
+Lemma kinding_or_inv : forall E T1 T2 K,
+    kinding E (typ_or T1 T2) K ->
+    exists cs1 cs2,
+    kinding E T1 (knd_row cs1) /\
+    kinding E T2 (knd_row cs2) /\
+    K = (knd_row (cons_union cs1 cs2)).
+Proof.
+  introv Hk.
+  inversion Hk; subst.
+  exists cs1 cs2.
+  auto.
+Qed.
+
+Lemma kinding_variant_inv : forall E T1 T2 K,
+    kinding E (typ_variant T1 T2) K ->
+    kinding E T1 (knd_row cons_universe) /\
+    kinding E T2 (knd_row cons_universe) /\
+    K = knd_type.
+Proof.
+  introv Hk.
+  inversion Hk; subst.
+  auto.
+Qed.
+
+Lemma kinding_arrow_inv : forall E T1 T2 K,
+    kinding E (typ_arrow T1 T2) K ->
+    kinding E T1 knd_type /\
+    kinding E T2 knd_type /\
+    K = knd_type.
+Proof.
+  introv Hk.
+  inversion Hk; subst.
+  auto.
+Qed.
+
+Lemma kinding_meet_inv : forall E T1 T2 K,
+    kinding E (typ_meet T1 T2) K ->
+    exists cs,
+    kinding E T1 (knd_row cs) /\
+    kinding E T2 (knd_row cs) /\
+    K = knd_row cs.
+Proof.
+  introv Hk.
+  inversion Hk; subst.
+  exists cs.
+  auto.
+Qed.
+
+Lemma kinding_join_inv : forall E T1 T2 K,
+    kinding E (typ_join T1 T2) K ->
+    exists cs,
+    kinding E T1 (knd_row cs) /\
+    kinding E T2 (knd_row cs) /\
+    K = knd_row cs.
+Proof.
+  introv Hk.
+  inversion Hk; subst.
+  exists cs.
+  auto.
+Qed.
+
+Hint Resolve kinding_constructor_inv kinding_or_inv
+     kinding_variant_inv kinding_arrow_inv
+     kinding_meet_inv kinding_join_inv: kinding.
+
+(* *************************************************************** *)
 (** Weakening *)
 
 Hint Resolve binds_weaken : weaken.
@@ -554,141 +632,91 @@ Qed.
 (** * Properties of type equality *)
 
 (* *************************************************************** *)
-(** Reflexivity *)
-
-(*
-Lemma type_equal_refl : forall E T K,
-    kinding E T K ->
-    type_equal E T T K.
-Proof.
-  introv Hk.
-  induction* Hk.
-Qed.
-*)
-
-(* *************************************************************** *)
-(** Symmetry *)
-
-Lemma type_equal_symm : forall E T1 T2 K,
-    type_equal E T1 T2 K ->
-    type_equal E T2 T1 K.
-Proof.
-  introv He.
-  induction He; eauto.
-Qed.
-
-(* *************************************************************** *)
 (** Transitivity *)
-
-Lemma type_equal_trans_ind : forall E T2 T3 K,
-    type_equal E T2 T3 K ->
-    (forall T4, type_equal E T3 T4 K -> type_equal E T2 T4 K)
-    /\ (forall T1, type_equal E T1 T2 K -> type_equal E T1 T3 K).
-Proof.    
-  introv He1.
-  induction He1; split; introv He2; intuition auto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - 
-  - eauto.
-
-
-
 
 Lemma type_equal_trans : forall E T1 T2 T3 K,
     type_equal E T1 T2 K ->
     type_equal E T2 T3 K ->
     type_equal E T1 T3 K.
 Proof.
-  introv He1.
-  gen T3.
-  induction He1; introv He2; auto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-    eapply IHHe1.
-    apply type_equal_symm.
-    apply type_equal_or_associative_r.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
-  - eauto.
+  introv He.
+  induction He; eauto 0 3.
 Qed.
 
-(* *************************************************************** *)
-(** Idempotence of join and meet *)
-
-Lemma type_equal_join_idempotent : forall E T cs,
-    kinding E T (knd_row cs) ->
-    type_equal E (typ_join T T) T (knd_row cs).
-Proof.
-  introv Hk.
-  apply type_equal_trans
-    with (typ_join T (typ_meet T (typ_top cs)));
-    auto using type_equal_refl.
-Qed.
-
-Lemma type_equal_meet_idempotent : forall E T cs,
-    kinding E T (knd_row cs) ->
-    type_equal E (typ_meet T T) T (knd_row cs).
-Proof.
-  introv Ht.
-  apply type_equal_trans
-    with (typ_meet T (typ_join T (typ_bot cs)));
-    auto using type_equal_refl.
-Qed.
-
-Hint Resolve type_equal_join_idempotent.
-Hint Resolve type_equal_meet_idempotent.
-    
 (* *************************************************************** *)
 (** Well-kindedness *)
 
+Ltac invert_all_kinds2 Hs :=
+  try match goal with
+  | [ H : kinding _ (typ_constructor _ _) _ |- _ ] =>
+    invert_all_kinds2_body Hs H
+  | [ H : kinding _ (typ_or _ _) _ |- _ ] =>
+    invert_all_kinds2_body Hs H
+  | [ H : kinding _ (typ_variant _ _) _ |- _ ] =>
+    invert_all_kinds2_body Hs H
+  | [ H : kinding _ (typ_arrow _ _) _ |- _ ] =>
+    invert_all_kinds2_body Hs H
+  | [ H : kinding _ (typ_meet _ _) _ |- _ ] =>
+    invert_all_kinds2_body Hs H
+  | [ H : kinding _ (typ_join _ _) _ |- _ ] =>
+    invert_all_kinds2_body Hs H
+  | [ H : kinding _ (typ_top _) _ |- _ ] =>
+    invert_all_kinds2_body Hs H
+  | [ H : kinding _ (typ_bot _) _ |- _ ] =>
+    invert_all_kinds2_body Hs H
+  end
+
+with invert_all_kinds2_body Hs H :=
+  let b := inList H Hs in
+  match b with
+  | true => fail 1
+  | false =>
+    try invert_all_kinds2 (H, Hs);
+    inversion H
+  end.
+
+(* TODO move this *)
+Lemma kinding_unique_row : forall E T cs1 cs2,
+    kinding E T (knd_row cs1) ->
+    kinding E T (knd_row cs2) ->
+    cs1 = cs2.
+Proof.
+  introv H1 H2.
+  remember (kinding_unique H1 H2) as Heq.
+  inversion Heq.
+  easy.
+Qed.
 
 Lemma type_equal_kinding : forall E T1 T2 K,
     type_equal E T1 T2 K ->
     kinding E T1 K /\ kinding E T2 K.
 Proof.
   introv He.
-  induction He; split; subst;
-    intuition auto with constrs; eauto with constrs.
+  induction He; split; intuition auto;
+    invert_all_kinds2 tt;
+    invert_all_kinds2 tt;
+    subst;
+    repeat match goal with
+    | H1 : kinding ?E ?T ?K,
+      H2 : kinding ?E ?T ?K |- _ =>
+      clear H1
+    | H1 : kinding ?E ?T (knd_row ?cs1),
+      H2 : kinding ?E ?T (knd_row ?cs2) |- _ =>
+      replace cs1 with cs2 in *
+        by (apply (kinding_unique_row H2 H1))
+    | H1 : kinding ?E ?T ?K1,
+      H2 : kinding ?E ?T knd_type |- _ =>
+      replace K1 with knd_type in *
+        by apply (kinding_unique H2 H1)
+    | H1 : kinding ?E ?T ?K1,
+      H2 : kinding ?E ?T (knd_row ?cs) |- _ =>
+      replace K1 with (knd_row cs) in *
+        by apply (kinding_unique H2 H1)
+    end;
+    eauto.
+  - eauto with constrs.
+  - eauto with constrs.
+  - eauto with constrs.
 Qed.
 
 Hint Extern 1 (kinding ?E ?T ?K) =>
@@ -699,6 +727,92 @@ Hint Extern 1 (kinding ?E ?T ?K) =>
       apply (proj2 (type_equal_kinding H))
   end : kinding.
 
+(* *************************************************************** *)
+(** Symmetry *)
+
+Lemma type_equal_symm : forall E T1 T2 K,
+    type_equal E T1 T2 K ->
+    type_equal E T2 T1 K.
+Proof.
+  introv He.
+  induction (He); auto;
+    repeat match goal with
+    | [ H1 : type_equal ?E ?T1 ?T2 ?K,
+        H2 : type_equal ?E ?T1 ?T2 ?K -> type_equal _ _ _ _ |- _ ] =>
+      specialize (H2 H1)
+    end;
+    destruct (type_equal_kinding He) as [Hr _];
+    apply type_equal_refl in Hr;
+    eapply type_equal_trans;
+    eauto 0 2 with kinding.
+  - destruct (type_equal_kinding t) as [Hk _].
+    inversion Hk; subst.
+    inversion H; subst. 
+    inversion H5; subst.
+    inversion H7; subst.
+    eauto.
+  - destruct (type_equal_kinding t) as [Hk _].
+    inversion Hk; subst.
+    inversion H; subst. 
+    inversion H5; subst.
+    inversion H7; subst.
+    eauto.
+  - destruct (type_equal_kinding t) as [Hk _].
+    inversion Hk; subst.
+    inversion H1; subst.
+    inversion H2; subst.
+    eauto.
+  - destruct (type_equal_kinding t) as [Hk _].
+    inversion Hk; subst.
+    inversion H1; subst.
+    inversion H2; subst.
+    eauto.
+  - destruct (type_equal_kinding t) as [Hk _].
+    inversion Hk; subst.
+    auto.
+  - destruct (type_equal_kinding t) as [Hk _].
+    inversion Hk; subst.
+    inversion H4; subst.
+    eauto.
+  - destruct (type_equal_kinding t) as [Hk _].
+    inversion Hk; subst.
+    auto.
+  - destruct (type_equal_kinding t) as [Hk _].
+    inversion Hk; subst.
+    inversion H4; subst.
+    eauto.
+Qed.
+
+(* *************************************************************** *)
+(** Idempotence of join and meet *)
+
+Lemma type_equal_join_idempotent : forall E T cs,
+    kinding E T (knd_row cs) ->
+    type_equal E (typ_join T T) T (knd_row cs).
+Proof.
+  introv Hk.
+  eapply type_equal_join
+    with (T1' := T) (K1 := knd_row cs)
+         (T2' := (typ_meet T (typ_top cs)));
+    auto using type_equal_symm.
+  eapply type_equal_join_absorption_l; auto.
+Qed.    
+
+Lemma type_equal_meet_idempotent : forall E T cs,
+    kinding E T (knd_row cs) ->
+    type_equal E (typ_meet T T) T (knd_row cs).
+Proof.
+  introv Hk.
+  eapply type_equal_meet
+    with (T1' := T) (K1 := knd_row cs)
+         (T2' := (typ_join T (typ_bot cs)));
+    auto using type_equal_symm.
+  eapply type_equal_meet_absorption_l; auto.
+Qed.
+
+Hint Resolve type_equal_join_idempotent.
+Hint Resolve type_equal_meet_idempotent.
+    
 (* *************************************************************** *)
 (** Not affected by type bindings *)
 

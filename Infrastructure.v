@@ -191,6 +191,32 @@ Tactic Notation "exists_fresh" ident(x) ident(Hfr) :=
 
 Hint Constructors kind type term environment type_equal kinding kinding_env typing value red.
 
+(*
+TODO: delete
+Hint Resolve type_equal_refl type_equal_constructor type_equal_or
+     type_equal_variant type_equal_arrow type_equal_meet type_equal_join 1.
+
+Hint Resolve type_equal_or_commutative
+     type_equal_or_associative_l type_equal_or_associative_r
+     type_equal_or_bot_l type_equal_or_bot_r
+     type_equal_or_top_l type_equal_or_toprl
+     type_equal_or_meet_distribution_l type_equal_or_meet_distribution_r
+     type_equal_or_join_distribution_l type_equal_or_join_distribution_r
+     type_equal_meet_commutative
+     type_equal_meet_associative_l type_equal_meet_associative_r
+     type_equal_meet_identity_l
+     type_equal_meet_absorption_l
+     type_equal_meet_distribution_l type_equal_meet_distribution_r
+     type_equal_join_commutative
+     type_equal_join_associative_l type_equal_join_associative_r
+     type_equal_join_identity_l
+     type_equal_join_absorption_l
+     type_equal_join_distribution_l type_equal_join_distribution_r 2.
+
+Hint Resolve type_equal_meet_identity_r type_equal_meet_absorption_r
+     type_equal_join_identity_r type_equal_join_absorption_r 3.
+*)
+
 Lemma typ_def_fresh : typ_fv typ_def = \{}.
 Proof.
   easy.
