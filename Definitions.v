@@ -335,40 +335,48 @@ Inductive kinding : env -> typ -> knd -> Prop :=
       environment E ->
       binds X (bind_knd K) E ->
       kinding E (typ_fvar X) K
-  | kinding_constructor : forall E c T cs,
+  | kinding_constructor : forall E c T cs K,
       kinding E T knd_type ->
       cs = cons_finite \{c} ->
-      kinding E (typ_constructor c T) (knd_row cs)
-  | kinding_or : forall E cs1 T1 cs2 T2 cs,
+      K = knd_row cs ->
+      kinding E (typ_constructor c T) K
+  | kinding_or : forall E cs1 T1 cs2 T2 cs K,
       kinding E T1 (knd_row cs1) ->
       kinding E T2 (knd_row cs2) ->
       cs = cons_union cs1 cs2 ->
       cons_disjoint cs1 cs2 ->
-      kinding E (typ_or T1 T2) (knd_row cs)
-  | kinding_variant : forall E T1 T2,
+      K = knd_row cs ->
+      kinding E (typ_or T1 T2) K
+  | kinding_variant : forall E T1 T2 K,
       kinding E T1 (knd_row cons_universe) ->
       kinding E T2 (knd_row cons_universe) ->
-      kinding E (typ_variant T1 T2) knd_type
-  | kinding_arrow : forall E T1 T2,
+      K = knd_type ->
+      kinding E (typ_variant T1 T2) K
+  | kinding_arrow : forall E T1 T2 K,
       kinding E T1 knd_type -> 
       kinding E T2 knd_type -> 
-      kinding E (typ_arrow T1 T2) knd_type
-  | kinding_top : forall E cs,
+      K = knd_type ->
+      kinding E (typ_arrow T1 T2) K
+  | kinding_top : forall E cs K,
       cons_non_empty cs ->
       environment E ->
-      kinding E (typ_top cs) (knd_row cs)
-  | kinding_bot : forall E cs,
+      K = knd_row cs ->
+      kinding E (typ_top cs) K
+  | kinding_bot : forall E cs K,
       cons_non_empty cs ->
       environment E ->
-      kinding E (typ_bot cs) (knd_row cs)
-  | kinding_meet : forall E cs T1 T2,
+      K = knd_row cs ->
+      kinding E (typ_bot cs) K
+  | kinding_meet : forall E cs T1 T2 K,
       kinding E T1 (knd_row cs) ->
       kinding E T2 (knd_row cs) ->
-      kinding E (typ_meet T1 T2) (knd_row cs)
-  | kinding_join : forall E cs T1 T2,
+      K = knd_row cs ->
+      kinding E (typ_meet T1 T2) K
+  | kinding_join : forall E cs T1 T2 K,
       kinding E T1 (knd_row cs) ->
       kinding E T2 (knd_row cs) ->
-      kinding E (typ_join T1 T2) (knd_row cs).
+      K = knd_row cs ->
+      kinding E (typ_join T1 T2) K.
 
 Inductive kindings : env -> nat -> list typ -> list knd -> Prop :=
   | kindings_nil : forall E,
@@ -411,144 +419,113 @@ Inductive kinding_env : env -> Prop :=
 
 (** Equality relation on types *)
 
+Inductive type_equal_step : env -> typ -> typ -> Prop :=
+  | type_equal_constructor : forall E c T1 T1',
+      type_equal_step E T1 T1' ->
+      type_equal_step E (typ_constructor c T1) (typ_constructor c T1')
+  | type_equal_or_l : forall E T1 T1' T2,
+      type_equal_step E T1 T1' ->
+      type_equal_step E (typ_or T1 T2) (typ_or T1' T2)
+  | type_equal_or_r : forall E T1 T2 T2',
+      type_equal_step E T2 T2' ->
+      type_equal_step E (typ_or T1 T2) (typ_or T1 T2')
+  | type_equal_variant_l : forall E T1 T1' T2,
+      type_equal_step E T1 T1' ->
+      type_equal_step E (typ_variant T1 T2) (typ_variant T1' T2)
+  | type_equal_variant_r : forall E T1 T2 T2',
+      type_equal_step E T2 T2' ->
+      type_equal_step E (typ_variant T1 T2) (typ_variant T1 T2')
+  | type_equal_arrow_l : forall E T1 T1' T2,
+      type_equal_step E T1 T1' ->
+      type_equal_step E (typ_arrow T1 T2) (typ_arrow T1' T2)
+  | type_equal_arrow_r : forall E T1 T2 T2',
+      type_equal_step E T2 T2' ->
+      type_equal_step E (typ_arrow T1 T2) (typ_arrow T1 T2')
+  | type_equal_meet_l : forall E T1 T1' T2,
+      type_equal_step E T1 T1' ->
+      type_equal_step E (typ_meet T1 T2) (typ_meet T1' T2)
+  | type_equal_meet_r : forall E T1 T2 T2',
+      type_equal_step E T2 T2' -> 
+      type_equal_step E (typ_meet T1 T2) (typ_meet T1 T2')
+  | type_equal_join_l : forall E T1 T1' T2,
+      type_equal_step E T1 T1' ->
+      type_equal_step E (typ_join T1 T2) (typ_join T1' T2)
+  | type_equal_join_r : forall E T1 T2 T2',
+      type_equal_step E T2 T2' ->
+      type_equal_step E (typ_join T1 T2) (typ_join T1 T2')
+  | type_equal_or_commutative : forall E T1 T2,
+      type_equal_step E (typ_or T1 T2) (typ_or T2 T1)
+  | type_equal_or_associative : forall E T1 T2 T3,
+      type_equal_step E (typ_or T1 (typ_or T2 T3)) (typ_or (typ_or T1 T2) T3)
+  | type_equal_or_bot : forall E cs cs1 cs2 K,
+      kinding E (typ_or (typ_bot cs1) (typ_bot cs2)) K ->
+      kinding E (typ_bot cs) K ->
+      type_equal_step E (typ_bot cs) (typ_or (typ_bot cs1) (typ_bot cs2))
+  | type_equal_or_top : forall E cs cs1 cs2 K,
+      kinding E (typ_or (typ_top cs1) (typ_top cs2)) K ->
+      kinding E (typ_top cs) K ->
+      type_equal_step E (typ_top cs) (typ_or (typ_top cs1) (typ_top cs2))
+  | type_equal_or_meet_distribution : forall E T1 T2 T3 T4 K,
+      kinding E (typ_or (typ_meet T1 T3) (typ_meet T2 T4)) K ->
+      kinding E (typ_meet (typ_or T1 T2) (typ_or T3 T4)) K ->
+      type_equal_step E
+        (typ_or (typ_meet T1 T3) (typ_meet T2 T4))
+        (typ_meet (typ_or T1 T2) (typ_or T3 T4))
+  | type_equal_or_join_distribution : forall E T1 T2 T3 T4 K,
+      kinding E (typ_or (typ_join T1 T3) (typ_join T2 T4)) K ->
+      kinding E (typ_join (typ_or T1 T2) (typ_or T3 T4)) K ->
+      type_equal_step E
+        (typ_or (typ_join T1 T3) (typ_join T2 T4))
+        (typ_join (typ_or T1 T2) (typ_or T3 T4))
+  | type_equal_meet_commutative : forall E T1 T2,
+      type_equal_step E (typ_meet T1 T2) (typ_meet T2 T1)
+  | type_equal_meet_associative : forall E T1 T2 T3,
+      type_equal_step E
+        (typ_meet T1 (typ_meet T2 T3))
+        (typ_meet (typ_meet T1 T2) T3)
+  | type_equal_meet_identity : forall E cs T1 K,
+      kinding E T1 K ->
+      kinding E (typ_meet T1 (typ_top cs)) K ->
+      type_equal_step E T1 (typ_meet T1 (typ_top cs))
+  | type_equal_meet_absorption : forall E T1 T2 K,
+      kinding E T1 K ->
+      kinding E (typ_meet T1 (typ_join T1 T2)) K ->
+      type_equal_step E T1 (typ_meet T1 (typ_join T1 T2))
+  | type_equal_meet_distribution : forall E T1 T2 T3,
+      type_equal_step E
+        (typ_meet T1 (typ_join T2 T3))
+        (typ_join (typ_meet T1 T2) (typ_meet T1 T3))
+  | type_equal_join_commutative : forall E T1 T2,
+      type_equal_step E (typ_join T1 T2) (typ_join T2 T1)
+  | type_equal_join_associative : forall E T1 T2 T3,
+      type_equal_step E
+        (typ_join T1 (typ_join T2 T3))
+        (typ_join (typ_join T1 T2) T3)
+  | type_equal_join_identity : forall E cs T1 K,
+      kinding E T1 K ->
+      kinding E (typ_join T1 (typ_bot cs)) K ->
+      type_equal_step E T1 (typ_join T1 (typ_bot cs))
+  | type_equal_join_absorption : forall E T1 T2 K,
+      kinding E T1 K ->
+      kinding E (typ_join T1 (typ_meet T1 T2)) K ->
+      type_equal_step E T1 (typ_join T1 (typ_meet T1 T2))
+  | type_equal_join_distribution : forall E T1 T2 T3,
+      type_equal_step E
+        (typ_join T1 (typ_meet T2 T3))
+        (typ_meet (typ_join T1 T2) (typ_join T1 T3)).
+
 Inductive type_equal : env -> typ -> typ -> knd -> Prop :=
   | type_equal_refl : forall E T K,
       kinding E T K ->
       type_equal E T T K
-  | type_equal_constructor : forall E c T1 T1' K1 T2 K2,
-      type_equal E T1 T1' K1 ->
-      type_equal E (typ_constructor c T1) T2 K2 ->
-      type_equal E (typ_constructor c T1') T2 K2
-  | type_equal_or : forall E T1 T1' K1 T2 T2' K2 T3 K3,
-      type_equal E T1 T1' K1 ->
-      type_equal E T2 T2' K2 ->
-      type_equal E (typ_or T1' T2') T3 K3 ->
-      type_equal E (typ_or T1 T2) T3 K3
-  | type_equal_variant : forall E T1 T1' K1 T2 T2' K2 T3 K3,
-      type_equal E T1 T1' K1 ->
-      type_equal E T2 T2' K2 ->
-      type_equal E (typ_variant T1' T2') T3 K3 ->
-      type_equal E (typ_variant T1 T2) T3 K3
-  | type_equal_arrow : forall E T1 T1' K1 T2 T2' K2 T3 K3,
-      type_equal E T1 T1' K1 ->
-      type_equal E T2 T2' K2 ->
-      type_equal E (typ_arrow T1' T2') T3 K3 ->
-      type_equal E (typ_arrow T1 T2) T3 K3
-  | type_equal_meet : forall E T1 T1' K1 T2 T2' K2 T3 K3,
-      type_equal E T1 T1' K1 ->
-      type_equal E T2 T2' K2 -> 
-      type_equal E (typ_meet T1' T2') T3 K3 ->
-      type_equal E (typ_meet T1 T2) T3 K3
-  | type_equal_join : forall E T1 T1' K1 T2 T2' K2 T3 K3,
-      type_equal E T1 T1' K1 ->
-      type_equal E T2 T2' K2 ->
-      type_equal E (typ_join T1' T2') T3 K3 ->
-      type_equal E (typ_join T1 T2) T3 K3
-  | type_equal_or_commutative : forall E T1 T2 T3 K,
-      type_equal E (typ_or T2 T1) T3 K ->
-      type_equal E (typ_or T1 T2) T3 K
-  | type_equal_or_associative_l : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_or (typ_or T1 T2) T3) T4 K ->
-      type_equal E (typ_or T1 (typ_or T2 T3)) T4 K
-  | type_equal_or_associative_r : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_or T1 (typ_or T2 T3)) T4 K ->
-      type_equal E (typ_or (typ_or T1 T2) T3) T4 K
-  | type_equal_or_bot_l : forall E T cs cs1 cs2 K,
-      kinding E (typ_or (typ_bot cs1) (typ_bot cs2)) K ->
-      type_equal E (typ_bot cs) T K ->
-      type_equal E (typ_or (typ_bot cs1) (typ_bot cs2)) T K
-  | type_equal_or_bot_r : forall E T cs cs1 cs2 K,
-      type_equal E (typ_or (typ_bot cs1) (typ_bot cs2)) T K ->
-      cs = cons_union cs1 cs2 ->
-      type_equal E (typ_bot cs) T K
-  | type_equal_or_top_l : forall E T cs cs1 cs2 K,
-      kinding E (typ_or (typ_top cs1) (typ_top cs2)) K ->
-      type_equal E (typ_top cs) T K ->
-      type_equal E (typ_or (typ_top cs1) (typ_top cs2)) T K
-  | type_equal_or_top_r : forall E T cs cs1 cs2 K,
-      type_equal E (typ_or (typ_top cs1) (typ_top cs2)) T K ->
-      cs = cons_union cs1 cs2 ->
-      type_equal E (typ_top cs) T K
-  | type_equal_or_meet_distribution_l : forall E T1 K1 T2 K2 T3 T4 T5 K,
-      kinding E T1 K1 ->
-      kinding E T2 K2 ->
-      kinding E T3 K1 ->
-      kinding E T4 K2 ->
-      type_equal E (typ_meet (typ_or T1 T2) (typ_or T3 T4)) T5 K ->
-      type_equal E (typ_or (typ_meet T1 T3) (typ_meet T2 T4)) T5 K
-  | type_equal_or_meet_distribution_r : forall E T1 T2 T3 T4 T5 K,
-      type_equal E (typ_or (typ_meet T1 T3) (typ_meet T2 T4)) T5 K ->
-      type_equal E (typ_meet (typ_or T1 T2) (typ_or T3 T4)) T5 K
-  | type_equal_or_join_distribution_l : forall E T1 K1 T2 K2 T3 T4 T5 K,
-      kinding E T1 K1 ->
-      kinding E T2 K2 ->
-      kinding E T3 K1 ->
-      kinding E T4 K2 ->
-      type_equal E (typ_join (typ_or T1 T2) (typ_or T3 T4)) T5 K ->
-      type_equal E (typ_or (typ_join T1 T3) (typ_join T2 T4)) T5 K
-  | type_equal_or_join_distribution_r : forall E T1 T2 T3 T4 T5 K,
-      type_equal E (typ_or (typ_join T1 T3) (typ_join T2 T4)) T5 K ->
-      type_equal E (typ_join (typ_or T1 T2) (typ_or T3 T4)) T5 K
-  | type_equal_meet_commutative : forall E T1 T2 T3 K,
-      type_equal E (typ_meet T2 T1) T3 K ->
-      type_equal E (typ_meet T1 T2) T3 K
-  | type_equal_meet_associative_l : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_meet (typ_meet T1 T2) T3) T4 K ->
-      type_equal E (typ_meet T1 (typ_meet T2 T3)) T4 K
-  | type_equal_meet_associative_r : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_meet T1 (typ_meet T2 T3)) T4 K ->
-      type_equal E (typ_meet (typ_meet T1 T2) T3) T4 K
-  | type_equal_meet_identity_l : forall E cs T1 T2 K,
-      kinding E (typ_top cs) K ->
-      type_equal E T1 T2 K ->
-      type_equal E (typ_meet T1 (typ_top cs)) T2 K
-  | type_equal_meet_identity_r : forall E cs T1 T2 K,
-      type_equal E (typ_meet T1 (typ_top cs)) T2 K ->
-      type_equal E T1 T2 K
-  | type_equal_meet_absorption_l : forall E T1 T2 T3 K cs,
-      kinding E T2 K ->
-      K = knd_row cs ->
-      type_equal E T1 T3 K ->
-      type_equal E (typ_meet T1 (typ_join T1 T2)) T3 K
-  | type_equal_meet_absorption_r : forall E T1 T2 T3 K,
-      type_equal E (typ_meet T1 (typ_join T1 T2)) T3 K ->
+  | type_equal_step_l : forall E T1 T2 T3 K,
+      type_equal_step E T1 T2 ->
+      type_equal E T2 T3 K ->
       type_equal E T1 T3 K
-  | type_equal_meet_distribution_l : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_join T1 (typ_meet T2 T3)) T4 K ->
-      type_equal E (typ_meet (typ_join T1 T2) (typ_join T1 T3)) T4 K
-  | type_equal_meet_distribution_r : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_meet (typ_join T1 T2) (typ_join T1 T3)) T4 K ->
-      type_equal E (typ_join T1 (typ_meet T2 T3)) T4 K
-  | type_equal_join_commutative : forall E T1 T2 T3 K,
-      type_equal E (typ_join T2 T1) T3 K ->
-      type_equal E (typ_join T1 T2) T3 K
-  | type_equal_join_associative_l : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_join (typ_join T1 T2) T3) T4 K ->
-      type_equal E (typ_join T1 (typ_join T2 T3)) T4 K
-  | type_equal_join_associative_r : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_join T1 (typ_join T2 T3)) T4 K ->
-      type_equal E (typ_join (typ_join T1 T2) T3) T4 K
-  | type_equal_join_identity_l : forall E cs T1 T2 K,
-      kinding E (typ_bot cs) K ->
-      type_equal E T1 T2 K ->
-      type_equal E (typ_join T1 (typ_bot cs)) T2 K
-  | type_equal_join_identity_r : forall E cs T1 T2 K,
-      type_equal E (typ_join T1 (typ_bot cs)) T2 K ->
-      type_equal E T1 T2 K
-  | type_equal_join_absorption_l : forall E T1 T2 T3 K cs,
-      kinding E T2 K ->
-      K = knd_row cs ->
-      type_equal E T1 T3 K ->
-      type_equal E (typ_join T1 (typ_meet T1 T2)) T3 K
-  | type_equal_join_absorption_r : forall E T1 T2 T3 K,
-      type_equal E (typ_join T1 (typ_meet T1 T2)) T3 K ->
-      type_equal E T1 T3 K
-  | type_equal_join_distribution_l : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_meet (typ_join T1 T2) (typ_join T1 T3)) T4 K ->
-      type_equal E (typ_join T1 (typ_meet T2 T3)) T4 K
-  | type_equal_join_distribution_r : forall E T1 T2 T3 T4 K,
-      type_equal E (typ_join T1 (typ_meet T2 T3)) T4 K ->
-      type_equal E (typ_meet (typ_join T1 T2) (typ_join T1 T3)) T4 K.
+  | type_equal_step_r : forall E T1 T2 T3 K,
+      type_equal_step E T2 T1 ->
+      type_equal E T2 T3 K ->
+      type_equal E T1 T3 K.
 
 Definition subtype E T1 T2 :=
   type_equal E T1 (typ_meet T1 T2) (knd_row cons_universe).

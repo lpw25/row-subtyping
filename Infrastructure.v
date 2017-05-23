@@ -189,33 +189,8 @@ Tactic Notation "exists_fresh" ident(x) ident(Hfr) :=
 (* *************************************************************** *)
 (** ** Automation *)
 
-Hint Constructors kind type term environment type_equal kinding kinding_env typing value red.
-
-(*
-TODO: delete
-Hint Resolve type_equal_refl type_equal_constructor type_equal_or
-     type_equal_variant type_equal_arrow type_equal_meet type_equal_join 1.
-
-Hint Resolve type_equal_or_commutative
-     type_equal_or_associative_l type_equal_or_associative_r
-     type_equal_or_bot_l type_equal_or_bot_r
-     type_equal_or_top_l type_equal_or_toprl
-     type_equal_or_meet_distribution_l type_equal_or_meet_distribution_r
-     type_equal_or_join_distribution_l type_equal_or_join_distribution_r
-     type_equal_meet_commutative
-     type_equal_meet_associative_l type_equal_meet_associative_r
-     type_equal_meet_identity_l
-     type_equal_meet_absorption_l
-     type_equal_meet_distribution_l type_equal_meet_distribution_r
-     type_equal_join_commutative
-     type_equal_join_associative_l type_equal_join_associative_r
-     type_equal_join_identity_l
-     type_equal_join_absorption_l
-     type_equal_join_distribution_l type_equal_join_distribution_r 2.
-
-Hint Resolve type_equal_meet_identity_r type_equal_meet_absorption_r
-     type_equal_join_identity_r type_equal_join_absorption_r 3.
-*)
+Hint Constructors kind type term environment type_equal_step
+     type_equal kinding kinding_env typing value red.
 
 Lemma typ_def_fresh : typ_fv typ_def = \{}.
 Proof.
@@ -1813,7 +1788,7 @@ Ltac invert_all_kinds Hs :=
 
 Ltac invert_all_types Hs :=
   try match goal with
-  | [ H : type (typ_constructor _)  |- _ ] =>
+  | [ H : type (typ_constructor _ _)  |- _ ] =>
     invert_all_types_body H Hs
   | [ H : type (typ_or _ _)  |- _ ] =>
     invert_all_types_body H Hs
@@ -1836,21 +1811,14 @@ with invert_all_types_body H Hs :=
     inversion H
   end.
 
-(** Type equality preserves regularity *)
-
-Lemma type_equal_regular : forall E T1 T2 K,
-    type_equal E T1 T2 K ->
-    environment E /\ type T1 /\ type T2 /\ kind K.
+Lemma type_equal_step_regular : forall E T1 T2,
+  type_equal_step E T1 T2 ->
+  environment E ->
+  (type T1 -> type T2) /\ (type T2 -> type T1).
 Proof.
-  introv Ht.
-  induction Ht; intuition auto;
+  introv Hs.
+  induction Hs; intuition auto;
     match goal with
-    | [ |- kind (knd_row _) ] =>
-      subst;
-      invert_all_kinds tt;
-      subst;
-      apply kind_row;
-      constrs
     | [ |- type _ ] =>
       subst;
       invert_all_types tt;
@@ -1858,6 +1826,18 @@ Proof.
       subst;
       auto
     end.
+Qed.
+
+(** Type equality preserves regularity *)
+
+Lemma type_equal_regular : forall E T1 T2 K,
+  type_equal E T1 T2 K ->
+  environment E /\ type T1 /\ type T2 /\ kind K.
+Proof.
+  introv He.
+  induction He; intuition auto.
+  - destruct (type_equal_step_regular H); auto.
+  - destruct (type_equal_step_regular H); auto.
 Qed.
 
 Lemma subtype_regular : forall E T1 T2,
