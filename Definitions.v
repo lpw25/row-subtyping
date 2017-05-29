@@ -331,14 +331,13 @@ Inductive environment : env -> Prop :=
 (** The kinding relation *)
 
 Inductive kinding : env -> typ -> knd -> Prop :=
-  | kinding_var : forall K E X,
+  | kinding_var : forall E X K,
       environment E ->
       binds X (bind_knd K) E ->
       kinding E (typ_fvar X) K
-  | kinding_constructor : forall E c T cs K,
+  | kinding_constructor : forall E c T K,
       kinding E T knd_type ->
-      cs = cons_finite \{c} ->
-      K = knd_row cs ->
+      K = knd_row (cons_finite \{c}) ->
       kinding E (typ_constructor c T) K
   | kinding_or : forall E cs1 T1 cs2 T2 cs K,
       kinding E T1 (knd_row cs1) ->
@@ -367,15 +366,15 @@ Inductive kinding : env -> typ -> knd -> Prop :=
       environment E ->
       K = knd_row cs ->
       kinding E (typ_bot cs) K
-  | kinding_meet : forall E cs T1 T2 K,
-      kinding E T1 (knd_row cs) ->
-      kinding E T2 (knd_row cs) ->
-      K = knd_row cs ->
+  | kinding_meet : forall E T1 T2 K,
+      kinding E T1 K ->
+      kinding E T2 K ->
+      (exists cs, K = knd_row cs) ->
       kinding E (typ_meet T1 T2) K
-  | kinding_join : forall E cs T1 T2 K,
-      kinding E T1 (knd_row cs) ->
-      kinding E T2 (knd_row cs) ->
-      K = knd_row cs ->
+  | kinding_join : forall E T1 T2 K,
+      kinding E T1 K ->
+      kinding E T2 K ->
+      (exists cs, K = knd_row cs) ->
       kinding E (typ_join T1 T2) K.
 
 Inductive kindings : env -> nat -> list typ -> list knd -> Prop :=

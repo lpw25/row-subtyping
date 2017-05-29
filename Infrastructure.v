@@ -1530,8 +1530,6 @@ Ltac fsets :=
     solve [ fsets_core ]
   end.
 
-Hint Extern 2 => fsets : fsets.
-
 Ltac constrs :=
   unfold cons_universe in *;
   repeat
@@ -1549,7 +1547,13 @@ Ltac constrs :=
   iauto;
   fsets.
 
-Hint Extern 2 => constrs : constrs.
+Hint Extern 2 (cons_disjoint _ _) => constrs : constrs.
+Hint Extern 2 (cons_non_empty _) => constrs : constrs.
+Hint Extern 2 (_ = _ :> constructors) => constrs : constrs.
+Hint Extern 2 (knd_row _ = knd_row _) =>
+  f_equal;
+  constrs
+: constrs.
 
 Lemma cons_union_commutative : forall cs1 cs2,
     cons_union cs1 cs2 = cons_union cs2 cs1.
@@ -1557,6 +1561,8 @@ Proof.
   intros.
   constrs.
 Qed.
+
+Hint Resolve cons_union_commutative : constrs.
 
 Lemma cons_union_associative : forall cs1 cs2 cs3,
     cons_union cs1 (cons_union cs2 cs3)
@@ -1566,6 +1572,8 @@ Proof.
   constrs.
 Qed.
 
+Hint Resolve cons_union_associative : constrs.
+
 Lemma cons_union_universe : forall cs,
     cons_union (cons_finite cs) (cons_cofinite cs)
     = cons_universe.
@@ -1574,13 +1582,27 @@ Proof.
   constrs.
 Qed.
 
-Lemma cons_diff_union : forall cs1 cs2,
+Hint Resolve cons_union_universe : constrs.
+
+Lemma cons_diff_union_l : forall cs1 cs2,
+    cons_disjoint cs1 cs2 ->
+    cons_diff (cons_union cs1 cs2) cs1 = cs2.
+Proof.
+  intros.
+  constrs.
+Qed.
+
+Hint Resolve cons_diff_union_l : constrs.
+
+Lemma cons_diff_union_r : forall cs1 cs2,
     cons_disjoint cs1 cs2 ->
     cons_diff (cons_union cs1 cs2) cs2 = cs1.
 Proof.
   intros.
   constrs.
 Qed.
+
+Hint Resolve cons_diff_union_r : constrs.
 
 Lemma cons_diff_universe_cofinite : forall cs,
     cons_diff cons_universe (cons_cofinite cs)
@@ -1590,6 +1612,8 @@ Proof.
   constrs.
 Qed.
 
+Hint Resolve cons_diff_universe_cofinite : constrs.
+
 Lemma cons_diff_universe_finite : forall cs,
     cons_diff cons_universe (cons_finite cs)
     = cons_cofinite cs.
@@ -1597,6 +1621,8 @@ Proof.
   intros.
   constrs.
 Qed.
+
+Hint Resolve cons_diff_universe_finite : constrs.
 
 Lemma cons_non_empty_kind : forall cs,
     kind (knd_row cs) ->
@@ -1607,7 +1633,7 @@ Proof.
   auto.
 Qed.
 
-Hint Resolve cons_non_empty_kind.
+Hint Resolve cons_non_empty_kind : constrs.
 
 (* =============================================================== *)
 (** * Properties of judgments *)
