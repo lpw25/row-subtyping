@@ -192,6 +192,8 @@ Tactic Notation "exists_fresh" ident(x) ident(Hfr) :=
 Hint Constructors kind type term environment type_equal_step
      type_equal kinding kinding_env typing value red.
 
+Hint Unfold is_row_kind.
+
 Lemma typ_def_fresh : typ_fv typ_def = \{}.
 Proof.
   easy.
@@ -1789,14 +1791,16 @@ Hint Extern 1 (type_body ?n ?T) =>
       apply (proj33 (kinding_body_regular H))
   end.
 
-Ltac invert_all_kinds Hs :=
+(* TODO: not needed
+
+Ltac invert_kind Hs :=
   try match goal with
   | [ H : kind (knd_row _) |- _ ] =>
     let b := inList H Hs in
     match b with
     | true => fail 1
     | false =>
-      try invert_all_kinds (H, Hs);
+      try invert_kind (H, Hs);
       inversion H
     end
   | [ H : kinding _ _ (knd_row ?cs) |- _ ] =>
@@ -1804,36 +1808,37 @@ Ltac invert_all_kinds Hs :=
     match b with
     | true => fail 1
     | false =>
-      try invert_all_kinds (H, Hs);
+      try invert_kind (H, Hs);
       let Hk := fresh "Hk" in
       assert (kind (knd_row cs))
         as Hk by (apply (proj33 (kinding_regular H)));
       inversion Hk
     end
   end.
+*)
 
-Ltac invert_all_types Hs :=
+Ltac invert_type Hs :=
   try match goal with
   | [ H : type (typ_constructor _ _)  |- _ ] =>
-    invert_all_types_body H Hs
+    invert_type_body H Hs
   | [ H : type (typ_or _ _)  |- _ ] =>
-    invert_all_types_body H Hs
+    invert_type_body H Hs
   | [ H : type (typ_variant _ _)  |- _ ] =>
-    invert_all_types_body H Hs
+    invert_type_body H Hs
   | [ H : type (typ_arrow _ _)  |- _ ] =>
-    invert_all_types_body H Hs
+    invert_type_body H Hs
   | [ H : type (typ_meet _ _)  |- _ ] =>
-    invert_all_types_body H Hs
+    invert_type_body H Hs
   | [ H : type (typ_join _ _)  |- _ ] =>
-    invert_all_types_body H Hs
+    invert_type_body H Hs
   end
 
-with invert_all_types_body H Hs :=
+with invert_type_body H Hs :=
   let b := inList H Hs in
   match b with
   | true => fail 1
   | false =>
-    try invert_all_types (H, Hs);
+    try invert_type (H, Hs);
     inversion H
   end.
 
@@ -1847,8 +1852,8 @@ Proof.
     match goal with
     | [ |- type _ ] =>
       subst;
-      invert_all_types tt;
-      invert_all_types tt;
+      invert_type tt;
+      invert_type tt;
       subst;
       auto
     end.
