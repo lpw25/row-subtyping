@@ -4,71 +4,17 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import List LibLN.
+Require Import List LibLN Cofinite.
 Implicit Types x : var.
 Implicit Types X : var.
 
 (* *************************************************************** *)
 (** ** Description of types *)
 
-(* Finite and co-finite sets of constructors (nats) *)
-Inductive constructors : Type :=
-  | cons_finite : fset nat -> constructors
-  | cons_cofinite : fset nat -> constructors.
-
-Definition cons_universe :=
-  cons_cofinite \{}.
-
-Definition cons_disjoint cs1 cs2 :=
-  match cs1, cs2 with
-  | cons_finite f1, cons_finite f2 => disjoint f1 f2
-  | cons_finite f1, cons_cofinite f2 => subset f1 f2
-  | cons_cofinite f1, cons_finite f2 => subset f2 f1
-  | cons_cofinite f1, cons_cofinite f2 => False
-  end.
-
-Definition cons_union cs1 cs2 := 
-  match cs1, cs2 with
-  | cons_finite f1, cons_finite f2 => cons_finite (f1 \u f2)
-  | cons_finite f1, cons_cofinite f2 => cons_cofinite (f2 \- f1)
-  | cons_cofinite f1, cons_finite f2 => cons_cofinite (f1 \- f2)
-  | cons_cofinite f1, cons_cofinite f2 => cons_cofinite (f1 \n f2)
-  end.
-
-Definition cons_inter cs1 cs2 := 
-  match cs1, cs2 with
-  | cons_finite f1, cons_finite f2 => cons_finite (f1 \n f2)
-  | cons_finite f1, cons_cofinite f2 => cons_finite (f1 \- f2)
-  | cons_cofinite f1, cons_finite f2 => cons_finite (f2 \- f1)
-  | cons_cofinite f1, cons_cofinite f2 => cons_cofinite (f1 \u f2)
-  end.
-
-Definition cons_subset cs1 cs2 :=
-  match cs1, cs2 with
-  | cons_finite f1, cons_finite f2 => subset f1 f2
-  | cons_finite f1, cons_cofinite f2 => disjoint f1 f2
-  | cons_cofinite f1, cons_finite f2 => False
-  | cons_cofinite f1, cons_cofinite f2 => subset f2 f1
-  end.
-
-Definition cons_diff cs1 cs2 := 
-  match cs1, cs2 with
-  | cons_finite f1, cons_finite f2 => cons_finite (f1 \- f2)
-  | cons_finite f1, cons_cofinite f2 => cons_finite (f1 \n f2)
-  | cons_cofinite f1, cons_finite f2 => cons_cofinite (f1 \u f2)
-  | cons_cofinite f1, cons_cofinite f2 => cons_finite (f2 \- f1)
-  end.
-
-Definition cons_non_empty cs :=
-  match cs with
-  | cons_finite f => exists c, c \in f
-  | cons_cofinite _ => True
-  end.
-
 (* Kinds *)
 Inductive knd : Type :=
   | knd_type : knd
-  | knd_row : constructors -> knd.
+  | knd_row : cset -> knd.
 
 (** Representation of pre-types *)
 
@@ -79,8 +25,8 @@ Inductive typ : Type :=
   | typ_or : typ -> typ -> typ
   | typ_variant : typ -> typ -> typ
   | typ_arrow : typ -> typ -> typ
-  | typ_top : constructors -> typ
-  | typ_bot : constructors -> typ
+  | typ_top : cset -> typ
+  | typ_bot : cset -> typ
   | typ_meet : typ -> typ -> typ
   | typ_join : typ -> typ -> typ.
 
@@ -88,12 +34,7 @@ Inductive typ : Type :=
 
 Definition typ_def := typ_bvar 0.
 
-Definition typ_nil := typ_bot (cons_finite \{}).
-
-Definition typ_row cs T R :=
-  fold_right
-    (fun c acc => typ_or (typ_constructor c T) acc)
-    R cs.
+Definition typ_nil := typ_bot (CSet.empty).
 
 (** Type schemes. *)
 
@@ -147,7 +88,7 @@ Open Scope typ_scope.
 Inductive kind : knd -> Prop :=
   | kind_type : kind knd_type
   | kind_row : forall cs,
-      cons_non_empty cs -> kind (knd_row cs).
+      ~ CSet.Empty cs -> kind (knd_row cs).
 
 Definition kinds n (L : list knd) :=
   n = length L /\ Forall kind L.
@@ -215,8 +156,8 @@ Inductive trm : Type :=
   | trm_let : trm -> trm -> trm
   | trm_app : trm -> trm -> trm
   | trm_constructor : nat -> trm -> trm
-  | trm_match : trm -> list nat -> trm -> trm -> trm
-  | trm_destruct : trm -> list nat -> trm -> trm
+  | trm_match : trm -> nat -> trm -> trm -> trm
+  | trm_destruct : trm -> nat -> trm -> trm
   | trm_absurd : trm -> trm.
 
 Fixpoint trm_open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
@@ -230,12 +171,12 @@ Fixpoint trm_open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
       trm_app (trm_open_rec k u t1) (trm_open_rec k u t2)
   | trm_constructor c t =>
       trm_constructor c (trm_open_rec k u t)
-  | trm_match t1 cs t2 t3 =>
-      trm_match (trm_open_rec k u t1) cs
+  | trm_match t1 c t2 t3 =>
+      trm_match (trm_open_rec k u t1) c
                 (trm_open_rec (S k) u t2)
                 (trm_open_rec (S k) u t3)
-  | trm_destruct t1 cs t2 =>
-      trm_destruct (trm_open_rec k u t1) cs
+  | trm_destruct t1 c t2 =>
+      trm_destruct (trm_open_rec k u t1) c
                    (trm_open_rec (S k) u t2)
   | trm_absurd t1 => trm_absurd (trm_open_rec k u t1)
   end.
@@ -265,15 +206,15 @@ Inductive term : trm -> Prop :=
   | term_constructor : forall c t,
       term t ->
       term (trm_constructor c t)
-  | term_match : forall L t1 cs t2 t3,
+  | term_match : forall L t1 c t2 t3,
       term t1 ->
       (forall x, x \notin L -> term (t2 ^ x)) ->
       (forall x, x \notin L -> term (t3 ^ x)) ->
-      term (trm_match t1 cs t2 t3)
-  | term_destruct : forall L t1 cs t2,
+      term (trm_match t1 c t2 t3)
+  | term_destruct : forall L t1 c t2,
       term t1 ->
       (forall x, x \notin L -> term (t2 ^ x)) ->
-      term (trm_destruct t1 cs t2)
+      term (trm_destruct t1 c t2)
   | term_absurd : forall t,
       term t ->
       term (trm_absurd t).
@@ -340,17 +281,17 @@ Inductive kinding : env -> typ -> knd -> Prop :=
       kinding E (typ_fvar X) K
   | kinding_constructor : forall E c T K,
       kinding E T knd_type ->
-      K = knd_row (cons_finite \{c}) ->
+      K = knd_row (CSet.singleton c) ->
       kinding E (typ_constructor c T) K
   | kinding_or : forall E T1 cs1 T2 cs2 K,
       kinding E T1 (knd_row cs1) ->
       kinding E T2 (knd_row cs2) ->
-      cons_disjoint cs1 cs2 ->
-      K = knd_row (cons_union cs1 cs2) ->
+      CSet.Disjoint cs1 cs2 ->
+      K = knd_row (CSet.union cs1 cs2) ->
       kinding E (typ_or T1 T2) K
   | kinding_variant : forall E T1 T2 K,
-      kinding E T1 (knd_row cons_universe) ->
-      kinding E T2 (knd_row cons_universe) ->
+      kinding E T1 (knd_row CSet.universe) ->
+      kinding E T2 (knd_row CSet.universe) ->
       K = knd_type ->
       kinding E (typ_variant T1 T2) K
   | kinding_arrow : forall E T1 T2 K,
@@ -359,12 +300,12 @@ Inductive kinding : env -> typ -> knd -> Prop :=
       K = knd_type ->
       kinding E (typ_arrow T1 T2) K
   | kinding_top : forall E cs K,
-      cons_non_empty cs ->
+      ~ CSet.Empty cs ->
       environment E ->
       K = knd_row cs ->
       kinding E (typ_top cs) K
   | kinding_bot : forall E cs K,
-      cons_non_empty cs ->
+      ~ CSet.Empty cs ->
       environment E ->
       K = knd_row cs ->
       kinding E (typ_bot cs) K
@@ -529,7 +470,7 @@ Inductive type_equal : env -> typ -> typ -> knd -> Prop :=
       type_equal E T1 T3 K.
 
 Definition subtype E T1 T2 :=
-  type_equal E T1 (typ_meet T1 T2) (knd_row cons_universe).
+  type_equal E T1 (typ_meet T1 T2) (knd_row CSet.universe).
 
 Notation "E ||= T1 -<: T2" := (subtype E T1 T2) (at level 60).
 
@@ -558,11 +499,11 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_constructor : forall c E T1 T2 T3 t,
       typing E t T1 ->
       E ||= (typ_or (typ_constructor c T1)
-                   (typ_bot (cons_cofinite \{c})))
+                   (typ_bot (CSet.cosingleton c)))
            -<: T2 ->
       (E ||= T2 -<: T3) ->
       typing E (trm_constructor c t) (typ_variant T3 T2)
-  | typing_match : forall cs L E T1 T2 T3 T4 T5
+  | typing_match : forall c L E T1 T2 T3 T4 T5
                           T6 T7 T8 T9 T10 t1 t2 t3,
       typing E t1 (typ_variant T1 T2) ->
       (forall x, x \notin L ->
@@ -574,31 +515,31 @@ Inductive typing : env -> trm -> typ -> Prop :=
       kinding E T10 knd_type ->
       E ||= T1 -<: (typ_or T8 T9) ->
       E ||= (typ_or T8
-                   (typ_bot (cons_cofinite (from_list cs))))
-           -<: (typ_row cs T10
-                       (typ_bot (cons_cofinite (from_list cs)))) ->
-      E ||= (typ_or T8 (typ_bot (cons_cofinite (from_list cs))))
+                   (typ_bot (CSet.cosingleton c)))
+           -<: (typ_or (typ_constructor c T10)
+                       (typ_bot (CSet.cosingleton c))) ->
+      E ||= (typ_or T8 (typ_bot (CSet.cosingleton c)))
            -<: T4 ->
-      E ||= (typ_or (typ_bot (cons_finite (from_list cs))) T9)
+      E ||= (typ_or (typ_bot (CSet.cosingleton c)) T9)
            -<: T7 ->
       E ||= T2 -<: T1 ->
       E ||= T4 -<: T3 ->
       E ||= T7 -<: T6 ->
-      typing E (trm_match t1 cs t2 t3) T5
-  | typing_destruct : forall cs L E T1 T2 T3 T4 t1 t2,
+      typing E (trm_match t1 c t2 t3) T5
+  | typing_destruct : forall c L E T1 T2 T3 T4 t1 t2,
       typing E t1 (typ_variant T1 T2) ->
       (forall x, x \notin L ->
          typing (E & x ~: (Sch nil T3))
                 (t2 ^ x) T4) ->
       kinding E T3 knd_type ->
-      E ||= T1 -<: (typ_row cs T3
-                    (typ_bot (cons_cofinite (from_list cs)))) ->
+      E ||= T1 -<: (typ_or (typ_constructor c T3)
+                      (typ_bot (CSet.cosingleton c))) ->
       E ||= T2 -<: T1 ->
-      typing E (trm_destruct t1 cs t2) T4
+      typing E (trm_destruct t1 c t2) T4
   | typing_absurd : forall E T1 T2 T3 t1,
       kinding E T3 knd_type ->
       typing E t1 (typ_variant T1 T2) ->
-      E ||= T1 -<: (typ_bot cons_universe) ->
+      E ||= T1 -<: (typ_bot CSet.universe) ->
       E ||= T2 -<: T1 ->
       typing E (trm_absurd t1) T3.
 
@@ -652,35 +593,35 @@ Inductive red : trm -> trm -> Prop :=
       term_body t3 ->
       red t1 t1' ->
       red (trm_match t1 c t2 t3) (trm_match t1' c t2 t3)
-  | red_match_2 : forall c cs t1 t2 t3,
-      In c cs ->
-      value (trm_constructor c t1) ->
+  | red_match_2 : forall c1 c2 t1 t2 t3,
+      c1 = c2 ->
+      value (trm_constructor c1 t1) ->
       term_body t2 ->
       term_body t3 ->
-      red (trm_match (trm_constructor c t1) cs t2 t3)
-          (t2 ^^ (trm_constructor c t1))
-  | red_match_3 : forall c cs t1 t2 t3,
-      ~ In c cs ->
-      value (trm_constructor c t1) ->
+      red (trm_match (trm_constructor c1 t1) c2 t2 t3)
+          (t2 ^^ (trm_constructor c1 t1))
+  | red_match_3 : forall c1 c2 t1 t2 t3,
+      c1 <> c2 ->
+      value (trm_constructor c1 t1) ->
       term_body t2 ->
       term_body t3 ->
-      red (trm_match (trm_constructor c t1) cs t2 t3)
-          (t3 ^^ (trm_constructor c t1))
+      red (trm_match (trm_constructor c1 t1) c2 t2 t3)
+          (t3 ^^ (trm_constructor c1 t1))
   | red_destruct_1 : forall c t1 t1' t2,
       term_body t2 ->
       red t1 t1' ->
       red (trm_destruct t1 c t2) (trm_destruct t1' c t2)
-  | red_destruct_2 : forall c cs t1 t2,
-      In c cs ->
-      value (trm_constructor c t1) ->
+  | red_destruct_2 : forall c1 c2 t1 t2,
+      c1 = c2 ->
+      value (trm_constructor c1 t1) ->
       term_body t2 ->
-      red (trm_destruct (trm_constructor c t1) cs t2)
+      red (trm_destruct (trm_constructor c1 t1) c2 t2)
           (t2 ^^ t1)
   | red_absurd : forall t1 t1',
       red t1 t1' ->
       red (trm_absurd t1) (trm_absurd t1').
                   
-Notation "t --> t'" := (red t t') (at level 68).
+Notation "t ---> t'" := (red t t') (at level 68).
 
 (* ************************************************************** *)
 (** ** Description of the results *)
@@ -689,11 +630,11 @@ Notation "t --> t'" := (red t t') (at level 68).
 
 Definition preservation := forall E t t' T,
   E |= t -: T ->
-  t --> t' ->
+  t ---> t' ->
   E |= t' -: T.
 
 
 Definition progress := forall t T, 
   empty |= t -: T ->
      value t 
-  \/ exists t', t --> t'.
+  \/ exists t', t ---> t'.

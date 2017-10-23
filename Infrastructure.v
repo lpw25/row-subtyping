@@ -1344,300 +1344,6 @@ Proof.
 Qed.
 
 (* =============================================================== *)
-(** ** Automation for fset and constructors *)
-
-Lemma fset_from_list_mem : forall A (x : A) L,
-  x \in from_list L = LibList.Mem x L.
-Proof using.
-  unfold from_list. induction L; simpl.
-  - rewrite in_empty.
-    rewrite LibList.Mem_nil_eq.
-    reflexivity.
-  - rewrite in_union.
-    rewrite in_singleton.
-    rewrite~ LibList.Mem_cons_eq.
-    congruence.
-Qed.
-
-Lemma fset_in_decidable : forall (A : fset nat) x,
-    x \in A \/ x \notin A.
-Proof.
-  unfold notin.
-  intros.
-  destruct (fset_finite A) as [l].
-  subst.
-  rewrite fset_from_list_mem.
-  assert ((LibList.Mem x l /\ LibReflect.decide (LibList.Mem x l) = true)
-          \/ (~ (LibList.Mem x l) /\ LibReflect.decide (LibList.Mem x l) = false))
-    by apply LibReflect.decide_cases.
-  iauto.
-Qed.
-
-Lemma notin_remove_nat : forall (x : nat) E F,
-  x \notin (E \- F) <-> (x \notin E) \/ (x \in F).
-Proof.
-  intros. unfold notin. rewrite* in_remove.
-  destruct (fset_in_decidable E x);
-  destruct (fset_in_decidable F x);
-  unfold notin;
-  iauto.
-Qed.
-
-Lemma notin_empty : forall A (x : A),
-    x \notin \{} = True.
-Proof.
-  intros.
-  unfold notin.
-  rewrite in_empty.
-  auto.
-Qed.
-
-Hint Rewrite in_empty : rew_fset.
-Hint Rewrite in_union : rew_fset.
-Hint Rewrite in_inter : rew_fset.
-Hint Rewrite in_remove : rew_fset.
-Hint Rewrite notin_empty : rew_fset.
-Hint Rewrite notin_union : rew_fset.
-Hint Rewrite notin_remove_nat : rew_fset.
-
-Lemma fset_extens_inv : forall A (E : fset A) F x,
-    E = F ->
-    (x \in E -> x \in F)
-    /\ (x \in F -> x \in E).
-Proof.
-  intros. subst. iauto.
-Qed.
-
-Ltac inList x xs :=
-  match xs with
-    | tt => constr:false
-    | (x, _) => constr:true
-    | (_, ?xs') => inList x xs'
-  end.
-
-Ltac fsets_decide_all v xs :=
-  try match goal with
-  | [ x : fset nat |- _ ] =>
-    let b := inList x xs in
-    match b with
-    | true => fail 1
-    | false =>
-      try fsets_decide_all v (x, xs);
-      let dec := fresh "decidable" in
-      destruct (fset_in_decidable x v) as [dec | dec];
-      unfold notin in dec
-    end
-  end.
-
-Ltac fsets_abstract_singleton v :=
-  let single := fresh "single" in
-  let Heq_single := fresh "Heq_single" in
-  remember \{v} as single eqn:Heq_single;
-  let Heq_v := fresh "Heq_v" in
-  assert (forall S, v \in S -> subset single S)
-    by ( intros; unfold subset; intro;
-         rewrite Heq_single; rewrite in_singleton;
-         intro Heq_v; rewrite Heq_v; assumption );
-  let Hin := fresh "Hin" in
-  assert (forall S, v \notin S -> disjoint single S)
-    by ( intro; unfold notin; unfold disjoint; rewrite Heq_single;
-         intro; apply fset_extens;
-         unfold subset; intro; rewrite in_empty;
-         intro Hin; tryfalse; rewrite in_inter in Hin;
-         rewrite in_singleton in Hin; destruct Hin;
-         tryfalse );
-  assert (v \in single)
-    by ( rewrite Heq_single;
-         rewrite in_singleton;
-         reflexivity ).
-
-Ltac fsets_specialise A y :=
-  repeat
-    match goal with
-    | [ H : ?S3 = ?S4 |- _ ] =>
-      apply fset_extens_inv with (x := y) in H;
-      autorewrite with rew_fset in H
-    | [ H : forall (_ : A), _ \in _ -> _ \in _ |- _ ] =>
-      specialize (H y);
-      autorewrite with rew_fset in H
-    end.
-
-Ltac fsets_core :=
-  repeat
-    match goal with
-    | [ |- context[\{?v}] ] =>
-      fsets_abstract_singleton v
-    end;
-  repeat
-    match goal with
-    | [ H : exists x, x \in ?S |- _] =>
-      destruct H
-    end;
-  try apply fset_extens;
-  try unfold subset in *;
-  match goal with
-  | [ |- forall (_ : ?A), _ \in _ -> _ \in _ ] =>
-    let fresh_x := fresh "x" in
-    intro fresh_x;
-    fsets_specialise A fresh_x;
-    autorewrite with rew_fset;
-    unfold notin in *;
-    try solve [intuition eauto; tryfalse];
-    fsets_decide_all fresh_x tt;
-    unfold notin;
-    solve [intuition eauto; tryfalse]
-  | [ H : ?x \in _ |- exists y, y \in _ ] =>
-    let A := type of x in
-    exists x;
-    fsets_specialise A x;
-    autorewrite with rew_fset;
-    autorewrite with rew_fset in H;
-    unfold notin in *;
-    try solve [intuition eauto; tryfalse];
-    fsets_decide_all x tt;
-    unfold notin;
-    unfold notin in H;
-    solve [ intuition eauto; tryfalse ]
-  | [ H : ?x \in _ |- False ] =>
-    let A := type of x in
-    fsets_specialise A x;
-    autorewrite with rew_fset in H;
-    unfold notin in *;
-    try solve [intuition eauto; tryfalse];
-    fsets_decide_all x tt;
-    unfold notin;
-    unfold notin in H;
-    solve [intuition eauto]
-  end.
-
-Ltac fsets_get E :=
-  match E with
-  | context [?cs] =>
-    match type of cs with
-    | fset _ => cs
-    end
-  end.
-
-Ltac fsets :=
-  try unfold disjoint in *;
-  match goal with
-  | [ |- ?A = ?B] =>
-    let cs := fsets_get A in
-    let ds := fsets_get B in
-    let Heq := fresh "Heq" in
-    assert (cs = ds) as Heq by fsets_core;
-    rewrite Heq at 1;
-    reflexivity
-  | _ =>
-    solve [ fsets_core ]
-  end.
-
-Ltac constrs :=
-  unfold cons_universe in *;
-  repeat
-    match goal with
-    | [ C : constructors |- _ ] =>
-      destruct C
-    | _ => fail 1
-    end;
-  simpl cons_disjoint in *;
-  simpl cons_union in *;
-  simpl cons_inter in *;
-  simpl cons_subset in *;
-  simpl cons_diff in *;
-  simpl cons_non_empty in *;
-  iauto;
-  fsets.
-
-Hint Extern 2 (cons_disjoint _ _) => constrs : constrs.
-Hint Extern 2 (cons_non_empty _) => constrs : constrs.
-Hint Extern 2 (_ = _ :> constructors) => constrs : constrs.
-Hint Extern 2 (knd_row _ = knd_row _) =>
-  f_equal;
-  constrs
-: constrs.
-
-Lemma cons_union_commutative : forall cs1 cs2,
-    cons_union cs1 cs2 = cons_union cs2 cs1.
-Proof.
-  intros.
-  constrs.
-Qed.
-
-Hint Resolve cons_union_commutative : constrs.
-
-Lemma cons_union_associative : forall cs1 cs2 cs3,
-    cons_union cs1 (cons_union cs2 cs3)
-    = cons_union (cons_union cs1 cs2) cs3.
-Proof.
-  intros.
-  constrs.
-Qed.
-
-Hint Resolve cons_union_associative : constrs.
-
-Lemma cons_union_universe : forall cs,
-    cons_union (cons_finite cs) (cons_cofinite cs)
-    = cons_universe.
-Proof.
-  intros.
-  constrs.
-Qed.
-
-Hint Resolve cons_union_universe : constrs.
-
-Lemma cons_diff_union_l : forall cs1 cs2,
-    cons_disjoint cs1 cs2 ->
-    cons_diff (cons_union cs1 cs2) cs1 = cs2.
-Proof.
-  intros.
-  constrs.
-Qed.
-
-Hint Resolve cons_diff_union_l : constrs.
-
-Lemma cons_diff_union_r : forall cs1 cs2,
-    cons_disjoint cs1 cs2 ->
-    cons_diff (cons_union cs1 cs2) cs2 = cs1.
-Proof.
-  intros.
-  constrs.
-Qed.
-
-Hint Resolve cons_diff_union_r : constrs.
-
-Lemma cons_diff_universe_cofinite : forall cs,
-    cons_diff cons_universe (cons_cofinite cs)
-    = cons_finite cs.
-Proof.
-  intros.
-  constrs.
-Qed.
-
-Hint Resolve cons_diff_universe_cofinite : constrs.
-
-Lemma cons_diff_universe_finite : forall cs,
-    cons_diff cons_universe (cons_finite cs)
-    = cons_cofinite cs.
-Proof.
-  intros.
-  constrs.
-Qed.
-
-Hint Resolve cons_diff_universe_finite : constrs.
-
-Lemma cons_non_empty_kind : forall cs,
-    kind (knd_row cs) ->
-    cons_non_empty cs.
-Proof.
-  introv Hkd.
-  inversion Hkd.
-  auto.
-Qed.
-
-Hint Resolve cons_non_empty_kind : constrs.
-
-(* =============================================================== *)
 (** * Properties of judgments *)
 
 (* *************************************************************** *)
@@ -1791,16 +1497,14 @@ Hint Extern 1 (type_body ?n ?T) =>
       apply (proj33 (kinding_body_regular H))
   end.
 
-(* TODO: not needed
-
-Ltac invert_kind Hs :=
+Ltac invert_kind_rec Hs :=
   try match goal with
   | [ H : kind (knd_row _) |- _ ] =>
     let b := inList H Hs in
     match b with
     | true => fail 1
     | false =>
-      try invert_kind (H, Hs);
+      try invert_kind_rec (H, Hs);
       inversion H
     end
   | [ H : kinding _ _ (knd_row ?cs) |- _ ] =>
@@ -1808,39 +1512,46 @@ Ltac invert_kind Hs :=
     match b with
     | true => fail 1
     | false =>
-      try invert_kind (H, Hs);
+      try invert_kind_rec (H, Hs);
       let Hk := fresh "Hk" in
       assert (kind (knd_row cs))
         as Hk by (apply (proj33 (kinding_regular H)));
       inversion Hk
     end
   end.
-*)
 
-Ltac invert_type Hs :=
+Ltac invert_kind :=
+  invert_kind_rec tt;
+  subst.
+
+Ltac invert_type_rec Hs :=
   try match goal with
   | [ H : type (typ_constructor _ _)  |- _ ] =>
-    invert_type_body H Hs
+    invert_type_rec_body H Hs
   | [ H : type (typ_or _ _)  |- _ ] =>
-    invert_type_body H Hs
+    invert_type_rec_body H Hs
   | [ H : type (typ_variant _ _)  |- _ ] =>
-    invert_type_body H Hs
+    invert_type_rec_body H Hs
   | [ H : type (typ_arrow _ _)  |- _ ] =>
-    invert_type_body H Hs
+    invert_type_rec_body H Hs
   | [ H : type (typ_meet _ _)  |- _ ] =>
-    invert_type_body H Hs
+    invert_type_rec_body H Hs
   | [ H : type (typ_join _ _)  |- _ ] =>
-    invert_type_body H Hs
+    invert_type_rec_body H Hs
   end
 
-with invert_type_body H Hs :=
+with invert_type_rec_body H Hs :=
   let b := inList H Hs in
   match b with
   | true => fail 1
   | false =>
-    try invert_type (H, Hs);
+    try invert_type_rec (H, Hs);
     inversion H
   end.
+
+Ltac invert_type :=
+  invert_type_rec tt;
+  subst.
 
 Lemma type_equal_step_regular : forall E T1 T2,
   type_equal_step E T1 T2 ->
@@ -1852,8 +1563,8 @@ Proof.
     match goal with
     | [ |- type _ ] =>
       subst;
-      invert_type tt;
-      invert_type tt;
+      invert_type;
+      invert_type;
       subst;
       auto
     end.
