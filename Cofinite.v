@@ -138,7 +138,7 @@ Module CSet.
   Definition In x cs :=
     match cs with
     | finite ms => MSet.In x ms
-    | cofinite ms => not (MSet.In x ms)
+    | cofinite ms => ~ MSet.In x ms
     end.
 
   Definition Equal cs1 cs2 := forall x : elt, In x cs1 <-> In x cs2.
@@ -147,7 +147,11 @@ Module CSet.
 
   Definition Empty cs := forall x : elt, ~ In x cs.
 
+  Definition Nonempty cs := exists x : elt, In x cs.
+
   Definition Universe cs := forall x : elt, In x cs.
+
+  Definition Nonuniverse cs := exists x : elt, ~ In x cs.
 
   Definition For_all (P : elt -> Prop) cs := forall x, In x cs -> P x.
 
@@ -159,7 +163,7 @@ Module CSet.
   Definition eq : t -> t -> Prop := Equal.
 
   Local Lemma not_in_mset_spec : forall ms,
-    not (MSet.In (not_in_mset ms) ms).
+    ~ (MSet.In (not_in_mset ms) ms).
   Proof.
     intro ms.
     unfold not_in_mset.
@@ -172,7 +176,7 @@ Module CSet.
   Qed.
 
   Local Lemma choose_not_in_mset : forall ms,
-    exists x : elt, not (MSet.In x ms).
+    exists x : elt, ~ (MSet.In x ms).
   Proof.
     intro ms.
     exists (x := not_in_mset ms).
@@ -209,6 +213,22 @@ Module CSet.
     firstorder.
   Qed.
 
+  Local Lemma is_empty_mset_spec2 : forall ms,
+    MSet.is_empty ms = false <-> exists x, MSet.In x ms.
+  Proof.
+    intros ms.
+    split; intro Hempty.
+    - destruct (MSetEqProperties.choose_mem_3 _ Hempty)
+        as [x [_ Hmem]].
+      rewrite MSet.mem_spec in Hmem.
+      exists x.
+      assumption.
+    - destruct Hempty.
+      rewrite <- MSet.mem_spec in H.
+      destruct ms.
+      destruct this; auto.
+  Qed.
+
   Local Lemma eq_not_in : forall ms1 ms2,
       MSet.eq ms1 ms2 <->
       forall x : elt, ~ MSet.In x ms1 <-> ~ MSet.In x ms2.
@@ -231,6 +251,13 @@ Module CSet.
           auto.
         rewrite Hiff in Hnot2.
         exfalso; auto.
+  Qed.
+
+  Lemma In_dec : forall x cs, {In x cs} + {~ In x cs}.
+    intros x cs.
+    unfold In.
+    destruct cs as [ms | ms];
+      destruct (MSetProperties.In_dec x ms); intuition.
   Qed.
 
   Lemma eq_leibniz : forall cs1 cs2,
@@ -364,13 +391,11 @@ Module CSet.
       MSetDecide.fsetdec.
     Qed.
 
-    Lemma is_empty_spec :
+    Lemma is_empty_spec1 :
       is_empty cs = true <-> Empty cs.
     Proof.
       destruct cs as [ms | ms]; unfold is_empty, Empty, In.
-      - rewrite MSet.is_empty_spec.
-        unfold MSet.Empty.
-        reflexivity.
+      - apply MSet.is_empty_spec.
       - split; intro H.
         + discriminate.
         + exfalso.
@@ -379,7 +404,16 @@ Module CSet.
           assumption.
     Qed.
 
-    Lemma is_universe_spec :
+    Lemma is_empty_spec2 :
+      is_empty cs = false <-> Nonempty cs.
+    Proof.
+      destruct cs as [ms | ms]; unfold is_empty, Nonempty, In.
+      - apply is_empty_mset_spec2.
+      - split; auto; intro.
+        apply choose_not_in_mset.
+    Qed.
+
+    Lemma is_universe_spec1 :
       is_universe cs = true <-> Universe cs.
     Proof.
       destruct cs as [ms | ms]; unfold is_universe, Universe, In.
@@ -392,6 +426,24 @@ Module CSet.
       - rewrite MSet.is_empty_spec.
         unfold MSet.Empty.
         reflexivity.
+    Qed.
+
+    Lemma is_universe_spec2 :
+      is_universe cs = false <-> Nonuniverse cs.
+    Proof.
+      destruct cs as [ms | ms]; unfold is_universe, Nonuniverse, In.
+      - split; intro H.
+        + apply choose_not_in_mset.
+        + reflexivity.
+      - split; intro H.
+        + apply is_empty_mset_spec2 in H.
+          destruct H as [z Hin].
+          exists z.
+          intuition.
+        + destruct H as [z Hnotnotin].
+          rewrite is_empty_mset_spec2.
+          exists z.
+          destruct (MSetProperties.In_dec z ms); intuition.
     Qed.
 
     Lemma add_spec :
@@ -416,7 +468,7 @@ Module CSet.
     Qed.
 
     Lemma cosingleton_spec :
-        ~ In y (cosingleton x) <-> y = x.
+        In y (cosingleton x) <-> y <> x.
     Proof.
       unfold In, cosingleton.
       split; MSetDecide.fsetdec.
@@ -546,14 +598,22 @@ Module CSetFacts.
     Proof. intros; apply -> subset_spec; auto. Qed.
 
     Lemma is_empty_1 : Empty cs -> is_empty cs = true.
-    Proof. intros; apply <- is_empty_spec; auto. Qed.
+    Proof. intros; apply <- is_empty_spec1; auto. Qed.
     Lemma is_empty_2 : is_empty cs = true -> Empty cs.
-    Proof. intros; apply -> is_empty_spec; auto. Qed.
+    Proof. intros; apply -> is_empty_spec1; auto. Qed.
+    Lemma is_empty_3 : Nonempty cs -> is_empty cs = false.
+    Proof. intros; apply <- is_empty_spec2; auto. Qed.
+    Lemma is_empty_4 : is_empty cs = false -> Nonempty cs.
+    Proof. intros; apply -> is_empty_spec2; auto. Qed.
 
     Lemma is_universe_1 : Universe cs -> is_universe cs = true.
-    Proof. intros; apply <- is_universe_spec; auto. Qed.
+    Proof. intros; apply <- is_universe_spec1; auto. Qed.
     Lemma is_universe_2 : is_universe cs = true -> Universe cs.
-    Proof. intros; apply -> is_universe_spec; auto. Qed.
+    Proof. intros; apply -> is_universe_spec1; auto. Qed.
+    Lemma is_universe_3 : Nonuniverse cs -> is_universe cs = false.
+    Proof. intros; apply <- is_universe_spec2; auto. Qed.
+    Lemma is_universe_4 : is_universe cs = false -> Nonuniverse cs.
+    Proof. intros; apply -> is_universe_spec2; auto. Qed.
 
     Lemma add_1 : E.eq x y -> In y (add x cs).
     Proof. intros; apply <- add_spec. auto with relations. Qed.
@@ -576,6 +636,11 @@ Module CSetFacts.
     Proof. rewrite singleton_spec; auto with relations. Qed.
     Lemma singleton_2 : E.eq x y -> In y (singleton x).
     Proof. rewrite singleton_spec; auto with relations. Qed.
+
+    Lemma cosingleton_1 : In y (cosingleton x) -> ~ E.eq x y.
+    Proof. rewrite cosingleton_spec; auto with relations. Qed.
+    Lemma cosingleton_2 : ~ E.eq x y -> In y (cosingleton x).
+    Proof. rewrite cosingleton_spec; auto with relations. Qed.
 
     Lemma union_1 : In x (union cs1 cs2) -> In x cs1 \/ In x cs2.
     Proof. rewrite union_spec; auto. Qed.
@@ -609,13 +674,14 @@ Module CSetFacts.
   Notation universe_1 := universe_spec (only parsing).
 
   Hint Resolve mem_1 equal_1 subset_1 empty_1 universe_1
-      is_empty_1 is_universe_1 add_1 add_2 remove_1
-      remove_2 singleton_2 union_1 union_2 union_3
-      inter_3 diff_3 disjoint_1 : set.
+      is_empty_1 is_empty_3 is_universe_1 is_universe_3
+      add_1 add_2 remove_1 remove_2 singleton_2
+      cosingleton_2 union_1 union_2 union_3 inter_3 diff_3
+      disjoint_1 : set.
 
-  Hint Immediate In_1 mem_2 equal_2 subset_2 is_empty_2
-       is_universe_2 add_3 remove_3 singleton_1 inter_1
-       inter_2 diff_1 diff_2 disjoint_2
+  Hint Immediate In_1 mem_2 equal_2 subset_2 is_empty_2 is_empty_4
+       is_universe_2 is_universe_4 add_3 remove_3 singleton_1
+       cosingleton_1 inter_1 inter_2 diff_1 diff_2 disjoint_2
     : set.
 
   (** * Specifications written using equivalences :
@@ -650,14 +716,24 @@ Module CSetFacts.
     Lemma universe_iff : In x universe <-> True.
     Proof. intuition; apply (universe_spec H). Qed.
 
-    Lemma is_empty_iff : Empty cs <-> is_empty cs = true.
-    Proof. apply iff_sym, is_empty_spec. Qed.
+    Lemma is_empty_iff1 : Empty cs <-> is_empty cs = true.
+    Proof. apply iff_sym, is_empty_spec1. Qed.
 
-    Lemma is_universe_iff : Universe cs <-> is_universe cs = true.
-    Proof. apply iff_sym, is_universe_spec. Qed.
+    Lemma is_empty_iff2 : Nonempty cs <-> is_empty cs = false.
+    Proof. apply iff_sym, is_empty_spec2. Qed.
+
+    Lemma is_universe_iff1 : Universe cs <-> is_universe cs = true.
+    Proof. apply iff_sym, is_universe_spec1. Qed.
+
+    Lemma is_universe_iff2 :
+      Nonuniverse cs <-> is_universe cs = false.
+    Proof. apply iff_sym, is_universe_spec2. Qed.
 
     Lemma singleton_iff : In y (singleton x) <-> E.eq x y.
     Proof. rewrite singleton_spec; intuition. Qed.
+
+    Lemma cosingleton_iff : In y (cosingleton x) <-> ~ E.eq x y.
+    Proof. rewrite cosingleton_spec; intuition. Qed.
 
     Lemma add_iff : In y (add x cs) <-> E.eq x y \/ In y cs.
     Proof. rewrite add_spec; intuition. Qed.
@@ -689,7 +765,8 @@ Module CSetFacts.
   Ltac set_iff :=
    repeat (progress (
     rewrite add_iff || rewrite remove_iff || rewrite singleton_iff
-    || rewrite union_iff || rewrite inter_iff || rewrite diff_iff
+    || rewrite cosingleton_iff || rewrite union_iff
+    || rewrite inter_iff || rewrite diff_iff
     || rewrite empty_iff || rewrite universe_iff)).
 
   (**  * Specifications written using boolean predicates *)
@@ -756,6 +833,14 @@ Module CSetFacts.
     destruct (eq_dec x y); destruct (mem y (singleton x)); intuition.
     Qed.
 
+    Lemma cosingleton_b : mem y (cosingleton x) = negb (eqb x y).
+    Proof.
+    generalize (mem_iff (cosingleton x) y)(cosingleton_iff x y);
+      unfold eqb, negb.
+    destruct (eq_dec x y); destruct (mem y (cosingleton x));
+      intuition.
+    Qed.
+
     Lemma union_b : mem x (union cs1 cs2) = mem x cs1 || mem x cs2.
     Proof.
     generalize (mem_iff (union cs1 cs2) x)
@@ -798,6 +883,12 @@ Module CSetFacts.
   setoid_rewrite E; auto.
   Qed.
 
+  Instance Nonempty_m : Proper (Equal==>iff) Nonempty.
+  Proof.
+  repeat red; unfold Nonempty; intros s s' E.
+  setoid_rewrite E; auto.
+  Qed.
+
   Instance Universe_m : Proper (Equal==>iff) Universe.
   Proof.
   repeat red; unfold Universe; intros s s' E.
@@ -807,15 +898,15 @@ Module CSetFacts.
   Instance is_empty_m : Proper (Equal==>Logic.eq) is_empty.
   Proof.
   intros s s' H.
-  generalize (is_empty_iff s). rewrite H at 1. rewrite is_empty_iff.
+  generalize (is_empty_iff1 s). rewrite H at 1. rewrite is_empty_iff1.
   destruct (is_empty s); destruct (is_empty s'); intuition.
   Qed.
 
   Instance is_universe_m : Proper (Equal==>Logic.eq) is_universe.
   Proof.
   intros s s' H.
-  generalize (is_universe_iff s).
-  rewrite H at 1. rewrite is_universe_iff.
+  generalize (is_universe_iff1 s).
+  rewrite H at 1. rewrite is_universe_iff1.
   destruct (is_universe s); destruct (is_universe s'); intuition.
   Qed.
 
@@ -829,6 +920,11 @@ Module CSetFacts.
   Instance singleton_m : Proper (E.eq==>Equal) singleton.
   Proof.
   intros x y H a. rewrite !singleton_iff, H; intuition.
+  Qed.
+
+  Instance cosingleton_m : Proper (E.eq==>Equal) cosingleton.
+  Proof.
+  intros x y H a. rewrite !cosingleton_iff, H; intuition.
   Qed.
 
   Instance add_m : Proper (E.eq==>Equal==>Equal) add.
@@ -1220,59 +1316,61 @@ Module CSetDecideAuxiliary.
 
   (** ** Discarding Irrelevant Hypotheses
       We will want to clear the context of any
-      non-MSet-related hypotheses in order to increase the
+      non-CSet-related hypotheses in order to increase the
       speed of the tactic.  To do this, we will need to be
       able to decide which are relevant.  We do this by making
       a simple inductive definition classifying the
       propositions of interest. *)
 
-  Inductive MSet_elt_Prop : Prop -> Prop :=
+  Inductive CSet_elt_Prop : Prop -> Prop :=
   | eq_Prop : forall (S : Type) (x y : S),
-      MSet_elt_Prop (x = y)
+      CSet_elt_Prop (x = y)
   | eq_elt_prop : forall x y,
-      MSet_elt_Prop (E.eq x y)
+      CSet_elt_Prop (E.eq x y)
   | In_elt_prop : forall x s,
-      MSet_elt_Prop (In x s)
+      CSet_elt_Prop (In x s)
   | True_elt_prop :
-      MSet_elt_Prop True
+      CSet_elt_Prop True
   | False_elt_prop :
-      MSet_elt_Prop False
+      CSet_elt_Prop False
   | conj_elt_prop : forall P Q,
-      MSet_elt_Prop P ->
-      MSet_elt_Prop Q ->
-      MSet_elt_Prop (P /\ Q)
+      CSet_elt_Prop P ->
+      CSet_elt_Prop Q ->
+      CSet_elt_Prop (P /\ Q)
   | disj_elt_prop : forall P Q,
-      MSet_elt_Prop P ->
-      MSet_elt_Prop Q ->
-      MSet_elt_Prop (P \/ Q)
+      CSet_elt_Prop P ->
+      CSet_elt_Prop Q ->
+      CSet_elt_Prop (P \/ Q)
   | impl_elt_prop : forall P Q,
-      MSet_elt_Prop P ->
-      MSet_elt_Prop Q ->
-      MSet_elt_Prop (P -> Q)
+      CSet_elt_Prop P ->
+      CSet_elt_Prop Q ->
+      CSet_elt_Prop (P -> Q)
   | not_elt_prop : forall P,
-      MSet_elt_Prop P ->
-      MSet_elt_Prop (~ P).
+      CSet_elt_Prop P ->
+      CSet_elt_Prop (~ P).
 
-  Inductive MSet_Prop : Prop -> Prop :=
-  | elt_MSet_Prop : forall P,
-      MSet_elt_Prop P ->
-      MSet_Prop P
-  | Empty_MSet_Prop : forall s,
-      MSet_Prop (Empty s)
-  | Universe_MSet_Prop : forall s,
-      MSet_Prop (Universe s)
-  | Subset_MSet_Prop : forall s1 s2,
-      MSet_Prop (Subset s1 s2)
-  | Equal_MSet_Prop : forall s1 s2,
-      MSet_Prop (Equal s1 s2)
-  | Disjoint_MSet_Prop : forall s1 s2,
-      MSet_Prop (Disjoint s1 s2).
+  Inductive CSet_Prop : Prop -> Prop :=
+  | elt_CSet_Prop : forall P,
+      CSet_elt_Prop P ->
+      CSet_Prop P
+  | Empty_CSet_Prop : forall s,
+      CSet_Prop (Empty s)
+  | Nonempty_CSet_Prop : forall s,
+      CSet_Prop (Nonempty s)
+  | Universe_CSet_Prop : forall s,
+      CSet_Prop (Universe s)
+  | Subset_CSet_Prop : forall s1 s2,
+      CSet_Prop (Subset s1 s2)
+  | Equal_CSet_Prop : forall s1 s2,
+      CSet_Prop (Equal s1 s2)
+  | Disjoint_CSet_Prop : forall s1 s2,
+      CSet_Prop (Disjoint s1 s2).
 
   (** Here is the tactic that will throw away hypotheses that
       are not useful (for the intended scope of the [fsetdec]
       tactic). *)
-  Hint Constructors MSet_elt_Prop MSet_Prop : MSet_Prop.
-  Ltac discard_nonMSet :=
+  Hint Constructors CSet_elt_Prop CSet_Prop : CSet_Prop.
+  Ltac discard_nonCSet :=
     repeat (
       match goal with
       | H : context [ @Logic.eq ?T ?x ?y ] |- _ =>
@@ -1280,14 +1378,14 @@ Module CSetDecideAuxiliary.
         else tryif (change T with t in H) then fail
         else clear H
       | H : ?P |- _ =>
-        tryif prop (MSet_Prop P) holds by
-          (auto 100 with MSet_Prop)
+        tryif prop (CSet_Prop P) holds by
+          (auto 100 with CSet_Prop)
         then fail
         else clear H
       end).
 
   (** ** Turning Set Operators into Propositional Connectives
-      The lemmas from [MSetFacts] will be used to break down
+      The lemmas from [CSetFacts] will be used to break down
       set operations into propositional formulas built over
       the predicates [In] and [E.eq] applied
       only to variables.  We are going to use them with
@@ -1296,8 +1394,9 @@ Module CSetDecideAuxiliary.
 
   Hint Rewrite
     CSetFacts.empty_iff CSetFacts.universe_iff
-    CSetFacts.singleton_iff CSetFacts.add_iff
-    CSetFacts.remove_iff CSetFacts.union_iff CSetFacts.inter_iff
+    CSetFacts.singleton_iff CSetFacts.cosingleton_iff
+    CSetFacts.add_iff CSetFacts.remove_iff
+    CSetFacts.union_iff CSetFacts.inter_iff
     CSetFacts.diff_iff
   : set_simpl.
 
@@ -1308,7 +1407,7 @@ Module CSetDecideAuxiliary.
 
   Hint Rewrite eq_refl_iff : set_eq_simpl.
 
-  (** ** Decidability of MSet Propositions *)
+  (** ** Decidability of CSet Propositions *)
 
   (** [In] is decidable. *)
   Lemma dec_In : forall x s,
@@ -1325,9 +1424,9 @@ Module CSetDecideAuxiliary.
     red; intros x y; destruct (E.eq_dec x y); auto.
   Qed.
 
-  (** The hint database [MSet_decidability] will be given to
+  (** The hint database [CSet_decidability] will be given to
       the [push_neg] tactic from the module [Negation]. *)
-  Hint Resolve dec_In dec_eq : MSet_decidability.
+  Hint Resolve dec_In dec_eq : CSet_decidability.
 
   (** ** Normalizing Propositions About Equality
       We have to deal with the fact that [E.eq] may be
@@ -1356,6 +1455,12 @@ Module CSetDecideAuxiliary.
           | J : _ |- _ => progress (change T with E.t in J)
           | |- _ => progress (change T with E.t)
           end )
+      | |- exists x : ?T, _ =>
+        progress (change T with E.t);
+        repeat (
+          match goal with
+          | J : _ |- _ => progress (change T with E.t in J)
+          end )
      end).
 
   (** These two tactics take us from Coq's built-in equality
@@ -1382,7 +1487,7 @@ Module CSetDecideAuxiliary.
   (** This tactic works like the built-in tactic [subst], but
       at the level of set element equality (which may not be
       the convertible with Coq's equality). *)
-  Ltac substMSet :=
+  Ltac substCSet :=
     repeat (
       match goal with
       | H: E.eq ?x ?x |- _ => clear H
@@ -1422,6 +1527,53 @@ Module CSetDecideAuxiliary.
       | _: ~ ?P, H : ?P \/ ~ ?P |- _ => clear H
       end).
 
+  Ltac inList x xs :=
+    match xs with
+    | tt => constr:false
+    | (x, _) => constr:true
+    | (_, ?xs') => inList x xs'
+    end.
+
+  Ltac inst_exists_rec xs :=
+    match goal with
+    | _ : context [ In ?x _ ] |-_ => add_inst_exists x xs
+    | _ : context [ E.eq ?x _ ] |- _ => add_inst_exists x xs
+    | _ : context [ E.eq _ ?x ] |- _ => add_inst_exists x xs
+    | _ => idtac
+    end
+    with add_inst_exists x xs :=
+      let b := inList x xs in
+      match b with
+      | true => fail 1
+      | false =>
+        match goal with
+        | |- exists y : E.t, @?G y =>
+          let H  := fresh "H" in
+          enough ((exists y, G y) \/ G x) as H
+              by (destruct H; [assumption | exists x; assumption])
+        | |- (exists y : E.t, @?G1 y) \/ ?G2 =>
+          let H  := fresh "H" in
+          enough ((exists y, G1 y) \/ (G1 x \/ G2)) as H
+              by (destruct H as [? | [? | ?]];
+                  [left; assumption
+                  |left; exists x; assumption
+                  | right; assumption])
+        end;
+        inst_exists_rec (x, xs)
+      end.
+
+  Ltac inst_exists :=
+    match goal with
+    | |- exists y : E.t, _ =>
+      inst_exists_rec tt;
+      match goal with
+      | |- _ \/ _ => right
+      | |- exists y : E.t, _ => exists 0
+      | _ => idtac
+      end
+    | _ => idtac
+    end.
+
   (** ** Handling [Empty], [Subset], and [Equal]
       This tactic instantiates universally quantified
       hypotheses (which arise from the unfolding of [Empty],
@@ -1429,7 +1581,7 @@ Module CSetDecideAuxiliary.
       expressions that is involved in some membership or
       equality fact.  Then it throws away those hypotheses,
       which should no longer be needed. *)
-  Ltac inst_MSet_hypotheses :=
+  Ltac inst_CSet_hypotheses :=
     repeat (
       match goal with
       | H : forall a : E.t, _,
@@ -1463,12 +1615,70 @@ Module CSetDecideAuxiliary.
         clear H
       end).
 
+  Local Lemma in_singleton : forall x, In x (singleton x).
+  Proof. intro x. rewrite singleton_spec. reflexivity. Qed.
+
+  Local Lemma not_in_singleton : forall x, ~ In (S x) (singleton x).
+  Proof.
+    intro x. rewrite singleton_spec.
+    intro. apply (n_Sn x). symmetry. assumption.
+  Qed.
+
+  Local Lemma in_cosingleton : forall x, In (S x) (cosingleton x).
+  Proof.
+    intro x. rewrite cosingleton_spec.
+    intro. apply (n_Sn x). symmetry. assumption.
+  Qed.
+
+  Local Lemma not_in_cosingleton : forall x, ~ In x (cosingleton x).
+  Proof.
+    intro x. rewrite cosingleton_spec.
+    intro H. contradict H. reflexivity.
+  Qed.
+
+  Ltac add_in_constants :=
+    repeat (
+        match goal with
+        | _ : context [ singleton ?x ] |- _ =>
+          assert new (In x (singleton x))
+            by (apply in_singleton)
+        | _ : context [ singleton ?x ] |- _ =>
+          assert new (~ In (S x) (singleton x))
+            by (apply not_in_singleton)
+        | |- context [ singleton ?x ] =>
+          assert new (In x (singleton x))
+            by (apply in_singleton)
+        | |- context [ singleton ?x ] =>
+          assert new (~ In (S x) (singleton x))
+            by (apply not_in_singleton)
+        | _ : context [ cosingleton ?x ] |- _ =>
+          assert new (In (S x) (cosingleton x))
+            by (apply in_cosingleton)
+        | _ : context [ cosingleton ?x ] |- _ =>
+          assert new (~ In x (cosingleton x))
+            by (apply not_in_cosingleton)
+        | |- context [ cosingleton ?x ] =>
+          assert new (In (S x) (cosingleton x))
+            by (apply in_cosingleton)
+        | |- context [ cosingleton ?x ] =>
+          assert new (~ In x (cosingleton x))
+            by (apply not_in_cosingleton)
+        | _ : context [ universe ] |- _ =>
+          assert new (In 0 universe) by (apply universe_spec)
+        | |- context [ universe ] =>
+          assert new (In 0 universe) by (apply universe_spec)
+        | _ : context [ empty ] |- _ =>
+          assert new (~ In 0 empty) by (apply empty_spec)
+        | |- context [ empty ] =>
+          assert new (~ In 0 empty) by (apply empty_spec)
+        end ).
+
   (** ** The Core [fsetdec] Auxiliary Tactics *)
 
   (** Here is the crux of the proof search.  Recursion through
       [intuition]!  (This will terminate if I correctly
       understand the behavior of [intuition].) *)
-  Ltac csetdec_rec := progress substMSet; intuition csetdec_rec.
+  Ltac csetdec_rec := progress substCSet; intuition csetdec_rec.
 
   (** If we add [unfold Empty, Subset, Equal in *; intros;] to
       the beginning of this tactic, it will satisfy the same
@@ -1477,10 +1687,11 @@ Module CSetDecideAuxiliary.
       done by the wrapper tactic [fsetdec]. *)
   Ltac csetdec_body :=
     autorewrite with set_eq_simpl in *;
-    inst_MSet_hypotheses;
+    inst_exists;
+    inst_CSet_hypotheses;
     autorewrite with set_simpl set_eq_simpl in *;
-    push not in * using MSet_decidability;
-    substMSet;
+    push not in * using CSet_decidability;
+    substCSet;
     assert_decidability;
     auto;
     (intuition csetdec_rec) ||
@@ -1510,14 +1721,20 @@ Ltac csetdec :=
       later "clear" will work nicely (see bug #2136) *)
   no_logical_interdep;
   (** Now we decompose conjunctions, which will allow the
-      [discard_nonMSet] and [assert_decidability] tactics to
+      [discard_nonCSet] and [assert_decidability] tactics to
       do a much better job. *)
   decompose records;
-  discard_nonMSet;
+  discard_nonCSet;
+  (* Add In hypothesise for empty, universe, singelton and
+     cosingleton. *)
+  add_in_constants;
   (** We unfold these defined propositions on finite sets.  If
       our goal was one of them, then have one more item to
       introduce now. *)
-  unfold Empty, Universe, Subset, Disjoint, Equal in *; intros;
+  unfold Empty, Nonempty, Universe, Nonuniverse,
+           Subset, Disjoint, Equal in *;
+  intros;
+  decompose records;
   (** We now want to get rid of all uses of [=] in favor of
       [E.eq].  However, the best way to eliminate a [=] is in
       the context is with [subst], so we will try that first.
@@ -1538,9 +1755,9 @@ Ltac csetdec :=
       branch below, we attempt any swap.  However, to maintain
       completeness of this tactic, we can only perform such a
       swap with a decidable proposition; hence, we first test
-      whether the hypothesis is an [MSet_elt_Prop], noting
-      that any [MSet_elt_Prop] is decidable. *)
-  pull not using MSet_decidability;
+      whether the hypothesis is an [CSet_elt_Prop], noting
+      that any [CSet_elt_Prop] is decidable. *)
+  pull not using CSet_decidability;
   unfold not in *;
   match goal with
   | H: (In ?x ?r) -> False |- (In ?x ?s) -> False =>
@@ -1550,12 +1767,148 @@ Ltac csetdec :=
   | H: (In ?x ?r) -> False |- (E.eq ?y ?x) -> False =>
     contradict H; csetdec_body
   | H: ?P -> False |- ?Q -> False =>
-    tryif prop (MSet_elt_Prop P) holds by
-      (auto 100 with MSet_Prop)
+    tryif prop (CSet_elt_Prop P) holds by
+      (auto 100 with CSet_Prop)
     then (contradict H; csetdec_body)
     else csetdec_body
   | |- _ =>
     csetdec_body
   end.
 
-    
+(*
+Module CSetDecideTestCases.
+
+  Lemma test_eq_trans_1 : forall x y z s,
+    E.eq x y ->
+    ~ ~ E.eq z y ->
+    In x s ->
+    In z s.
+  Proof. csetdec. Qed.
+
+  Lemma test_eq_trans_2 : forall x y z r s,
+    In x (singleton y) ->
+    ~ In z r ->
+    ~ ~ In z (add y r) ->
+    In x s ->
+    In z s.
+  Proof. csetdec. Qed.
+
+  Lemma test_eq_neq_trans_1 : forall w x y z s,
+    E.eq x w ->
+    ~ ~ E.eq x y ->
+    ~ E.eq y z ->
+    In w s ->
+    In w (remove z s).
+  Proof. csetdec. Qed.
+
+  Lemma test_eq_neq_trans_2 : forall w x y z r1 r2 s,
+    In x (singleton w) ->
+    ~ In x r1 ->
+    In x (add y r1) ->
+    In y r2 ->
+    In y (remove z r2) ->
+    In w s ->
+    In w (remove z s).
+  Proof. csetdec. Qed.
+
+  Lemma test_In_singleton : forall x,
+    In x (singleton x).
+  Proof. csetdec. Qed.
+
+  Lemma test_add_In : forall x y s,
+    In x (add y s) ->
+    ~ E.eq x y ->
+    In x s.
+  Proof. csetdec. Qed.
+
+  Lemma test_Subset_add_remove : forall x s,
+    Subset s (add x (remove x s)).
+  Proof. csetdec. Qed.
+
+  Lemma test_eq_disjunction : forall w x y z,
+    In w (add x (add y (singleton z))) ->
+    E.eq w x \/ E.eq w y \/ E.eq w z.
+  Proof. csetdec. Qed.
+
+  Lemma test_not_In_disj : forall x y s1 s2 s3 s4,
+    ~ In x (union s1 (union s2 (union s3 (add y s4)))) ->
+    ~ (In x s1 \/ In x s4 \/ E.eq y x).
+  Proof. csetdec. Qed.
+
+  Lemma test_not_In_conj : forall x y s1 s2 s3 s4,
+    ~ In x (union s1 (union s2 (union s3 (add y s4)))) ->
+    ~ In x s1 /\ ~ In x s4 /\ ~ E.eq y x.
+  Proof. csetdec. Qed.
+
+  Lemma test_iff_conj : forall a x s s',
+  (In a s' <-> E.eq x a \/ In a s) ->
+  (In a s' <-> In a (add x s)).
+  Proof. csetdec. Qed.
+
+  Lemma test_set_ops_1 : forall x q r s,
+    Subset (singleton x) s ->
+    Empty (union q r) ->
+    Empty (inter (diff s q) (diff s r)) ->
+    ~ In x s.
+  Proof. csetdec. Qed.
+
+  Lemma eq_chain_test : forall x1 x2 x3 x4 s1 s2 s3 s4,
+    Empty s1 ->
+    In x2 (add x1 s1) ->
+    In x3 s2 ->
+    ~ In x3 (remove x2 s2) ->
+    ~ In x4 s3 ->
+    In x4 (add x3 s3) ->
+    In x1 s4 ->
+    Subset (add x4 s4) s4.
+  Proof. csetdec. Qed.
+
+  Lemma test_too_complex : forall x y z r s,
+    E.eq x y ->
+    (In x (singleton y) -> Subset r s) ->
+    In z r ->
+    In z s.
+  Proof.
+    (** [csetdec] is not intended to solve this directly. *)
+    intros until s; intros Heq H Hr; lapply H; csetdec.
+  Qed.
+
+  Lemma function_test_1 :
+    forall (f : t -> t),
+    forall (g : elt -> elt),
+    forall (s1 s2 : t),
+    forall (x1 x2 : elt),
+    Equal s1 (f s2) ->
+    E.eq x1 (g (g x2)) ->
+    In x1 s1 ->
+    In (g (g x2)) (f s2).
+  Proof. csetdec. Qed.
+
+  Lemma function_test_2 :
+    forall (f : t -> t),
+    forall (g : elt -> elt),
+    forall (s1 s2 : t),
+    forall (x1 x2 : elt),
+    Equal s1 (f s2) ->
+    E.eq x1 (g x2) ->
+    In x1 s1 ->
+    g x2 = g (g x2) ->
+    In (g (g x2)) (f s2).
+  Proof.
+    (** [csetdec] is not intended to solve this directly. *)
+    intros until 3. intros g_eq. rewrite <- g_eq. csetdec.
+  Qed.
+
+  Lemma test_baydemir :
+    forall (f : t -> t),
+    forall (s : t),
+    forall (x y : elt),
+    In x (add y (f s)) ->
+    ~ E.eq x y ->
+    In x (f s).
+  Proof.
+    csetdec.
+  Qed.
+
+End CSetDecideTestCases.
+*)
