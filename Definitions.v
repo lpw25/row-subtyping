@@ -4,7 +4,7 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import Recdef List LibLN Cofinite.
+Require Import  List LibLN Cofinite.
 Implicit Types x : var.
 Implicit Types X : var.
 
@@ -118,7 +118,7 @@ Notation "M ^ X" := (sch_open_var M X) (only parsing) : sch_scope.
 Bind Scope sch_scope with sch.
 Open Scope sch_scope.
 
-Function instance_rec (M : sch) (Us : list typ) (n : nat)
+Fixpoint instance_rec (M : sch) (Us : list typ) (n : nat)
          {struct n} : typ :=
   match n with
   | 0 => sch_body M
@@ -298,19 +298,34 @@ Inductive bind : Type :=
   | bind_knd : knd -> bind
   | bind_typ : sch -> bind.
 
-Definition bind_knds Xs Ks :=
-  map bind_knd (Xs ~* Ks).
+(** Pre-environment is an associative list of bindings. *)
+
+Definition env := LibEnv.env bind.
+
+Function bind_knds_rec (M : sch) (Xs : list var) (n : nat)
+         {struct n} : env :=
+  match n with
+  | 0 => nil
+  | S n =>
+    match M with
+    | sch_empty _ => nil
+    | sch_bind K M =>
+      match Xs with
+      | nil => nil
+      | X :: Xs => (X ~ bind_knd K) & bind_knds_rec (M ^ X) Xs n
+      end
+    end
+  end.
+
+Definition bind_knds Xs M :=
+  bind_knds_rec M Xs (sch_arity M). 
 
 Notation "X ~:: K" := (X ~ bind_knd K)
   (at level 23, left associativity) : env_scope.
 Notation "x ~: T" := (x ~ bind_typ T)
   (at level 23, left associativity) : env_scope.
-Notation "Xs ~::* Ks" := (map bind_knd (Xs ~* Ks))
+Notation "Xs ~::* M" := (bind_knds Xs M)
   (at level 23, left associativity) : env_scope.
-
-(** Pre-environment is an associative list of bindings. *)
-
-Definition env := LibEnv.env bind.
 
 (** Environment is a pre-environment with unique bindings *)
 
@@ -538,6 +553,29 @@ Inductive kinding_scheme : env -> sch -> Prop :=
          kinding_scheme (E & X ~:: K) (M ^ X)) ->
       kinding_scheme E (sch_bind K M).
 
+Function kinding_instance_rec (M : sch) (Us : list typ) (n : nat)
+         {struct n} : typ :=
+  match n with
+  | 0 => sch_body M
+  | S n =>
+    match M with
+    | sch_empty T => T
+    | sch_bind K M =>
+      match Us with
+      | nil => sch_body M
+      | U :: Us => instance_rec (M ^^ U) Us n
+      end
+    end
+  end.
+
+Inductive kinding_instance : env -> sch -> list typ -> Prop :=
+  | kinding_instance_empty : forall E T,
+      kinding_instance E (sch_empty T) nil
+  | kinding_instance_bind : forall E K M T Ts,
+      kinding E T K ->
+      kinding_instance E (M ^^ T) Ts ->
+      kinding_instance E (sch_bind K M) (T :: Ts).
+
 (** A environment E is well-kinded if it contains no duplicate
   bindings and if each type in it is well-kinded with respect to
   the environment it is pushed on to. *)
@@ -563,11 +601,11 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_var : forall E x M Us, 
       kinding_env E -> 
       binds x (bind_typ M) E -> 
-      kindings E (sch_arity M) Us (sch_kinds M) ->
-      typing E (trm_fvar x) (M ^^ Us)
+      kinding_instance E M Us ->
+      typing E (trm_fvar x) (instance M Us)
   | typing_abs : forall L E T1 T2 t1, 
       (forall x, x \notin L -> 
-        typing (E & x ~ bind_typ (Sch nil T1)) (t1 ^ x) T2) -> 
+        typing (E & x ~ bind_typ (sch_empty T1)) (t1 ^ x) T2) -> 
       typing E (trm_abs t1) (typ_arrow T1 T2)
   | typing_app : forall E S T t1 t2, 
       typing E t1 (typ_arrow S T) ->
@@ -576,57 +614,65 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_let : forall M L E T2 t1 t2, 
       (forall Xs, fresh L (sch_arity M) Xs ->
          typing
-           (E & Xs ~::* sch_kinds M)
-           t1 (M ^ Xs)) ->
+           (E & Xs ~::* M)
+           t1 (instance_vars M Xs)) ->
       (forall x, x \notin L -> typing (E & x ~ (bind_typ M)) (t2 ^ x) T2) -> 
       typing E (trm_let t1 t2) T2
-  | typing_constructor : forall c E T1 T2 T3 t,
-      typing E t T1 ->
-      E ||= (typ_or (typ_constructor c T1)
-                   (typ_bot (CSet.cosingleton c)))
-           -<: T2 ->
-      (E ||= T2 -<: T3) ->
-      typing E (trm_constructor c t) (typ_variant T3 T2)
+  | typing_constructor : forall c E T1 T2 t,
+      kinding E T1
+        (knd_range (typ_top CSet.universe)
+                   (typ_or (typ_constructor c T2)
+                           (typ_bot (CSet.cosingleton c)))) ->
+      typing E t T2 ->
+      typing E (trm_constructor c t) (typ_variant T1)
   | typing_match : forall c L E T1 T2 T3 T4 T5
-                          T6 T7 T8 T9 T10 t1 t2 t3,
-      typing E t1 (typ_variant T1 T2) ->
+                          T6 T7 t1 t2 t3,
+      kinding E T1
+        (knd_range (typ_or (typ_constructor c T2)
+                           (typ_top (CSet.cosingleton c)))
+                   (typ_bot CSet.universe)) ->
+      kinding E T1 (knd_range (typ_or T3 T4)
+                              (typ_bot CSet.universe)) ->
+      kinding E T5
+              (knd_range (typ_top CSet.universe)
+                         (typ_or T3
+                                 (typ_bot (CSet.cosingleton c)))) ->
+      kinding E T6
+              (knd_range (typ_top CSet.universe)
+                         (typ_or (typ_bot (CSet.singleton c))
+                                 T4)) ->
+      typing E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing (E & x ~: (Sch nil (typ_variant T3 T4)))
-                (t2 ^ x) T5) ->
+         typing (E & x ~: (sch_empty (typ_variant T5)))
+                (t2 ^ x) T7) ->
       (forall y, y \notin L -> 
-         typing (E & y ~: (Sch nil (typ_variant T6 T7)))
-                (t3 ^ y) T5) ->
-      E ||= T1 -<: (typ_or T8 T9) ->
-      E ||= (typ_or T8
-                   (typ_bot (CSet.cosingleton c)))
-           -<: (typ_or (typ_constructor c T10)
-                       (typ_bot (CSet.cosingleton c))) ->
-      E ||= (typ_or T8 (typ_bot (CSet.cosingleton c)))
-           -<: T4 ->
-      E ||= (typ_or (typ_bot (CSet.singleton c)) T9)
-           -<: T7 ->
-      typing E (trm_match t1 c t2 t3) T5
-  | typing_destruct : forall c L E T1 T2 T3 T4 t1 t2,
-      typing E t1 (typ_variant T1 T2) ->
+         typing (E & y ~: (sch_empty (typ_variant T6)))
+                (t3 ^ y) T7) ->
+      typing E (trm_match t1 c t2 t3) T7
+  | typing_destruct : forall c L E T1 T2 T3 t1 t2,
+      kinding E T1
+        (knd_range (typ_or (typ_constructor c T2)
+                           (typ_bot (CSet.cosingleton c)))
+                   (typ_bot CSet.universe)) ->
+      typing E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing (E & x ~: (Sch nil T3))
-                (t2 ^ x) T4) ->
-      E ||= T1 -<: (typ_or (typ_constructor c T3)
-                      (typ_bot (CSet.cosingleton c))) ->
-      typing E (trm_destruct t1 c t2) T4
-  | typing_absurd : forall E T1 T2 T3 t1,
-      kinding E T3 knd_type ->
-      typing E t1 (typ_variant T1 T2) ->
-      E ||= T1 -<: (typ_bot CSet.universe) ->
-      typing E (trm_absurd t1) T3.
+         typing (E & x ~: (sch_empty T2))
+                (t2 ^ x) T3) ->
+      typing E (trm_destruct t1 c t2) T3
+  | typing_absurd : forall E T1 T2 t1,
+      kinding E T1 (knd_range (typ_bot CSet.universe)
+                              (typ_bot CSet.universe)) ->
+      kinding E T2 knd_type ->
+      typing E t1 (typ_variant T1) ->
+      typing E (trm_absurd t1) T2.
 
 Notation "E |= t -: T" := (typing E t T) (at level 69).
 
 Definition typing_scheme E t M :=
-  kinds (sch_arity M) (sch_kinds M) /\
+  kinding_scheme E M /\
   exists L, forall Xs,
     fresh L (sch_arity M) Xs ->
-    (E & Xs ~::* sch_kinds M) |= t -: (M ^ Xs).
+    (E & Xs ~::* M) |= t -: (instance_vars M Xs).
 
 (* ************************************************************* *)
 (** ** Description of the semantics *)
