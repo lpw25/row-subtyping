@@ -36,10 +36,6 @@ Inductive knd : Type :=
   | knd_row : cset -> knd
   | knd_range : typ -> typ -> knd.
 
-(** Types are inhabited, giving us a default value. *)
-
-Definition typ_def := typ_bvar 0.
-
 Definition typ_nil := typ_bot (CSet.empty).
 
 (** Type schemes. *)
