@@ -2,15 +2,16 @@
 COQC=coqc
 COQPARAMS=-R ~/Repositories/tlc/src TLC
 
-MODULES=Cofinite.vo Definitions.vo Infrastructure.vo Kinding.vo
+MODULES=Cofinite.vo Definitions.vo Substitutions.vo Wellformedness.vo Kinding.vo
 
 all: ${MODULES}
 
 %.vo: %.v
 	${COQC} ${COQPARAMS} $<
 
-Infrastructure.vo: Definitions.vo
-Kinding.vo: Definitions.vo Infrastructure.vo
+Substitutions.vo: Definitions.vo
+Wellformedness.vo: Definitions.vo Substitutions.vo
+Kinding.vo: Definitions.vo Substitutions.vo Wellformedness.vo
 
 clean:
 	@rm -f *.vo *.glob .*.aux
