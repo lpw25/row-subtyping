@@ -100,7 +100,7 @@ Fixpoint typ_subst (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   end.
 
 Fixpoint typ_substs (Zs : list var) (Us : list typ) (T : typ)
-         { struct Zs} :=
+         {struct Zs} :=
   match Zs with
   | nil => T
   | Z :: Zs =>
@@ -118,12 +118,34 @@ Definition knd_subst Z U K :=
   | knd_range T1 T2 => knd_range (typ_subst Z U T1) (typ_subst Z U T2)
   end.
 
+Fixpoint knd_substs (Zs : list var) (Us : list typ) (K : knd)
+         {struct Zs} :=
+  match Zs with
+  | nil => K
+  | Z :: Zs =>
+    match Us with
+    | nil => K
+    | U :: Us => knd_substs Zs Us (knd_subst Z U K)
+    end
+  end.
+
 (** Substitution for names for schemes. *)
 
 Fixpoint sch_subst (Z : var) (U : typ) (M : sch) {struct M} :=
   match M with
   | sch_empty T => sch_empty (typ_subst Z U T)
   | sch_bind K M => sch_bind (knd_subst Z U K) (sch_subst Z U M)
+  end.
+
+Fixpoint sch_substs (Zs : list var) (Us : list typ) (M : sch)
+         {struct Zs} :=
+  match Zs with
+  | nil => M
+  | Z :: Zs =>
+    match Us with
+    | nil => M
+    | U :: Us => sch_substs Zs Us (sch_subst Z U M)
+    end
   end.
 
 (** Substitution for bindings *)
@@ -224,6 +246,35 @@ Proof.
   - rewrite IHts1.
     rewrite* union_assoc.
 Qed.
+
+(* =============================================================== *)
+(** Utilities *)
+
+Lemma fresh_length : forall L n xs,
+  fresh L n xs -> n = length xs.
+Proof using.
+  intros. gen n L. induction xs; simpl; intros n L Fr;
+    destruct n; tryfalse*.
+  easy.
+  f_equal.
+  rewrite* <- (@IHxs n (L \u \{a})).
+Qed.
+
+Lemma map_identity : forall A L,
+    List.map (fun x : A => x) L = L.
+Proof.
+  intros.
+  induction L; simpl; f_equal; auto.
+Qed.
+
+Lemma map_compose : forall A B C L (g : A -> B) (f : B -> C),
+    List.map (fun x : A => f (g x)) L =
+    List.map f (List.map g L).
+Proof.
+  intros.
+  induction L; simpl; f_equal; auto.
+Qed.
+
 
 (* =============================================================== *)
 (** * Properties of terms *)
@@ -428,7 +479,7 @@ Qed.
 
 Lemma typ_subst_fresh_list : forall X U Ts,
   X \notin typ_fv_list Ts ->
-  Ts = List.map (typ_subst X U) Ts.
+  List.map (typ_subst X U) Ts = Ts.
 Proof.
   induction Ts; simpl; intros Fr.
   - easy.
@@ -438,7 +489,7 @@ Qed.
 
 Lemma typ_subst_fresh_typ_fvars : forall X U Xs,
   fresh (\{X}) (length Xs) Xs ->
-  typ_fvars Xs = List.map (typ_subst X U) (typ_fvars Xs).
+  List.map (typ_subst X U) (typ_fvars Xs) = typ_fvars Xs.
 Proof.
   intros. apply typ_subst_fresh_list.
   induction Xs; simpl.
@@ -543,6 +594,16 @@ Proof.
   auto.
 Qed.
 
+Lemma types_cons : forall T Ts,
+    types (length (T :: Ts)) (T :: Ts) <->
+    type T /\ types (length Ts) Ts.
+Proof.
+  intros. unfold types. simpl.
+  intuition.
+  - inversion H1; assumption.
+  - inversion H1; assumption.
+Qed.
+
 Lemma typ_substs_fresh : forall Xs Us T, 
   fresh (typ_fv T) (length Xs) Xs ->
   typ_substs Xs Us T = T.
@@ -554,86 +615,58 @@ Proof.
   rewrite typ_subst_fresh; auto.
 Qed.
 
-Lemma map_identity : forall A L,
-    L = List.map (fun x : A => x) L.
+Lemma typ_substs_fvars : forall Xs Ts,
+    fresh (typ_fv_list Ts) (length Ts) Xs ->
+    List.map (typ_substs Xs Ts) (typ_fvars Xs) = Ts.
 Proof.
-  intros.
-  induction L; simpl; f_equal; auto.
+  introv Hf.
+  assert (length Ts = length Xs)
+    by apply (fresh_length _ _ _ Hf).
+  generalize dependent Ts.
+  induction Xs; introv Hf Hl;
+    destruct Ts; simpl in *; try discriminate.
+  - reflexivity.
+  - inversion Hl.
+    destruct Hf.
+    case_var.
+    rewrite typ_substs_fresh; auto.
+    rewrite map_compose.
+    rewrite typ_subst_fresh_typ_fvars; auto.
+    f_equal; auto.
 Qed.
 
-Lemma map_compose : forall A B C L (g : A -> B) (f : B -> C),
-    List.map (fun x : A => f (g x)) L =
-    List.map f (List.map g L).
+Lemma typ_substs_open_k : forall k Xs Us T1 T2,
+  types (length Us) Us -> 
+  typ_substs Xs Us (typ_open_k k T1 T2) = 
+   typ_open_k k (typ_substs Xs Us T1) (typ_substs Xs Us T2).
 Proof.
-  intros.
-  induction L; simpl; f_equal; auto.
+  intros k Xs.
+  induction Xs; introv H; simpl; auto.
+  destruct Us; auto.
+  rewrite types_cons in H.
+  destruct H.
+  rewrite typ_subst_open_k; auto.
 Qed.
 
-Lemma typ_substs_fresh_list : forall Xs Us Ts,
-  fresh (typ_fv_list Ts) (length Xs) Xs ->
-  Ts = List.map (typ_substs Xs Us) Ts.
+Lemma typ_substs_open : forall Xs Us T1 T2,
+    types (length Us) Us -> 
+    typ_substs Xs Us (typ_open T1 T2) = 
+    typ_open (typ_substs Xs Us T1) (typ_substs Xs Us T2).
 Proof.
-  introv H. generalize dependent Us.
-  induction Xs; intro; simpl.
-  - apply map_identity.
-  - destruct Us.
-    + apply map_identity.
-    + destruct H.
-      rewrite map_compose.
-      rewrite <- typ_subst_fresh_list; auto.
+  intros. unfold typ_open. apply typ_substs_open_k. assumption.
 Qed.
 
-Lemma typ_substs_fresh_typ_fvars : forall Xs Us Ys,
-  fresh (from_list Xs) (length Ys) Ys ->
-  typ_fvars Ys = List.map (typ_substs Xs Us) (typ_fvars Ys).
+Lemma typ_substs_open_var : forall Xs Y Us T,
+    fresh \{Y} (length Xs) Xs ->
+    types (length Us) Us ->
+    typ_open_var (typ_substs Xs Us T) Y
+    = typ_substs Xs Us (typ_open_var T Y).
 Proof.
-  intros. apply typ_substs_fresh_list.
-  induction Xs; simpl.
-  - auto.
-  - simpl in H. destruct H. auto.
+  introv Nin Wu. unfold typ_open_var. 
+  rewrite typ_substs_open; auto.
+  f_equal.
+  rewrite typ_substs_fresh; auto.
 Qed.
-
-(** Substitution distributes on the open operation. *)
-
-Lemma typ_subst_open_k : forall k X U T1 T2, type U -> 
-  typ_subst X U (typ_open_k k T1 T2) = 
-   typ_open_k k (typ_subst X U T1) (typ_subst X U T2).
-Proof.
-  intros. induction T2; intros; unfold typ_open; simpl; f_equal*.
-  - case_nat*.
-  - case_var*. apply* typ_open_type.
-Qed.
-
-Lemma typ_subst_open : forall X U T1 T2, type U -> 
-  typ_subst X U (typ_open T1 T2) = 
-   typ_open (typ_subst X U T1) (typ_subst X U T2).
-Proof.
-  intros. unfold typ_open. apply typ_subst_open_k. assumption.
-Qed.
-
-(** Substitution and open_var for distinct names commute. *)
-
-Lemma typ_subst_open_var : forall X Y U T, 
-  Y <> X -> type U ->
-     typ_open_var (typ_subst X U T) Y
-   = typ_subst X U (typ_open_var T Y).
-Proof.
-  introv Neq Wu. unfold typ_open_var. 
-  rewrite* typ_subst_open. simpl.
-  case_var*.
-Qed.
-
-(** Opening up a type T with a type U is the same as opening up T
-    with a fresh name X and then substituting U for X. *)
-Lemma typ_subst_intro : forall X T U, 
-  X \notin (typ_fv T) -> type U ->
-  typ_open T U = typ_subst X U (typ_open_var T X).
-Proof.
-  introv Fr Wu. unfold typ_open_var.
-  rewrite* typ_subst_open.
-  rewrite* typ_subst_fresh. simpl. case_var*.
-Qed.
-
 
 (** Open on a kind is the identity. *)
 
@@ -703,6 +736,50 @@ Proof.
   rewrite* knd_subst_fresh. simpl. case_var*.
 Qed.
 
+Lemma knd_substs_fresh : forall Xs Us K, 
+  fresh (knd_fv K) (length Xs) Xs ->
+  knd_substs Xs Us K = K.
+Proof.
+  introv H. generalize dependent Us.
+  induction Xs; intro; simpl; auto.
+  destruct Us; auto.
+  destruct H.
+  rewrite knd_subst_fresh; auto.
+Qed.
+
+Lemma knd_substs_open_k : forall k Xs Us K T,
+  types (length Us) Us -> 
+  knd_substs Xs Us (knd_open_k k T K) = 
+   knd_open_k k (typ_substs Xs Us T) (knd_substs Xs Us K).
+Proof.
+  intros k Xs.
+  induction Xs; introv H; simpl; auto.
+  destruct Us; auto.
+  rewrite types_cons in H.
+  destruct H.
+  rewrite knd_subst_open_k; auto.
+Qed.
+
+Lemma knd_substs_open : forall Xs Us K T,
+    types (length Us) Us -> 
+    knd_substs Xs Us (knd_open K T) = 
+    knd_open (knd_substs Xs Us K) (typ_substs Xs Us T).
+Proof.
+  intros. unfold knd_open. apply knd_substs_open_k. assumption.
+Qed.
+
+Lemma knd_substs_open_var : forall Xs Y Us T,
+    fresh \{Y} (length Xs) Xs ->
+    types (length Us) Us ->
+    knd_open_var (knd_substs Xs Us T) Y
+    = knd_substs Xs Us (knd_open_var T Y).
+Proof.
+  introv Nin Wu. unfold knd_open_var. 
+  rewrite knd_substs_open; auto.
+  f_equal.
+  rewrite typ_substs_fresh; auto.
+Qed.
+
 (** Open on a scheme is the identity. *)
 
 Lemma sch_open_rec_core :forall M j V i U, i <> j ->
@@ -739,14 +816,21 @@ Qed.
 
 (** Substitution distributes on the open operation. *)
 
+Lemma sch_subst_open_k : forall k X U M T, type U -> 
+  sch_subst X U (sch_open_k k T M) = 
+   sch_open_k k (typ_subst X U T) (sch_subst X U M).
+Proof.
+  intros. unfold sch_open. generalize dependent k.
+  induction M; intro; simpl; f_equal*.
+  - apply typ_subst_open_k; auto.
+  - apply knd_subst_open_k; auto.
+Qed.
+
 Lemma sch_subst_open : forall X U M T, type U -> 
   sch_subst X U (sch_open M T) = 
    sch_open (sch_subst X U M) (typ_subst X U T).
 Proof.
-  intros. unfold sch_open. generalize 0.
-  induction M; intro; simpl; f_equal*.
-  - apply typ_subst_open_k; auto.
-  - apply knd_subst_open_k; auto.
+  intros. unfold sch_open. apply sch_subst_open_k. assumption.
 Qed.
 
 (** Substitution and open_var for distinct names commute. *)
@@ -770,6 +854,50 @@ Proof.
   introv Fr Wu. unfold sch_open_var.
   rewrite* sch_subst_open.
   rewrite* sch_subst_fresh. simpl. case_var*.
+Qed.
+
+Lemma sch_substs_fresh : forall Xs Us M, 
+  fresh (sch_fv M) (length Xs) Xs ->
+  sch_substs Xs Us M = M.
+Proof.
+  introv H. generalize dependent Us.
+  induction Xs; intro; simpl; auto.
+  destruct Us; auto.
+  destruct H.
+  rewrite sch_subst_fresh; auto.
+Qed.
+
+Lemma sch_substs_open_k : forall k Xs Us M T,
+  types (length Us) Us -> 
+  sch_substs Xs Us (sch_open_k k T M) = 
+   sch_open_k k (typ_substs Xs Us T) (sch_substs Xs Us M).
+Proof.
+  intros k Xs.
+  induction Xs; introv H; simpl; auto.
+  destruct Us; auto.
+  rewrite types_cons in H.
+  destruct H.
+  rewrite sch_subst_open_k; auto.
+Qed.
+
+Lemma sch_substs_open : forall Xs Us M T,
+    types (length Us) Us -> 
+    sch_substs Xs Us (sch_open M T) = 
+    sch_open (sch_substs Xs Us M) (typ_substs Xs Us T).
+Proof.
+  intros. unfold sch_open. apply sch_substs_open_k. assumption.
+Qed.
+
+Lemma sch_substs_open_var : forall Xs Y Us M,
+    fresh \{Y} (length Xs) Xs ->
+    types (length Us) Us ->
+    sch_open_var (sch_substs Xs Us M) Y
+    = sch_substs Xs Us (sch_open_var M Y).
+Proof.
+  introv Nin Wu. unfold sch_open_var. 
+  rewrite sch_substs_open; auto.
+  f_equal.
+  rewrite typ_substs_fresh; auto.
 Qed.
 
 (** Substitution distributes on the sch_body. *)
@@ -814,23 +942,34 @@ Proof.
   assumption.
 Qed.
 
+Lemma sch_substs_instance : forall Xs Us M Ts,
+    types (length Us) Us -> 
+    typ_substs Xs Us (instance M Ts) = 
+    instance (sch_substs Xs Us M) (List.map (typ_substs Xs Us) Ts).
+Proof.
+  intro.
+  induction Xs; introv H; simpl.
+  - rewrite map_identity. reflexivity.
+  - destruct Us.
+    + rewrite map_identity. reflexivity.
+    + rewrite map_compose.
+      apply types_cons in H.
+      destruct H.
+      rewrite sch_subst_instance; auto.
+Qed.
+
 Lemma typ_substs_intro_instance : forall M Xs Us,
   fresh (sch_fv M \u typ_fv_list Us) (sch_arity M) Xs -> 
   types (sch_arity M) Us ->
-  instance M Us = typ_subst Xs Us (instance_vars M Xs).
+  instance M Us = typ_substs Xs Us (instance_vars M Xs).
 Proof.
-  introv Hf Ht Hl.
-  apply typ_substs_intro; rewrite Hl; auto.
-Qed.
-
-Lemma fresh_length : forall L n xs,
-  fresh L n xs -> n = length xs.
-Proof using.
-  intros. gen n L. induction xs; simpl; intros n L Fr;
-    destruct n; tryfalse*.
-  easy.
-  f_equal.
-  rewrite* <- (@IHxs n (L \u \{a})).
+  introv Hf Ht. unfold instance_vars.
+  replace (sch_arity M) with (length Xs) in *
+    by (symmetry; apply (fresh_length _ _ _ Hf)).
+  destruct Ht.
+  rewrite sch_substs_instance; auto.
+  rewrite sch_substs_fresh; auto.
+  rewrite typ_substs_fvars; auto.
 Qed.
 
 Lemma sch_subst_empty : forall X U T,
@@ -838,7 +977,6 @@ Lemma sch_subst_empty : forall X U T,
     sch_empty (typ_subst X U T).
 Proof.
   unfold sch_subst.
-  simpl.
   reflexivity.
 Qed.
 
