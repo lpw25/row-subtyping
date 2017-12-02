@@ -735,10 +735,7 @@ Inductive red : trm -> trm -> Prop :=
       value (trm_constructor c1 t1) ->
       term_body t2 ->
       red (trm_destruct (trm_constructor c1 t1) c2 t2)
-          (t2 ^^ t1)
-  | red_absurd : forall t1 t1',
-      red t1 t1' ->
-      red (trm_absurd t1) (trm_absurd t1').
+          (t2 ^^ t1).
                   
 Notation "t ---> t'" := (red t t') (at level 68).
 

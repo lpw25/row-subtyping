@@ -73,9 +73,7 @@ Fixpoint trm_fv (t : trm) {struct t} : vars :=
   end.
 
 (* *************************************************************** *)
-(** ** Substitution for free names *)
-
-(** Substitution for names for types *)
+(** ** Types *)
 
 Fixpoint typ_subst (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   match T with
@@ -108,6 +106,7 @@ Fixpoint typ_substs (Zs : list var) (Us : list typ) (T : typ)
   end.
 
 (** Substitution for names for kinds. *)
+
 Definition knd_subst Z U K :=
   match K with
   | knd_type => knd_type
@@ -146,15 +145,37 @@ Fixpoint sch_substs (Zs : list var) (Us : list typ) (M : sch)
   end.
 
 (** Substitution for bindings *)
-Definition binding_subst Z U B :=
+Definition bind_subst Z U B :=
   match B with
   | bind_knd K => bind_knd (knd_subst Z U K)
   | bind_typ M => bind_typ (sch_subst Z U M)
   end.
 
+Fixpoint bind_substs (Zs : list var) (Us : list typ) (B : bind)
+         {struct Zs} :=
+  match Zs with
+  | nil => B
+  | Z :: Zs =>
+    match Us with
+    | nil => B
+    | U :: Us => bind_substs Zs Us (bind_subst Z U B)
+    end
+  end.
+
 (** Substitution for environments *)
-Definition environment_subst Z U E :=
-  map (binding_subst Z U) E.
+Definition env_subst Z U E :=
+  map (bind_subst Z U) E.
+
+Fixpoint env_substs (Zs : list var) (Us : list typ) (E : env)
+         {struct Zs} :=
+  match Zs with
+  | nil => E
+  | Z :: Zs =>
+    match Us with
+    | nil => E
+    | U :: Us => env_substs Zs Us (env_subst Z U E)
+    end
+  end.
 
 (** Substitution for name in a term. *)
 
@@ -224,18 +245,6 @@ Hint Extern 1 =>
   end.
 
 (* =============================================================== *)
-(** ** Properties of fv *)
-
-Lemma fv_list_map : forall ts1 ts2,
-  typ_fv_list (ts1 ++ ts2) = typ_fv_list ts1 \u typ_fv_list ts2.
-Proof.
-  induction ts1; simpl; intros. 
-  - rewrite* union_empty_l.
-  - rewrite IHts1.
-    rewrite* union_assoc.
-Qed.
-
-(* =============================================================== *)
 (** Utilities *)
 
 Lemma fresh_length : forall L n xs,
@@ -273,8 +282,8 @@ Proof.
   - inversion H1; assumption.
 Qed.
 
-(* =============================================================== *)
-(** * Properties of terms *)
+(* *************************************************************** *)
+(** ** Terms *)
 
 (** Substitution on indices is identity on well-formed terms. *)
 
@@ -496,6 +505,9 @@ Proof.
   rewrite typ_substs_fresh; auto.
 Qed.
 
+(* *************************************************************** *)
+(** ** Kinds *)
+
 (** Open on a kind is the identity. *)
 
 Lemma knd_open_rec_core : forall K j V i U, i <> j ->
@@ -607,6 +619,9 @@ Proof.
   f_equal.
   rewrite typ_substs_fresh; auto.
 Qed.
+
+(* *************************************************************** *)
+(** ** Schemes *)
 
 (** Open on a scheme is the identity. *)
 
@@ -807,3 +822,115 @@ Proof.
   unfold sch_subst.
   reflexivity.
 Qed.
+
+(* *************************************************************** *)
+(** ** Bindings *)
+
+Lemma bind_subst_fresh : forall X U B, 
+  X \notin bind_fv B -> 
+  bind_subst X U B = B.
+Proof.
+  intros. destruct B; simpls; f_equal*. 
+  - apply knd_subst_fresh; auto.
+  - apply sch_subst_fresh; auto.
+Qed.
+
+Lemma bind_substs_fresh : forall Xs Us B, 
+  fresh (bind_fv B) (length Xs) Xs ->
+  bind_substs Xs Us B = B.
+Proof.
+  introv H. generalize dependent Us.
+  induction Xs; intro; simpl; auto.
+  destruct Us; auto.
+  destruct H.
+  rewrite bind_subst_fresh; auto.
+Qed.
+
+(* *************************************************************** *)
+(** ** Environments *)
+
+Lemma env_fv_empty :
+  env_fv empty = \{}.
+Proof.
+  unfold env_fv, fv_in_values; rew_env_defs; simpl; reflexivity. 
+Qed.  
+
+Lemma env_fv_single : forall x v,
+  env_fv (x ~ v) = bind_fv v.
+Proof.
+  intros.
+  unfold env_fv, fv_in_values; rew_env_defs; simpl. 
+  apply union_empty_r.
+Qed.  
+
+Lemma env_fv_concat : forall E F,
+  env_fv (E & F) = env_fv E \u env_fv F.
+Proof.
+  intros.
+  unfold env_fv, fv_in_values; rew_env_defs.
+  rewrite LibList.map_app.
+  rewrite LibList.fold_right_app.
+  induction F.
+  - simpl. symmetry. apply union_empty_r.
+  - rewrite LibList.map_cons.
+    simpl.
+    rewrite union_comm_assoc.
+    rewrite IHF.
+    reflexivity.
+Qed. 
+
+Hint Rewrite env_fv_empty env_fv_single env_fv_concat : rew_env_fv.
+
+Lemma env_subst_empty : forall X U,
+  env_subst X U empty = empty.
+Proof.
+  intros.
+  unfold env_subst.
+  autorewrite with rew_env_map.
+  reflexivity. 
+Qed.  
+
+Lemma env_subst_single : forall X U x v,
+  env_subst X U (x ~ v) = (x ~ bind_subst X U v).
+Proof.
+  intros.
+  unfold env_subst.
+  autorewrite with rew_env_map.
+  reflexivity.
+Qed.  
+
+Lemma env_subst_concat : forall X U E F,
+  env_subst X U (E & F) = env_subst X U E & env_subst X U F.
+Proof.
+  intros.
+  unfold env_subst.
+  autorewrite with rew_env_map.
+  reflexivity. 
+Qed.
+
+Hint Rewrite env_subst_empty env_subst_single env_subst_concat
+  : rew_env_subst.
+
+Lemma env_subst_fresh : forall X U E, 
+  X \notin env_fv E -> 
+  env_subst X U E = E.
+Proof.
+  intros.
+  induction E using env_ind;
+    autorewrite with rew_env_subst rew_env_fv in *.
+  - reflexivity.
+  - rewrite bind_subst_fresh; auto.
+    rewrite IHE; auto.
+Qed.
+
+Lemma env_substs_fresh : forall Xs Us E, 
+  fresh (env_fv E) (length Xs) Xs ->
+  env_substs Xs Us E = E.
+Proof.
+  introv H. generalize dependent Us.
+  induction Xs; intro; simpl; auto.
+  destruct Us; auto.
+  destruct H.
+  rewrite env_subst_fresh; auto.
+Qed.
+
