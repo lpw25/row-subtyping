@@ -213,11 +213,6 @@ Tactic Notation "exists_fresh" ident(x) ident(Hfr) :=
 (* *************************************************************** *)
 (** ** Automation *)
 
-Hint Constructors kind type scheme term environment type_equal_or
-     type_equal_meet type_equal_join type_equal_core type_equal_cong
-     type_equal_symm type_equal valid_kind kinding kinding_scheme
-     kinding_instance kinding_env typing value red.
-
 Hint Extern 1 =>
   match goal with
   | H : forall x, x \notin ?L -> ?P |- ?P =>
@@ -800,7 +795,7 @@ Proof.
   replace (sch_arity M) with (length Xs) in *
     by (symmetry; apply (fresh_length _ _ _ Hf)).
   destruct Ht.
-  rewrite sch_substs_instance; auto.
+  rewrite sch_substs_instance; try (split; auto).
   rewrite sch_substs_fresh; auto.
   rewrite typ_substs_fvars; auto.
 Qed.

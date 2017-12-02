@@ -4,7 +4,7 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import List LibLN Definitions.
+Require Import List LibLN Definitions Substitution.
 
 (* *************************************************************** *)
 (** ** Automation *)
