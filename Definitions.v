@@ -197,6 +197,13 @@ Inductive scheme : sch -> Prop :=
       (forall X, X \notin L -> scheme (M ^ X)) ->
       scheme (sch_bind K M).
 
+Definition scheme_body M :=
+  exists L, forall X, X \notin L -> scheme (M ^ X).
+
+Definition instance_body M :=
+  exists L, forall Xs,
+      fresh L (sch_arity M) Xs -> type (instance_vars M Xs).
+
 (* ************************************************************** *)
 (** ** Description of terms *)
 

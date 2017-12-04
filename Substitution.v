@@ -272,9 +272,9 @@ Proof.
   induction L; simpl; f_equal; auto.
 Qed.
 
-Lemma types_cons : forall T Ts,
-    types (length (T :: Ts)) (T :: Ts) <->
-    type T /\ types (length Ts) Ts.
+Lemma types_cons : forall n T Ts,
+    types (S n) (T :: Ts) <->
+    type T /\ types n Ts.
 Proof.
   intros. unfold types. simpl.
   intuition.
@@ -480,6 +480,7 @@ Proof.
   intros k Xs.
   induction Xs; introv H; simpl; auto.
   destruct Us; auto.
+  simpl in H.
   rewrite types_cons in H.
   destruct H.
   rewrite typ_subst_open_k; auto.
@@ -595,6 +596,7 @@ Proof.
   intros k Xs.
   induction Xs; introv H; simpl; auto.
   destruct Us; auto.
+  simpl in H.
   rewrite types_cons in H.
   destruct H.
   rewrite knd_subst_open_k; auto.
@@ -718,6 +720,7 @@ Proof.
   intros k Xs.
   induction Xs; introv H; simpl; auto.
   destruct Us; auto.
+  simpl in H.
   rewrite types_cons in H.
   destruct H.
   rewrite sch_subst_open_k; auto.

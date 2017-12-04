@@ -31,92 +31,15 @@ Proof.
   - apply_fresh* term_destruct as y; rewrite* trm_subst_open_var.
 Qed.
 
-Hint Resolve trm_subst_term.
-
-(** Conversion from locally closed abstractions and bodies *)
-
-Lemma term_abs_to_body : forall t1, 
-  term (trm_abs t1) -> term_body t1.
-Proof.
-  intros. unfold term_body. inversion* H.
-Qed.
-
-Lemma body_to_term_abs : forall t1, 
-  term_body t1 -> term (trm_abs t1).
-Proof.
-  intros. inversion* H.
-Qed.
-
-Lemma term_let_to_body : forall t1 t2, 
-  term (trm_let t1 t2) -> term_body t2.
-Proof.
-  intros. unfold term_body. inversion* H.
-Qed.
-
-Lemma body_to_term_let : forall t1 t2, 
-  term_body t2 -> term t1 -> term (trm_let t1 t2).
-Proof.
-  intros. inversion* H.
-Qed.
-
-Lemma term_match_to_body1 : forall c t1 t2 t3,
-  term (trm_match t1 c t2 t3) -> term_body t2.
-Proof.
-  intros. unfold term_body. inversion* H.
-Qed.
-
-Lemma term_match_to_body2 : forall c t1 t2 t3,
-  term (trm_match t1 c t2 t3) -> term_body t3.
-Proof.
-  intros. unfold term_body. inversion* H.
-Qed.
-
-Lemma bodies_to_term_match : forall c t1 t2 t3,
-  term t1 -> term_body t2 -> term_body t3 ->
-  term (trm_match t1 c t2 t3).
-Proof.
-  intros. inversion H0. inversion H1.
-  apply* (@term_match (x \u x0)).
-Qed.
-
-Lemma term_destruct_to_body : forall c t1 t2,
-  term (trm_destruct t1 c t2) -> term_body t2.
-Proof.
-  intros. unfold term_body. inversion* H.
-Qed.
-
-Lemma body_to_term_destruct : forall c t1 t2,
-  term t1 -> term_body t2 ->
-  term (trm_destruct t1 c t2).
-Proof.
-  intros. inversion H0.
-  apply* (@term_destruct x).
-Qed.
-
-Hint Resolve body_to_term_abs body_to_term_let
-     bodies_to_term_match body_to_term_destruct.
-
-Hint Extern 1 (term_body ?t) =>
-  match goal with 
-  | H: context [trm_abs t] |- _ => 
-    apply term_abs_to_body 
-  | H: context [trm_let ?t1 t] |- _ => 
-    apply (@term_let_to_body t1) 
-  | H: context [trm_match ?t1 ?c t ?t3] |- _ => 
-    apply (@term_match_to_body1 c t1 t t3) 
-  | H: context [trm_match ?t1 ?c ?t2 t] |- _ => 
-    apply (@term_match_to_body2 c t1 t2 t)
-  end.
-
 (** ** Opening a body with a term gives a term *)
 
 Lemma trm_open_term : forall t u,
   term_body t -> term u -> term (t ^^ u).
 Proof.
-  intros. destruct H. pick_fresh y. rewrite* (@trm_subst_intro y).
+  intros. destruct H. pick_fresh y.
+  rewrite (@trm_subst_intro y); auto.
+  apply trm_subst_term; auto.
 Qed.
-
-Hint Resolve trm_open_term.
 
 (* =============================================================== *)
 (** * Properties of types *)
@@ -129,8 +52,6 @@ Proof.
   induction 2; simpls*. case_var*.
 Qed.
 
-Hint Resolve typ_subst_type.
-
 (** Types are stable by iterated type substitution *)
 
 Lemma typ_substs_types : forall Xs Us T,
@@ -140,48 +61,145 @@ Lemma typ_substs_types : forall Xs Us T,
 Proof.
   induction Xs; destruct Us; simpl; introv TU TT; auto.
   destruct TU. simpls. inversions H. inversions* H0.
+  auto using typ_subst_type.
 Qed.
 
 (** List of types are stable by type substitution *)
 
-Lemma typ_subst_type_list : forall Z U Ts n,
-  type U -> types n Ts -> 
-  types n (List.map (typ_subst Z U) Ts).
+Lemma typ_subst_type_list : forall Z U Ts,
+  type U -> types (length Ts) Ts -> 
+  types (length Ts) (List.map (typ_subst Z U) Ts).
 Proof.
-  unfold types, list_for_n.
-  induction Ts; destruct n; simpl; intros TU [EQ TT]. 
-  easy. easy. inversion EQ.
-  inversions TT. forwards*: (IHTs n).
+  introv Ht Hts.
+  induction Ts; simpl in *; auto.
+  rewrite types_cons in *.
+  destruct Hts.
+  split; auto using typ_subst_type.
 Qed.
 
-(** ** Opening a body with a list of types gives a type *)
+(* =============================================================== *)
+(** * Properties of kinds *)
 
-Lemma typ_open_types : forall n T Us,
-  type_body n T ->
-  types n Us -> 
-  type (typ_open T Us).
-Proof. 
-  introv [L K] H. pick_freshes n Xs.
-  lets Fr': Fr.
-  rewrite (fresh_length _ _ _ Fr)  in H, Fr'.
-  rewrite* (@typ_substs_intro Xs). apply* typ_substs_types.
-Qed.
+(** Kinds are stable by type substitution *)
+
+Lemma knd_subst_kind : forall K Z U,
+  type U -> kind K -> kind (knd_subst Z U K).
+Proof.
+  introv Ht Hk.
+  induction Hk; simpl; auto using typ_subst_type.
+Qed.  
 
 (* =============================================================== *)
 (** * Properties of schemes *)
 
-(** ** Opening a scheme with a list of types gives a type *)
-
-Lemma sch_open_types : forall M Us,
-  scheme M ->
-  types (sch_arity M) Us ->
-  type (sch_open M Us).
+Lemma sch_open_k_arity : forall U M k,
+    sch_arity (sch_open_k k U M) = sch_arity M.
 Proof.
-  intros [Ks T] Us [Hb Hk] [Ha Ht].
-  simpls. apply* typ_open_types.
+  intros U M.
+  induction M; simpl; auto.
 Qed.
 
-Hint Resolve sch_open_types.
+Lemma sch_open_arity : forall U M,
+    sch_arity (M ^^ U) = sch_arity M.
+Proof.
+  intros.
+  apply sch_open_k_arity.
+Qed.
+
+Lemma sch_open_var_arity : forall X M,
+    sch_arity (M ^ X) = sch_arity M.
+Proof.
+  intros.
+  apply sch_open_arity.
+Qed.
+
+(** Schemes are stable by type substitution *)
+
+Lemma sch_subst_type : forall M Z U,
+  type U -> scheme M -> scheme (sch_subst Z U M).
+Proof.
+  introv Ht Hk.
+  induction Hk; simpl; auto using typ_subst_type.
+  apply_fresh scheme_bind as X; auto using knd_subst_kind.
+  rewrite sch_subst_open_var; auto.
+Qed.
+
+(** ** Opening a scheme body with a type gives a scheme *)
+
+Lemma sch_open_types : forall M U,
+  scheme_body M -> type U -> scheme (M ^^ U).
+Proof.
+  unfold scheme_body.
+  introv [L Hs] Ht.
+  pick_fresh X.
+  rewrite sch_subst_intro with (X := X); auto.
+  apply sch_subst_type; auto.
+Qed.
+
+Lemma scheme_instance_body : forall M,
+    scheme M -> instance_body M.
+Proof.
+  unfold instance_body, instance_vars, instance.
+  introv Hs.
+  induction Hs; simpl in *.
+  - exists (\{} : fset var).
+    auto.
+  - pick_fresh_gen (L \u (sch_fv M)) X.
+    assert (X \notin L) as Frl by auto.
+    destruct (H1 X Frl) as [Ls Hi].
+    exists (Ls \u L \u \{X}).
+    introv Hf.
+    assert (S (sch_arity M) = length Xs) as Hl
+        by apply (fresh_length _ _ _ Hf).
+    destruct Xs; try discriminate; simpl.
+    rewrite sch_subst_intro with (X := X).
+    rewrite <- typ_subst_fresh_typ_fvars
+      with (X := X) (U := (typ_fvar v)).
+    rewrite <- sch_subst_instance_rec.
+    apply typ_subst_type; auto.
+    rewrite <- sch_open_var_arity with (X := X).
+    apply Hi.
+Qed.
+
+
+Lemma sch_instance_vars_type : forall M Xs,
+    fresh (sch_fv M) (sch_arity M) Xs ->
+    scheme M -> type (instance_vars M Xs).
+Proof.
+  unfold instance_vars, instance.
+  introv Hf Hs.
+  remember (sch_arity M) as n.
+  assert (n = length Xs) as Hl
+    by apply (fresh_length _ _ _ Hf).
+  generalize dependent M.
+  generalize dependent Xs.
+  induction n; introv Hl Hn Hf Hs; simpl.
+  - destruct Hs; try discriminate; auto.
+  - destruct Hs; try discriminate; simpl.
+    destruct Xs; try discriminate; simpl.
+    inversion Hl; subst.
+    inversion Hn.
+    unfold sch_open_var in *.
+    apply IHn; rewrite? sch_open_arity; auto.
+    replace (sch_fv (sch_open M (typ_fvar v)))
+             with (sch_fv (sch_bind K M)).
+    auto.
+    
+  simpl in Hl.
+  destruct Xs; simpl; try discriminate.
+  
+
+(** **Instanciating a scheme with types gives a type *)
+Lemma sch_instance_type : forall M Us,
+    scheme M -> types (sch_arity M) Us -> type (instance M Us).
+Proof.
+  introv Hs Hts.
+  pick_freshes (sch_arity M) Xs.
+  rewrite typ_substs_intro_instance with (Xs := Xs); auto.
+  erewrite fresh_length with (n := sch_arity M) in Hts; auto.
+  apply typ_substs_types; auto.
+  
+  auto.
 
 (* =============================================================== *)
 (** * Properties of environment *)
