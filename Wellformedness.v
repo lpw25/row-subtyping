@@ -9,7 +9,7 @@ Require Import List LibLN Definitions Substitution.
 (* *************************************************************** *)
 (** ** Automation *)
 
-Hint Constructors kind type scheme term environment.
+Hint Constructors kind type scheme_vars term environment.
 
 Hint Unfold is_row_kind.
 
@@ -92,114 +92,57 @@ Qed.
 (* =============================================================== *)
 (** * Properties of schemes *)
 
-Lemma sch_open_k_arity : forall U M k,
-    sch_arity (sch_open_k k U M) = sch_arity M.
-Proof.
-  intros U M.
-  induction M; simpl; auto.
-Qed.
-
-Lemma sch_open_arity : forall U M,
-    sch_arity (M ^^ U) = sch_arity M.
-Proof.
-  intros.
-  apply sch_open_k_arity.
-Qed.
-
-Lemma sch_open_var_arity : forall X M,
-    sch_arity (M ^ X) = sch_arity M.
-Proof.
-  intros.
-  apply sch_open_arity.
-Qed.
-
 (** Schemes are stable by type substitution *)
 
-Lemma sch_subst_type : forall M Z U,
-  type U -> scheme M -> scheme (sch_subst Z U M).
+Lemma sch_subst_vars_type : forall M Xs Z U,
+  fresh \{Z} (sch_arity M) Xs -> 
+  type U ->
+  scheme_vars M Xs -> scheme_vars (sch_subst Z U M) Xs.
 Proof.
-  introv Ht Hk.
-  induction Hk; simpl; auto using typ_subst_type.
-  apply_fresh scheme_bind as X; auto using knd_subst_kind.
+  introv Hf Ht Hs.
+  induction Hs; simpl; auto using typ_subst_type.
+  destruct Hf.
+  autorewrite with rew_sch_arity in *.
+  apply scheme_bind; auto using knd_subst_kind.
   rewrite sch_subst_open_var; auto.
 Qed.
 
-(** ** Opening a scheme body with a type gives a scheme *)
-
-Lemma sch_open_types : forall M U,
-  scheme_body M -> type U -> scheme (M ^^ U).
+Lemma sch_subst_type : forall M Z U,
+    type U -> scheme M -> scheme (sch_subst Z U M).
 Proof.
-  unfold scheme_body.
-  introv [L Hs] Ht.
-  pick_fresh X.
-  rewrite sch_subst_intro with (X := X); auto.
-  apply sch_subst_type; auto.
+  introv Ht [L Hs].
+  exists (\{Z} \u L \u (typ_fv U)). introv Hf.
+  autorewrite with rew_sch_arity in *.
+  apply sch_subst_vars_type; auto.
 Qed.
 
-Lemma scheme_instance_body : forall M,
-    scheme M -> instance_body M.
+(** ** Instantiating a scheme body with types gives a type *)
+
+Lemma scheme_vars_instance_type : forall M Xs,
+  scheme_vars M Xs -> type (instance_vars M Xs).
 Proof.
-  unfold instance_body, instance_vars, instance.
+  unfold instance_vars.
   introv Hs.
-  induction Hs; simpl in *.
-  - exists (\{} : fset var).
+  generalize dependent M.
+  induction Xs; introv Hs; simpl.
+  - inversion Hs; subst; auto.
+  - inversion Hs; subst.
+    unfold sch_open_var in *.
     auto.
-  - pick_fresh_gen (L \u (sch_fv M)) X.
-    assert (X \notin L) as Frl by auto.
-    destruct (H1 X Frl) as [Ls Hi].
-    exists (Ls \u L \u \{X}).
-    introv Hf.
-    assert (S (sch_arity M) = length Xs) as Hl
-        by apply (fresh_length _ _ _ Hf).
-    destruct Xs; try discriminate; simpl.
-    rewrite sch_subst_intro with (X := X).
-    rewrite <- typ_subst_fresh_typ_fvars
-      with (X := X) (U := (typ_fvar v)).
-    rewrite <- sch_subst_instance_rec.
-    apply typ_subst_type; auto.
-    rewrite <- sch_open_var_arity with (X := X).
-    apply Hi.
 Qed.
 
-
-Lemma sch_instance_vars_type : forall M Xs,
-    fresh (sch_fv M) (sch_arity M) Xs ->
-    scheme M -> type (instance_vars M Xs).
+Lemma scheme_instance_type : forall M Us,
+    types (sch_arity M) Us ->
+    scheme M -> type (instance M Us).
 Proof.
-  unfold instance_vars, instance.
-  introv Hf Hs.
-  remember (sch_arity M) as n.
-  assert (n = length Xs) as Hl
-    by apply (fresh_length _ _ _ Hf).
-  generalize dependent M.
-  generalize dependent Xs.
-  induction n; introv Hl Hn Hf Hs; simpl.
-  - destruct Hs; try discriminate; auto.
-  - destruct Hs; try discriminate; simpl.
-    destruct Xs; try discriminate; simpl.
-    inversion Hl; subst.
-    inversion Hn.
-    unfold sch_open_var in *.
-    apply IHn; rewrite? sch_open_arity; auto.
-    replace (sch_fv (sch_open M (typ_fvar v)))
-             with (sch_fv (sch_bind K M)).
-    auto.
-    
-  simpl in Hl.
-  destruct Xs; simpl; try discriminate.
-  
-
-(** **Instanciating a scheme with types gives a type *)
-Lemma sch_instance_type : forall M Us,
-    scheme M -> types (sch_arity M) Us -> type (instance M Us).
-Proof.
-  introv Hs Hts.
+  introv Hts [L Hs].
   pick_freshes (sch_arity M) Xs.
   rewrite typ_substs_intro_instance with (Xs := Xs); auto.
-  erewrite fresh_length with (n := sch_arity M) in Hts; auto.
+  replace (sch_arity M) with (length Xs) in *
+    by (symmetry; apply (fresh_length _ _ _ Fr)).
   apply typ_substs_types; auto.
-  
-  auto.
+  apply scheme_vars_instance_type; auto.
+Qed.
 
 (* =============================================================== *)
 (** * Properties of environment *)

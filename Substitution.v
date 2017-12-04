@@ -625,6 +625,37 @@ Qed.
 (* *************************************************************** *)
 (** ** Schemes *)
 
+Lemma sch_open_k_arity : forall U M k,
+    sch_arity (sch_open_k k U M) = sch_arity M.
+Proof.
+  intros U M.
+  induction M; simpl; auto.
+Qed.
+
+Lemma sch_open_arity : forall U M,
+    sch_arity (M ^^ U) = sch_arity M.
+Proof.
+  intros.
+  apply sch_open_k_arity.
+Qed.
+
+Lemma sch_open_var_arity : forall X M,
+    sch_arity (M ^ X) = sch_arity M.
+Proof.
+  intros.
+  apply sch_open_arity.
+Qed.
+
+Lemma sch_subst_arity : forall X U M,
+    sch_arity (sch_subst X U M) = sch_arity M.
+Proof.
+  intros.
+  induction M; simpl; auto.
+Qed.
+
+Hint Rewrite sch_open_k_arity sch_open_arity
+     sch_open_var_arity sch_subst_arity : rew_sch_arity.
+
 (** Open on a scheme is the identity. *)
 
 Lemma sch_open_rec_core :forall M j V i U, i <> j ->
@@ -639,12 +670,15 @@ Qed.
 Lemma sch_open_scheme : forall M U,
   scheme M -> forall k, M = sch_open_k k U M.
 Proof.
-  introv W.
-  induction W; intros; simpl; f_equal*.
+  introv [L Hs].
+  pick_freshes_gen L (sch_arity M) Xs.
+  specialize (Hs Xs Fr).
+  induction Hs; intros; simpl; f_equal*.
   - apply typ_open_type; auto.
   - apply knd_open_kind; auto.
   - unfolds sch_open_var, sch_open.
-    pick_fresh X.
+    destruct Fr.
+    autorewrite with rew_sch_arity in *.
     apply sch_open_rec_core with (j := 0) (V := typ_fvar X); auto.
 Qed.    
 
@@ -756,36 +790,16 @@ Qed.
 
 (** Substitution distributes on the instance operation. *)
 
-Lemma sch_subst_instance_rec : forall k X U M Ts, type U -> 
-  typ_subst X U (instance_rec M Ts k) = 
-   instance_rec (sch_subst X U M) (List.map (typ_subst X U) Ts) k.
-Proof.
-  intros.
-  generalize dependent M.
-  generalize dependent Ts.
-  induction k; intros; simpl.
-  - apply sch_subst_body; assumption.
-  - destruct M; simpl; try reflexivity.
-    destruct Ts; simpl.
-    + apply sch_subst_body; assumption.
-    + rewrite <- sch_subst_open; auto.
-Qed.
-
-Lemma sch_subst_arity : forall X U M,
-    sch_arity (sch_subst X U M) = sch_arity M.
-Proof.
-  intros.
-  induction M; simpl; auto.
-Qed.
-
 Lemma sch_subst_instance : forall X U M Ts, type U -> 
   typ_subst X U (instance M Ts) = 
    instance (sch_subst X U M) (List.map (typ_subst X U) Ts).
 Proof.
-  intros. unfold instance.
-  rewrite sch_subst_arity.
-  apply sch_subst_instance_rec.
-  assumption.
+  intros.
+  generalize dependent M.
+  induction Ts; intros; simpl.
+  - apply sch_subst_body; assumption.
+  - destruct M; simpl; try reflexivity.
+    rewrite <- sch_subst_open; auto.
 Qed.
 
 Lemma sch_substs_instance : forall Xs Us M Ts,

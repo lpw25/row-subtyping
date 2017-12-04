@@ -114,23 +114,16 @@ Notation "M ^ X" := (sch_open_var M X) (only parsing) : sch_scope.
 Bind Scope sch_scope with sch.
 Open Scope sch_scope.
 
-Fixpoint instance_rec (M : sch) (Us : list typ) (n : nat)
-         {struct n} : typ :=
-  match n with
-  | 0 => sch_body M
-  | S n =>
+Fixpoint instance (M : sch) (Us : list typ)
+         {struct Us} : typ :=
+  match Us with
+  | nil => sch_body M
+  | U :: Us =>
     match M with
     | sch_empty T => T
-    | sch_bind K M =>
-      match Us with
-      | nil => sch_body M
-      | U :: Us => instance_rec (M ^^ U) Us n
+    | sch_bind K M => instance (M ^^ U) Us
       end
-    end
   end.
-
-Definition instance M Us :=
-  instance_rec M Us (sch_arity M). 
 
 Definition instance_vars M Xs :=
   instance M (typ_fvars Xs).
@@ -188,21 +181,19 @@ Inductive kind : knd -> Prop :=
 
 (** Definition of a well-formed scheme *)
 
-Inductive scheme : sch -> Prop :=
+Inductive scheme_vars : sch -> list var -> Prop :=
   | scheme_empty : forall T,
       type T ->
-      scheme (sch_empty T)
-  | scheme_bind : forall L K M,
+      scheme_vars (sch_empty T) nil
+  | scheme_bind : forall X Xs K M,
       kind K ->
-      (forall X, X \notin L -> scheme (M ^ X)) ->
-      scheme (sch_bind K M).
+      scheme_vars (M ^ X) Xs ->
+      scheme_vars (sch_bind K M) (X :: Xs).
 
-Definition scheme_body M :=
-  exists L, forall X, X \notin L -> scheme (M ^ X).
-
-Definition instance_body M :=
+Definition scheme M :=
   exists L, forall Xs,
-      fresh L (sch_arity M) Xs -> type (instance_vars M Xs).
+      fresh L (sch_arity M) Xs ->
+      scheme_vars M Xs.
 
 (* ************************************************************** *)
 (** ** Description of terms *)
@@ -546,38 +537,27 @@ Inductive valid_kind : env -> knd -> Prop :=
       subtype E T2 T1 ->
       valid_kind E (knd_range T1 T2).
 
-Inductive kinding_scheme : env -> sch -> Prop :=
+Inductive kinding_scheme_vars : env -> sch -> list var -> Prop :=
   | kinding_scheme_empty : forall E T,
       kinding E T knd_type ->
-      kinding_scheme E (sch_empty T)
-  | kinding_scheme_bind : forall L E K M,
+      kinding_scheme_vars E (sch_empty T) nil
+  | kinding_scheme_bind : forall X Xs E K M,
       valid_kind E K ->
-      (forall X, X \notin L ->
-         kinding_scheme (E & X ~:: K) (M ^ X)) ->
-      kinding_scheme E (sch_bind K M).
+      kinding_scheme_vars (E & X ~:: K) (M ^ X) Xs ->
+      kinding_scheme_vars E (sch_bind K M) (X :: Xs).
 
-Function kinding_instance_rec (M : sch) (Us : list typ) (n : nat)
-         {struct n} : typ :=
-  match n with
-  | 0 => sch_body M
-  | S n =>
-    match M with
-    | sch_empty T => T
-    | sch_bind K M =>
-      match Us with
-      | nil => sch_body M
-      | U :: Us => instance_rec (M ^^ U) Us n
-      end
-    end
-  end.
+Definition kinding_scheme E M :=
+  exists L, forall Xs,
+      fresh L (sch_arity M) Xs ->
+      kinding_scheme_vars E M Xs.
 
-Inductive kinding_instance : env -> sch -> list typ -> Prop :=
+Inductive kinding_instance : env -> list typ -> sch -> Prop :=
   | kinding_instance_empty : forall E T,
-      kinding_instance E (sch_empty T) nil
+      kinding_instance E nil (sch_empty T)
   | kinding_instance_bind : forall E K M T Ts,
       kinding E T K ->
-      kinding_instance E (M ^^ T) Ts ->
-      kinding_instance E (sch_bind K M) (T :: Ts).
+      kinding_instance E Ts (M ^^ T) ->
+      kinding_instance E (T :: Ts) (sch_bind K M).
 
 (** A environment E is well-kinded if it contains no duplicate
   bindings and if each type in it is well-kinded with respect to
@@ -604,7 +584,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_var : forall E x M Us, 
       kinding_env E -> 
       binds x (bind_typ M) E -> 
-      kinding_instance E M Us ->
+      kinding_instance E Us M ->
       typing E (trm_fvar x) (instance M Us)
   | typing_abs : forall L E T1 T2 t1, 
       (forall x, x \notin L -> 
