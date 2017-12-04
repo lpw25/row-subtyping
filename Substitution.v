@@ -925,8 +925,74 @@ Proof.
   reflexivity. 
 Qed.
 
-Hint Rewrite env_subst_empty env_subst_single env_subst_concat
-  : rew_env_subst.
+Lemma env_subst_bind_knds : forall X U Xs M,
+  fresh \{X} (sch_arity M) Xs -> type U ->
+  env_subst X U (Xs ~::* M) = Xs ~::* (sch_subst X U M).
+Proof.
+  introv Hf Ht.
+  generalize dependent M.
+  induction Xs; introv Hf; simpl.
+  - apply env_subst_empty.
+  - destruct M; simpl.
+    + apply env_subst_empty.
+    + destruct Hf.
+      rewrite env_subst_concat.
+      rewrite env_subst_single.
+      simpl.
+      fequal.
+      rewrite sch_subst_open_var; auto.
+      apply IHXs.
+      autorewrite with rew_sch_arity.
+      auto.
+Qed.
+
+Hint Rewrite env_subst_empty env_subst_single env_subst_concat : rew_env_subst.
+Hint Rewrite env_subst_bind_knds using auto : rew_env_subst.
+
+Lemma env_substs_empty : forall Xs Us,
+  env_substs Xs Us empty = empty.
+Proof.
+  intros.
+  generalize dependent Us.
+  induction Xs; intro Us; simpl.
+  - reflexivity.
+  - destruct Us.
+    + reflexivity.
+    + autorewrite with rew_env_subst.
+      auto.
+Qed.
+
+Lemma env_substs_single : forall Xs Us x v,
+  env_substs Xs Us (x ~ v) = (x ~ bind_substs Xs Us v).
+Proof.
+  intros.
+  generalize dependent Us.
+  generalize dependent v.
+  induction Xs; intros; simpl.
+  - reflexivity.
+  - destruct Us.
+    + reflexivity.
+    + autorewrite with rew_env_subst.
+      auto.
+Qed.  
+
+Lemma env_substs_concat : forall Xs Us E F,
+  env_substs Xs Us (E & F) = env_substs Xs Us E & env_substs Xs Us F.
+Proof.
+  intros.
+  generalize dependent Us.
+  generalize dependent E.
+  generalize dependent F.
+  induction Xs; intros; simpl.
+  - reflexivity.
+  - destruct Us.
+    + reflexivity.
+    + autorewrite with rew_env_subst.
+      auto.
+Qed.
+
+Hint Rewrite env_substs_empty env_substs_single env_substs_concat
+  : rew_env_substs.
 
 Lemma env_subst_fresh : forall X U E, 
   X \notin env_fv E -> 
@@ -951,3 +1017,9 @@ Proof.
   rewrite env_subst_fresh; auto.
 Qed.
 
+Lemma env_subst_notin : forall X Z U E,
+    X # E -> X # env_subst Z U E.
+Proof.
+  introv Hn.
+  induction E using env_ind; autorewrite with rew_env_subst; auto.
+Qed.

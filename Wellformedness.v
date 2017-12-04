@@ -116,7 +116,7 @@ Proof.
   apply sch_subst_vars_type; auto.
 Qed.
 
-(** ** Instantiating a scheme body with types gives a type *)
+(** ** Instantiating a scheme with types gives a type *)
 
 Lemma scheme_vars_instance_type : forall M Xs,
   scheme_vars M Xs -> type (instance_vars M Xs).
@@ -147,206 +147,35 @@ Qed.
 (* =============================================================== *)
 (** * Properties of environment *)
 
-Lemma environment_typ_push_inv : forall E x M,
-    environment (E & x ~ (bind_typ M)) ->
-    environment E /\ x # E /\ scheme M.
+Lemma env_subst_environment : forall X U E,
+    type U ->
+    environment E -> environment (env_subst X U E).
 Proof.
-  introv H.
-  inverts H as H1 H2 H3 H4.
-  - false (empty_push_inv H1).
-  - destruct (eq_push_inv H4) as [_ [Hv _]].
-    false Hv.
-  - destruct (eq_push_inv H4) as [Hx [Hv He]].
-    inversion Hv.
-    subst.
-    easy.
+  introv Ht He.
+  induction He; autorewrite with rew_env_subst; auto.
+  - apply environment_knd;
+      auto using knd_subst_kind, env_subst_notin.
+  - apply environment_typ;
+      auto using sch_subst_type, env_subst_notin.
 Qed.
 
-Lemma environment_kind_push_inv : forall E x K,
-    environment (E & x ~ (bind_knd K)) ->
-    environment E /\ x # E /\ kind K.
+Lemma environment_strengthen : forall E F,
+    environment (E & F) -> environment E.
 Proof.
-  introv H.
-  inverts H as H1 H2 H3 H4.
-  - false (empty_push_inv H1).
-  - destruct (eq_push_inv H4) as [Hx [Hk He]].
-    inversion Hk.
-    subst.
-    easy.
-  - destruct (eq_push_inv H4) as [_ [Hv _]].
-    false Hv.
-Qed.
-
-Lemma environment_typ_middle_inv : forall E x M F,
-    environment (E & x ~ (bind_typ M) & F) ->
-    environment (E & F) /\ x # E /\ scheme M.
-Proof.
-  introv H.
-  induction F using env_ind; rew_env_concat.
-  - rewrite concat_empty_r in H.
-    destruct* (environment_typ_push_inv H).
-  - rewrite concat_assoc in H.
-    destruct v.
-    + destruct* (environment_kind_push_inv H).
-    + destruct* (environment_typ_push_inv H).
-Qed.
-
-Lemma environment_kind_middle_inv : forall E x K F,
-    environment (E & x ~ (bind_knd K) & F) ->
-    environment (E & F) /\ x # E /\ kind K.
-Proof.
-  introv H.
-  induction F using env_ind; rew_env_concat.
-  - rewrite concat_empty_r in H.
-    destruct* (environment_kind_push_inv H).
-  - rewrite concat_assoc in H.
-    destruct v.
-    + destruct* (environment_kind_push_inv H).
-    + destruct* (environment_typ_push_inv H).
-Qed.
-
-Lemma environment_concat_inv : forall E F G,
-    environment (E & F & G) -> environment (E & G).
-Proof.
-  intros E F G.
-  induction F using env_ind; rew_env_concat; auto.
-  intro H.
-  destruct v.
-  - destruct* (environment_kind_middle_inv H).
-  - destruct* (environment_typ_middle_inv H).
-Qed.
-
-Lemma environment_concat_inv_l : forall E F,
-  environment (E & F) ->
-  environment E.
-Proof.
-  introv H.
-  rewrite <- (concat_empty_r F) in H.
-  rewrite concat_assoc in H.
-  rewrite <- (concat_empty_r E).
-  apply (environment_concat_inv H).
-Qed.
-
-Lemma environment_concat_inv_r : forall E F,
-  environment (E & F) ->
-  environment F.
-Proof.
-  introv H.
-  rewrite <- (concat_empty_l E) in H.
-  rewrite <- (concat_empty_l F).
-  apply (environment_concat_inv H).
-Qed.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H: environment (E & _) |- _ =>
-      apply (environment_concat_inv_l H)
-  | H: environment (_ & E) |- _ =>
-      apply (environment_concat_inv_r H)
-  end.
-
-Lemma environment_subst_inv_r : forall E F X T,
-  environment (E & F) ->
-  type T ->
-  environment (E & environment_subst X T F).
-Proof.
-  introv He Ht.
-  unfold environment_subst.
+  introv He.
   induction F using env_ind;
-    rew_env_concat; autorewrite with rew_env_map; auto.
-  rewrite concat_assoc in *.
-  destruct v; simpl.
-  - destruct (environment_kind_push_inv He).
-    apply* environment_knd.
-  - destruct (environment_typ_push_inv He).
-    apply*  environment_typ.
-Qed.
-
-Lemma environment_subst_empty : forall X T,
-    environment_subst X T empty = empty.
-Proof.
-  intros.
-  unfold environment_subst.
-  rewrite map_empty.
-  auto.
-Qed.
-
-Lemma environment_subst_push : forall X T E Y B,
-    environment_subst X T (E & Y ~ B)
-    = environment_subst X T E & Y ~ binding_subst X T B.
-Proof.
-  intros.
-  unfold environment_subst.
-  rewrite map_push.
-  auto.
-Qed.
-
-Lemma dom_environment_subst : forall X T E,
-    dom (environment_subst X T E) = dom E.
-Proof.
-  intros.
-  unfold environment_subst.
-  rewrite dom_map.
-  easy.
-Qed.
-
-Lemma environment_subst_kinds : forall X T E Xs Ks,
-    fresh \{X} (length Ks) Xs ->
-    environment_subst X T (E & Xs ~::* Ks) =
-    environment_subst X T E & Xs ~::* Ks.
-Proof.
-  introv Hf.
-  unfold environment_subst.
-  rewrite map_concat.
-  lets Hlx : (eq_sym (fresh_length _ _ _ Hf)).
-  gen Ks.
-  induction Xs; destruct Ks;
-    introv Hf Hl; tryfalse; auto.
-  - rewrite singles_nil.
-    rewrite! map_empty.
-    easy.
-  - inversion Hl.
-    rewrite singles_cons.
-    rewrite! map_push.
-    simpl binding_subst.
-    rewrite! concat_assoc.
-    rewrite* IHXs.
-    destruct* Hf.
-Qed.   
-    
-Lemma environment_substs_empty : forall Xs Ts,
-    length Xs = length Ts ->
-    environment_substs Xs Ts empty = empty.
-Proof.
-  introv Hl.
-  gen Ts.
-  induction Xs; destruct Ts; intros; tryfalse; auto.
-  simpl.
-  rewrite environment_subst_empty.
-  auto.
-Qed.
-
-Lemma environment_substs_push : forall Xs Ts E Y B,
-    environment_substs Xs Ts (E & Y ~ B)
-    = environment_substs Xs Ts E & Y ~ binding_substs Xs Ts B.
-Proof.
-  intros.
-  gen E Ts B.
-  induction Xs; destruct Ts; intros; tryfalse; auto.
-  simpl.
-  rewrite environment_subst_push.
-  apply IHXs.
-Qed.
-
-Lemma dom_environment_substs : forall Xs Ts E,
-    dom (environment_substs Xs Ts E) = dom E.
-Proof.
-  intros.
-  gen Ts E.
-  induction Xs; destruct Ts; intros; tryfalse; auto.
-  simpl.
-  rewrite IHXs.
-  apply dom_environment_subst.
+    autorewrite with rew_env_concat in *; auto.
+  remember (E & F & x ~ v) as G.
+  destruct He.
+  - destruct (empty_concat_inv HeqG) as [_ Hem].
+    apply empty_single_inv in Hem.
+    contradiction.
+  - destruct (eq_push_inv HeqG) as [_ [_ Hem]].
+    rewrite Hem in He.
+    auto.
+  - destruct (eq_push_inv HeqG) as [_ [_ Hem]].
+    rewrite Hem in He.
+    auto.
 Qed.
 
 Lemma fresh_kinds : forall E x n Xs Ks,
@@ -513,82 +342,6 @@ Proof.
     eauto.
   - destruct (eq_push_inv H) as [_ [Hb _]].
     tryfalse.
-Qed.
-
-Lemma env_fv_empty :
-  env_fv empty = \{}.
-Proof.
-  unfold env_fv, fv_in_values.
-  rew_env_defs.
-  simpl.
-  auto.
-Qed.
-
-Lemma env_fv_push_inv : forall E X B,
-    env_fv (E & X ~ B) = bind_fv B \u env_fv E.
-Proof.
-  intros.
-  unfold env_fv, fv_in_values.
-  rewrite values_def.
-  rewrite <- cons_to_push.
-  rewrite LibList.map_cons.
-  simpl.
-  auto.
-Qed.
-
-(** Substitution for a fresh name is identity. *)
-
-Lemma binding_subst_fresh : forall X U B, 
-  X \notin bind_fv B -> 
-  binding_subst X U B = B.
-Proof.
-  intros.
-  destruct B; simpl; auto.
-  f_equal.
-  simpl in H.
-  apply sch_subst_fresh.
-  assumption.
-Qed.
-
-Lemma binding_substs_fresh : forall Xs Us B, 
-  fresh (bind_fv B) (length Xs) Xs ->
-  binding_substs Xs Us B = B.
-Proof.
-  intros.
-  gen Us.
-  induction Xs; intros; auto.
-  destruct Us; auto.
-  simpl in H.
-  simpl.
-  rewrite* binding_subst_fresh.
-Qed.
-
-Lemma environment_subst_fresh : forall X U E, 
-  X \notin env_fv E -> 
-  environment_subst X U E = E.
-Proof.
-  intros.
-  unfold environment_subst.
-  induction E using env_ind.
-  - rewrite* map_empty.
-  - rewrite env_fv_push_inv in H.
-    rewrite notin_union in H.
-    rewrite map_push.
-    rewrite* binding_subst_fresh.
-    rewrite* IHE.
-Qed.
-
-Lemma environment_substs_fresh : forall Xs Us E, 
-  fresh (env_fv E) (length Xs) Xs ->
-  environment_substs Xs Us E = E.
-Proof.
-  intros.
-  gen Us.
-  induction Xs; intros; auto.
-  destruct Us; auto.
-  simpl in H.
-  simpl.
-  rewrite* environment_subst_fresh.
 Qed.
 
 Hint Rewrite in_empty in_singleton in_union : rew_in.

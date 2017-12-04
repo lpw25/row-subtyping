@@ -296,23 +296,16 @@ Inductive bind : Type :=
 
 Definition env := LibEnv.env bind.
 
-Function bind_knds_rec (M : sch) (Xs : list var) (n : nat)
-         {struct n} : env :=
-  match n with
-  | 0 => nil
-  | S n =>
+Function bind_knds (Xs : list var) (M : sch) {struct Xs} : env :=
+  match Xs with
+  | nil => empty
+  | X :: Xs =>
     match M with
-    | sch_empty _ => nil
+    | sch_empty _ => empty
     | sch_bind K M =>
-      match Xs with
-      | nil => nil
-      | X :: Xs => (X ~ bind_knd K) & bind_knds_rec (M ^ X) Xs n
-      end
+      (X ~ bind_knd K) & bind_knds Xs (M ^ X)
     end
   end.
-
-Definition bind_knds Xs M :=
-  bind_knds_rec M Xs (sch_arity M). 
 
 Notation "X ~:: K" := (X ~ bind_knd K)
   (at level 23, left associativity) : env_scope.
