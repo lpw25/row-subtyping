@@ -257,6 +257,16 @@ Proof using.
   rewrite* <- (@IHxs n (L \u \{a})).
 Qed.
 
+Tactic Notation "fresh_length" constr(Fr) "as" ident(H) :=
+  match type of Fr with
+  | fresh _ ?n ?xs =>
+    assert (n = length xs) as H
+      by apply (fresh_length _ _ _ Fr)
+  | _ =>
+    fail 1
+      "because it is not a freshness predicate"
+  end.
+
 Lemma map_identity : forall A L,
     List.map (fun x : A => x) L = L.
 Proof.
@@ -457,8 +467,7 @@ Lemma typ_substs_fvars : forall Xs Ts,
     List.map (typ_substs Xs Ts) (typ_fvars Xs) = Ts.
 Proof.
   introv Hf.
-  assert (length Ts = length Xs)
-    by apply (fresh_length _ _ _ Hf).
+  fresh_length Hf as Hl.
   generalize dependent Ts.
   induction Xs; introv Hf Hl;
     destruct Ts; simpl in *; try discriminate.
@@ -824,8 +833,8 @@ Lemma typ_substs_intro_instance : forall M Xs Us,
   instance M Us = typ_substs Xs Us (instance_vars M Xs).
 Proof.
   introv Hf Ht. unfold instance_vars.
-  replace (sch_arity M) with (length Xs) in *
-    by (symmetry; apply (fresh_length _ _ _ Hf)).
+  fresh_length Hf as Hl.
+  rewrite Hl in *.
   destruct Ht.
   rewrite sch_substs_instance; try (split; auto).
   rewrite sch_substs_fresh; auto.
@@ -926,28 +935,27 @@ Proof.
 Qed.
 
 Lemma env_subst_bind_knds : forall X U Xs M,
-  fresh \{X} (sch_arity M) Xs -> type U ->
+  X # (Xs ~::* M) -> type U ->
   env_subst X U (Xs ~::* M) = Xs ~::* (sch_subst X U M).
 Proof.
-  introv Hf Ht.
+  introv Hn Ht.
   generalize dependent M.
-  induction Xs; introv Hf; simpl.
+  induction Xs; introv Hn; simpl.
   - apply env_subst_empty.
-  - destruct M; simpl.
+  - destruct M; simpl in *.
     + apply env_subst_empty.
-    + destruct Hf.
+    + autorewrite with rew_env_dom in Hn.
       rewrite env_subst_concat.
       rewrite env_subst_single.
       simpl.
       fequal.
       rewrite sch_subst_open_var; auto.
-      apply IHXs.
-      autorewrite with rew_sch_arity.
-      auto.
 Qed.
 
-Hint Rewrite env_subst_empty env_subst_single env_subst_concat : rew_env_subst.
-Hint Rewrite env_subst_bind_knds using auto : rew_env_subst.
+Hint Rewrite env_subst_empty env_subst_single env_subst_concat
+  : rew_env_subst.
+Hint Rewrite env_subst_bind_knds using auto
+  : rew_env_subst.
 
 Lemma env_substs_empty : forall Xs Us,
   env_substs Xs Us empty = empty.
@@ -991,8 +999,53 @@ Proof.
       auto.
 Qed.
 
+Lemma env_substs_bind_knds : forall Zs Us Xs M,
+  fresh (dom (Xs ~::* M)) (length Zs) Zs ->
+  types (length Us) Us ->
+  env_substs Zs Us (Xs ~::* M) = Xs ~::* (sch_substs Zs Us M).
+Proof.
+  introv Hf Hts.
+  generalize dependent Us.
+  generalize dependent M.
+  induction Zs; intros; simpl.
+  - reflexivity.
+  - destruct Us; simpl in *.
+    + reflexivity.
+    + rewrite types_cons in *.
+      autorewrite with rew_env_subst; intuition auto.
+      apply IHZs; auto.
+      assert (dom (Xs ~::* sch_subst a t M) = dom (Xs ~::* M)) as Hd.
+      { clear IHZs H0.
+        generalize dependent M.
+        induction Xs; introv Hn; simpl; auto.
+        destruct M; simpl in *; auto.
+        autorewrite with rew_env_dom in *.
+        rewrite sch_subst_open_var; auto.
+        rewrite IHXs; auto. }
+      rewrite Hd.
+      auto.
+Qed.
+
 Hint Rewrite env_substs_empty env_substs_single env_substs_concat
   : rew_env_substs.
+Hint Rewrite env_substs_bind_knds using auto
+  : rew_env_substs.
+
+Lemma env_dom_bind_kinds : forall Xs M,
+  sch_arity M = length Xs ->
+  dom (Xs ~::* M) = from_list Xs.
+Proof.
+  intro.
+  induction Xs; introv Hl; simpl in *.
+  - rewrite from_list_nil.
+    apply dom_empty.
+  - destruct M; simpl in *; try discriminate.
+    autorewrite with rew_env_dom.
+    rewrite from_list_cons.
+    rewrite IHXs; autorewrite with rew_sch_arity; auto.
+Qed.
+
+Hint Rewrite env_dom_bind_kinds : rew_env_dom.
 
 Lemma env_subst_fresh : forall X U E, 
   X \notin env_fv E -> 
@@ -1022,4 +1075,46 @@ Lemma env_subst_notin : forall X Z U E,
 Proof.
   introv Hn.
   induction E using env_ind; autorewrite with rew_env_subst; auto.
+Qed.
+
+Lemma env_substs_notin : forall X Zs Us E,
+    X # E -> X # env_substs Zs Us E.
+Proof.
+  introv Hn.
+  generalize dependent E.
+  generalize dependent Us.
+  induction Zs; intros; try assumption.
+  destruct Us; try assumption.
+  apply IHZs.
+  apply env_subst_notin.
+  assumption.
+Qed.
+
+Lemma env_subst_binds : forall X B E Z U,
+    binds X B E ->
+    binds X (bind_subst Z U B) (env_subst Z U E).
+Proof.
+  introv Hbd.
+  induction E using env_ind.
+  - apply binds_empty_inv in Hbd; contradiction.
+  - destruct (binds_push_inv Hbd) as [[Hx Hb]|[Hx Hb]].
+    + subst. autorewrite with rew_env_subst.
+      apply binds_push_eq.
+    + autorewrite with rew_env_subst.
+      apply binds_push_neq; auto.
+Qed.
+
+Lemma env_substs_binds : forall X B E Zs Us,
+    binds X B E ->
+    binds X (bind_substs Zs Us B) (env_substs Zs Us E).
+Proof.
+  introv Hb.
+  generalize dependent E.
+  generalize dependent Us.
+  generalize dependent B.
+  induction Zs; intros; try assumption.
+  destruct Us; try assumption.
+  apply IHZs.
+  apply env_subst_binds.
+  assumption.
 Qed.

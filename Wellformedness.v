@@ -138,11 +138,39 @@ Proof.
   introv Hts [L Hs].
   pick_freshes (sch_arity M) Xs.
   rewrite typ_substs_intro_instance with (Xs := Xs); auto.
-  replace (sch_arity M) with (length Xs) in *
-    by (symmetry; apply (fresh_length _ _ _ Fr)).
+  fresh_length Fr as Hl.
+  rewrite Hl in *.
   apply typ_substs_types; auto.
   apply scheme_vars_instance_type; auto.
 Qed.
+
+Lemma scheme_bind_inv_sch : forall K M X,
+    scheme (sch_bind K M) -> scheme (M ^ X).
+Proof.
+  introv [L Hs].
+  pick_fresh Y.
+  unfold sch_open_var.
+  rewrite sch_subst_intro with (X := Y); auto.
+  apply sch_subst_type; auto.
+  exists (L \u \{Y}).
+  introv Hf.
+  specialize (Hs (Y :: Xs)).
+  simpl in Hs.
+  autorewrite with rew_sch_arity in Hf.
+  assert (scheme_vars (sch_bind K M) (Y :: Xs)) as Hsb by auto.
+  inversion Hsb; subst; auto.
+Qed.  
+
+Lemma scheme_bind_inv_knd : forall K M,
+    scheme (sch_bind K M) -> kind K.
+Proof.
+  introv [L Hs].
+  pick_freshes_gen L (sch_arity (sch_bind K M)) Xs.
+  fresh_length Fr as Hl.
+  specialize (Hs Xs Fr).
+  inversion Hs.
+  auto.
+Qed.  
 
 (* =============================================================== *)
 (** * Properties of environment *)
@@ -159,7 +187,7 @@ Proof.
       auto using sch_subst_type, env_subst_notin.
 Qed.
 
-Lemma environment_strengthen : forall E F,
+Lemma environment_retract : forall E F,
     environment (E & F) -> environment E.
 Proof.
   introv He.
@@ -178,97 +206,35 @@ Proof.
     auto.
 Qed.
 
-Lemma fresh_kinds : forall E x n Xs Ks,
-    fresh (dom E) (S n) (x :: Xs) ->
-    length Xs = length Ks ->
-    x # (E & Xs ~::* Ks).
-Proof.
-  introv Hf.
-  destruct Hf as [Hu Hx].
-  rewrite dom_concat.
-  rewrite notin_union.
-  split*.
-  rewrite dom_map.
-  rewrite dom_singles.
-  - eapply fresh_single_notin.
-    eapply fresh_union_r2.
-    apply Hx.
-  - { clear Hx.
-      gen Ks.
-      - induction Xs.
-        + induction Ks; intros; tryfalse; auto.
-        + induction Ks; intros; tryfalse.
-          rewrite! LibList.length_cons.
-          f_equal*. }
-Qed.
-
-Lemma environment_kinds : forall E n Xs Ks,
+Lemma environment_kinds : forall E Xs M,
     environment E ->
-    (fresh (dom E) n Xs) ->
-    length Ks = n ->
-    Forall kind Ks ->
-    environment (E & Xs ~::* Ks).
+    (fresh (dom E) (sch_arity M) Xs) ->
+    scheme M ->
+    environment (E & Xs ~::* M).
 Proof.
-  introv He Hf Hlk.
-  lets Hlx : (eq_sym (fresh_length _ _ _ Hf)).
-  gen Ks n.
-  induction Xs; destruct Ks;
-    intros; subst; tryfalse; rew_kinds*.
-  apply environment_knd.
-  - eapply IHXs; iauto.
-    + destruct* Hf.
-    + inversion H; auto.
-  - inversion H; auto.
-  - eapply fresh_kinds; auto.
+  introv He Hf Hs.
+  fresh_length Hf as Hl.
+  rewrite <- (concat_empty_r E) in *.
+  generalize dependent (@empty bind).
+  generalize dependent M.
+  induction Xs; intros M Hs Hl F He Hf; simpl.
+  - autorewrite with rew_env_concat; auto.
+  - destruct M.
+    + autorewrite with rew_env_concat; auto.
+    + { destruct Hf.
+        rewrite concat_assoc.
+        rewrite <- (concat_assoc E).
+        apply IHXs.
+        - apply scheme_bind_inv_sch with (K := k); auto.
+        - simpl in Hl; autorewrite with rew_sch_arity; auto.
+        - rewrite concat_assoc.
+          apply environment_knd; auto.
+          apply scheme_bind_inv_knd with (M := M).
+          auto.
+        - autorewrite with rew_env_dom in *.
+          autorewrite with rew_sch_arity.
+          auto. }
 Qed.
-
-(** Binding substitution is identity on bind_kind. *)
-
-Lemma binding_subst_kind : forall x T K,
-  binding_subst x T (bind_knd K) = bind_knd K.
-Proof.
-  simpl.
-  reflexivity.
-Qed.
-
-Lemma binds_subst_inv_r : forall E F X Y T K,
-    binds X (bind_knd K) (E & F) ->
-    binds X (bind_knd K) (E & environment_subst Y T F).
-Proof.
-  introv H.
-  unfolds environment_subst.
-  destruct (binds_concat_inv H).
-  - apply binds_concat_right.
-    erewrite <- binding_subst_kind .
-    apply* binds_map.
-  - apply* binds_concat_left.
-Qed.
-
-Hint Resolve binds_subst_inv_r.
-
-Lemma binds_environment_subst : forall E F X T K x M,
-    binds x (bind_typ M) (E & X ~:: K & F) ->
-    X \notin (env_fv E) ->
-    binds x (bind_typ (sch_subst X T M))
-          (E & environment_subst X T F).
-Proof.
-  introv Hb Hn.
-  destruct (binds_concat_inv Hb) as [Hbf | [Hf Hbex]].
-  - apply binds_concat_right.
-    unfold environment_subst.
-    fold (binding_subst X T (bind_typ M)).
-    apply* binds_map.
-  - apply binds_concat_left.
-    + { destruct (binds_concat_inv Hbex) as [Hbx | [_ Hbe]].
-        - destruct (binds_single_inv Hbx).
-          tryfalse.
-        - rewrite* sch_subst_fresh.
-          fold (bind_fv (bind_typ M)).
-          apply fv_in_values_binds with (x := x) (E := E); auto. }
-    + rewrite* dom_environment_subst.
-Qed.
-
-Hint Resolve binds_environment_subst.
 
 Lemma ok_from_environment : forall E,
   environment E -> ok E.
