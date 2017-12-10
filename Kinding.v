@@ -623,3 +623,68 @@ Proof.
 Qed.
 
 Hint Resolve kinding_env_typ_subst: typ_subst.
+
+Lemma kinding_closed : forall E T K X,
+    kinding E T K ->
+    X \in typ_fv T ->
+    X \in dom E.
+Proof.
+  introv Hk Hfv.
+  induction Hk; simpl in Hfv; rew_in in Hfv; iauto.
+  subst.
+  eapply get_some_inv.
+  apply H0.
+Qed.
+
+Lemma kinding_scheme_closed : forall E M X,
+    kinding_scheme E M ->
+    X \in sch_fv M ->
+    X \in dom E.
+Proof.
+  introv Hks Hfv.
+  unfold kinding_scheme, kinding_body in Hks.
+  unfold sch_fv in Hfv.
+  destruct Hks as [L Hk].
+  pick_freshes (sch_arity M) Xs.
+  destruct Hk with Xs as [_ Hkk]; auto.
+  eapply kinding_closed with (X := X) in Hkk; auto.
+  - rewrite dom_concat in Hkk.
+    rew_in in Hkk.
+    destruct* Hkk.
+    rewrite dom_map in H.
+    rewrite dom_singles in H.
+    + assert (fresh \{X} (sch_arity M) Xs) by auto.
+      eapply fresh_single_notin in H; auto.
+      tryfalse.
+    + apply fresh_length in Fr.
+      unfold sch_arity in Fr.
+      rewrite! liblist_length_eq_length.
+      auto.
+  - apply* typ_fv_open_vars.
+Qed.
+
+Lemma kinding_env_closed : forall E X,
+    kinding_env E ->
+    X \in env_fv E ->
+    X \in dom E.
+Proof.
+  introv Hk Hfv.
+  induction Hk.
+  - rewrite env_fv_empty in Hfv.
+    rew_in in Hfv.
+    iauto.
+  - rewrite env_fv_push_inv in Hfv.
+    rewrite dom_push.
+    rew_in.
+    right.
+    rew_in in Hfv.
+    destruct* Hfv.
+  - rewrite env_fv_push_inv in Hfv.
+    rewrite dom_push.
+    rew_in.
+    right.
+    rew_in in Hfv.
+    destruct* Hfv.
+    simpl in H1.
+    apply kinding_scheme_closed with M; auto.
+Qed.

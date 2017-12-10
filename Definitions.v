@@ -414,7 +414,7 @@ Inductive type_equal_cong : typ -> typ -> Prop :=
       type_equal_cong (typ_row T1) (typ_row T1')
   | type_equal_cong_variant : forall T1 T1',
       type_equal_cong T1 T1' ->
-      type_equal_cong (typ_variant T1) (typ_variant T1)
+      type_equal_cong (typ_variant T1) (typ_variant T1')
   | type_equal_cong_arrow_l : forall T1 T1' T2,
       type_equal_cong T1 T1' ->
       type_equal_cong (typ_arrow T1 T2) (typ_arrow T1' T2)
@@ -497,9 +497,10 @@ Inductive kinding : env -> typ -> knd -> Prop :=
       kinding E (typ_join T1 T2) K
   | kinding_subsumption : forall E T T1 T2 T1' T2' K,
       kinding E T (knd_range T1 T2) ->
-      type_equal E T1' (typ_meet T1' T1) (knd_row CSet.universe) ->
-      type_equal E T2 (typ_meet T2 T2') (knd_row CSet.universe) ->
-      type_equal E T2' (typ_meet T2' T1') (knd_row CSet.universe) ->
+      (* subtype E T1 T1' *)
+      type_equal E T1 (typ_meet T1 T1') (knd_row CSet.universe) ->
+      (* subtype E T2' T2 *)
+      type_equal E T2' (typ_meet T2' T2) (knd_row CSet.universe) ->
       K = knd_range T1' T2' ->
       kinding E T K
       
@@ -513,28 +514,34 @@ with type_equal : env -> typ -> typ -> knd -> Prop :=
       type_equal E T2 T3 K ->
       type_equal E T1 T3 K.
 
+Scheme kinding_type_equal_ind := Induction for kinding Sort Prop
+  with type_equal_kinding_ind := Induction for type_equal Sort Prop.
+
+Combined Scheme kinding_type_equal_mutind
+  from kinding_type_equal_ind, type_equal_kinding_ind.
+
 Definition subtype E T1 T2 :=
   type_equal E T1 (typ_meet T1 T2) (knd_row CSet.universe).
 
 Notation "E ||= T1 -<: T2" := (subtype E T1 T2) (at level 60).
 
 Inductive valid_kind : env -> knd -> Prop :=
-  | valid_type : forall E,
+  | valid_kind_type : forall E,
       environment E ->
       valid_kind E knd_type
-  | valid_row :  forall E cs,
+  | valid_kind_row :  forall E cs,
       environment E ->
       CSet.Nonempty cs ->
       valid_kind E (knd_row cs)
-  | valid_range : forall E T1 T2,
+  | valid_kind_range : forall E T1 T2,
       subtype E T2 T1 ->
       valid_kind E (knd_range T1 T2).
 
 Inductive kinding_scheme_vars : env -> sch -> list var -> Prop :=
-  | kinding_scheme_empty : forall E T,
+  | kinding_scheme_vars_empty : forall E T,
       kinding E T knd_type ->
       kinding_scheme_vars E (sch_empty T) nil
-  | kinding_scheme_bind : forall X Xs E K M,
+  | kinding_scheme_vars_bind : forall X Xs E K M,
       valid_kind E K ->
       kinding_scheme_vars (E & X ~:: K) (M ^ X) Xs ->
       kinding_scheme_vars E (sch_bind K M) (X :: Xs).
@@ -564,7 +571,7 @@ Inductive kinding_env : env -> Prop :=
       valid_kind E K ->
       X # E ->
       kinding_env (E & X ~:: K)
-  | kinding_env_typ : forall E x M,
+  | kinding_env_type : forall E x M,
       kinding_env E ->
       kinding_scheme E M ->
       x # E ->
