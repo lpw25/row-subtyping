@@ -101,15 +101,21 @@ Qed.
 (** * Properties of schemes *)
 
 Lemma scheme_empty_type : forall T,
-    type T -> scheme (sch_empty T).
+    type T <-> scheme (sch_empty T).
 Proof.
-  introv Ht.
-  eexists \{}.
-  simpl.
-  introv Fr.
-  fresh_length Fr as Hl.
-  destruct Xs; try discriminate.
-  auto.
+  split.
+  - introv Ht.
+    eexists \{}.
+    simpl.
+    introv Fr.
+    fresh_length Fr as Hl.
+    destruct Xs; try discriminate.
+    auto.
+  - introv [L Hs].
+    simpl in Hs.
+    specialize (Hs nil I).
+    inversion Hs.
+    auto.
 Qed.
 
 Hint Resolve scheme_empty_type.
@@ -1132,18 +1138,113 @@ Proof.
       by auto using scheme_instance_type.
     auto with typing_regular.
   - pick_fresh_gen L x.
-    
-    specialize (H0 x Fr).
-
+    assert (typing_regular (E & x ~: sch_empty T1) (t1 ^ x) T2)
+      by auto.
     apply typing_regular_abs with (L := L); auto with typing_regular.
-    
+    + eauto using environment_retract with typing_regular.
+    + rewrite scheme_empty_type.
+      eauto using scheme_from_env with typing_regular.
+    + apply term_abs with (L := L).
+      intros y Hn.
+      assert (typing_regular (E & y ~: sch_empty T1) (t1 ^ y) T2)
+        by auto.
+      auto with typing_regular.
+    + intros y Hn.
+      assert (typing_regular (E & y ~: sch_empty T1) (t1 ^ y) T2)
+        by auto.
+      auto with typing_regular.
+  - assert (type (typ_arrow S T)) as Hta
+      by auto with typing_regular.
+    inversion Hta; subst.
+    eauto with typing_regular.
+  - pick_freshes_gen L (sch_arity M) Xs.
+    assert (typing_regular (E & Xs ~::* M) t1 (instance_vars M Xs))
+      by auto.
+    pick_fresh_gen L x.
+    assert (typing_regular (E & x ~: M) (t2 ^ x) T2) by auto.
+    apply typing_regular_let with (M := M) (L := L);
+      auto with typing_regular.
+    + eauto using environment_retract with typing_regular.
+    + eauto using scheme_from_env with typing_regular.
+    + apply term_let with (L := L); auto with typing_regular.
+      intros y Hn.
+      assert (typing_regular (E & y ~: M) (t2 ^ y) T2) by auto.
+      auto with typing_regular.
+    + intros Ys Hf.
+      assert (typing_regular (E & Ys ~::* M) t1 (instance_vars M Ys))
+        by auto.
+      auto with typing_regular.
+    + intros y Hn.
+      assert (typing_regular (E & y ~: M) (t2 ^ y) T2) by auto.
+      auto with typing_regular.
+  - assert
+      (kinding_regular E T1
+         (knd_range (typ_top CSet.universe)
+                    (typ_or (typ_constructor c T2)
+                            (typ_bot (CSet.cosingleton c)))))
+      by auto using regular_kinding.
+    apply typing_regular_constructor with (T2 := T2);
+      auto with typing_regular kinding_regular.
+  - assert
+      (kinding_regular E T1
+        (knd_range
+           (typ_or (typ_constructor c T2)
+              (typ_top (CSet.cosingleton c)))
+           (typ_bot CSet.universe)))
+      by auto using regular_kinding.
+    assert
+      (kinding_regular E T1
+               (knd_range (typ_or T3 T4) (typ_bot CSet.universe)))
+      by auto using regular_kinding.
+    assert
+      (kinding_regular E T5
+         (knd_range (typ_top CSet.universe)
+            (typ_or T3 (typ_bot (CSet.cosingleton c)))))
+      by auto using regular_kinding.
+    assert
+      (kinding_regular E T6
+         (knd_range (typ_top CSet.universe)
+            (typ_or (typ_bot (CSet.singleton c)) T4)))
+      by auto using regular_kinding.
+    assert
+      (kind (knd_range
+               (typ_or (typ_constructor c T2)
+                       (typ_top (CSet.cosingleton c)))
+               (typ_bot CSet.universe))) as Hk1
+        by auto with kinding_regular.
+    assert
+      (kind (knd_range (typ_or T3 T4) (typ_bot CSet.universe))) as Hk2
+      by auto with kinding_regular.
+    pick_fresh_gen L x.
+    assert
+      (typing_regular (E & x ~: sch_empty (typ_variant T5)) 
+         (t2 ^ x) T7) by auto.
+    apply typing_regular_match
+      with (L := L) (T1 := T1) (T2 := T2) (T3 := T3)
+           (T4 := T4) (T5 := T5) (T6 := T6);
+      auto with typing_regular kinding_regular.
+    + inversion Hk1; subst.
+      assert (type
+                (typ_or (typ_constructor c T2)
+                        (typ_top (CSet.cosingleton c)))) as Hto
+          by assumption.
+      inversion Hto; subst.
+      assert (type (typ_constructor c T2)) as Htc by assumption.
+      inversion Htc; auto.
+    + inversion Hk2; subst.
+      assert (type (typ_or T3 T4)) as Hto by assumption.
+      inversion Hto; auto.
+    + inversion Hk2; subst.
+      assert (type (typ_or T3 T4)) as Hto by assumption.
+      inversion Hto; auto.
+    + 
 Qed.
 
-Lemma regular_kinding_env_inv : forall E,
-    kinding_env_regular E -> kinding_env E.
+Lemma regular_typing_inv : forall E t T,
+    typing_regular E t T -> typing E t T.
 Proof.
   introv He.
-  induction He; auto using kinding_env.
+  induction He; auto using typing.
 Qed.
 
 
