@@ -26,6 +26,43 @@ Hint Extern 1 (CSet.Disjoint _ _) => csetdec.
 (* =============================================================== *)
 (** * Properties of terms *)
 
+Lemma term_abs_body : forall t1,
+    term_body t1 -> term (trm_abs t1).
+Proof.
+  introv [L Ht].
+  eauto.
+Qed.
+
+Lemma term_let_body : forall t1 t2,
+    term t1 -> term_body t2 ->
+    term (trm_let t1 t2).
+Proof.
+  introv Ht1 [L Ht2].
+  eauto.
+Qed.
+
+Lemma term_match_body : forall t1 c t2 t3,
+    term t1 ->
+    term_body t2 ->
+    term_body t3 ->
+    term (trm_match t1 c t2 t3).
+Proof.
+  introv Ht1 [L2 Ht2] [L3 Ht3].
+  apply term_match with (L := L2 \u L3); eauto.
+Qed.
+
+Lemma term_destruct_body : forall t1 c t2,
+    term t1 ->
+    term_body t2 ->
+    term (trm_destruct t1 c t2).
+Proof.
+  introv Ht1 [L Ht2].
+  eauto.
+Qed.
+
+Hint Resolve term_abs_body term_let_body
+     term_match_body term_destruct_body.
+
 (** Terms are stable by substitution *)
 
 Lemma trm_subst_term : forall t z u,
@@ -49,9 +86,38 @@ Proof.
   apply trm_subst_term; auto.
 Qed.
 
+Hint Resolve trm_open_term.
+
+Lemma trm_open_term_var : forall t x,
+  term_body t -> term (t ^ x).
+Proof.
+  introv Ht.
+  apply trm_open_term; auto.
+Qed.
+
+Hint Resolve trm_open_term_var.
+
 (* =============================================================== *)
 (** * Properties of types *)
 
+(** Types of fvars *)
+Lemma types_fvars : forall Xs n,
+    n = length Xs ->
+    types n (typ_fvars Xs).
+Proof.
+  introv Hl.
+  unfold types.
+  split.
+  - generalize dependent n.
+    induction Xs; introv Hl; simpl in *; auto.
+    destruct n; try discriminate.
+    auto.
+  - generalize dependent n.
+    induction Xs; introv Hl; simpl in *; eauto.
+Qed.
+
+Hint Resolve types_fvars.
+ 
 (** Types are stable by type substitution *)
 
 Lemma typ_subst_type : forall T Z U,
@@ -118,7 +184,7 @@ Proof.
     auto.
 Qed.
 
-Hint Resolve scheme_empty_type.
+Hint Resolve -> scheme_empty_type.
 
 (** Schemes are stable by type substitution *)
 
@@ -659,18 +725,36 @@ Proof.
   assumption.
 Qed.
 
-Lemma regular_type_equal : forall E T1 T2 K,
-    type_equal E T1 T2 K -> type_equal_regular E T1 T2 K.
-Proof.
-  destruct regular_kinding_type_equal.
-  assumption.
-Qed.
-
 Lemma regular_kinding_inv : forall E T K,
     kinding_regular E T K -> kinding E T K.
 Proof.
   introv Hk.
   induction Hk; eauto using kinding.
+Qed.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : kinding E _ _ |- _ =>
+      apply (proj31 (kinding_regular_wellformed (regular_kinding H)))
+  end : kinding_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : kinding _ T _ |- _ =>
+      apply (proj32 (kinding_regular_wellformed (regular_kinding H)))
+  end : kinding_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : kinding _ _ K |- _ =>
+      apply (proj33 (kinding_regular_wellformed (regular_kinding H)))
+  end : kinding_regular.
+
+Lemma regular_type_equal : forall E T1 T2 K,
+    type_equal E T1 T2 K -> type_equal_regular E T1 T2 K.
+Proof.
+  destruct regular_kinding_type_equal.
+  assumption.
 Qed.
 
 Lemma regular_type_equal_inv : forall E T1 T2 K,
@@ -680,6 +764,30 @@ Proof.
   induction Hte;
     eauto using type_equal, regular_type_equal_symm_inv.
 Qed.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal E _ _ _ |- _ =>
+      apply (proj41 (type_equal_regular_wellformed
+                       (regular_type_equal H)))
+  end : type_equal_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal _ T _ _ |- _ =>
+      apply (proj42 (type_equal_regular_wellformed
+                       (regular_type_equal H)))
+  | H : type_equal _ _ T _ |- _ =>
+      apply (proj43 (type_equal_regular_wellformed
+                       (regular_type_equal H)))
+  end : type_equal_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal _ _ _ K |- _ =>
+      apply (proj44 (type_equal_regular_wellformed
+                       (regular_type_equal H)))
+  end : type_equal_regular.
 
 Inductive valid_kind_regular : env -> knd -> Prop :=
   | valid_kind_regular_type : forall E,
@@ -724,11 +832,7 @@ Lemma regular_valid_kind : forall E K,
 Proof.
   introv Hv.
   induction Hv; unfold subtype in *; auto using valid_kind_regular.
-  - assert
-      (type_equal_regular E T2 (typ_meet T2 T1)
-                          (knd_row CSet.universe))
-      by auto using regular_type_equal.
-    assert (type (typ_meet T2 T1)) as Ht
+  - assert (type (typ_meet T2 T1)) as Ht
         by auto with type_equal_regular.
     inversion Ht.
     auto using valid_kind_regular with type_equal_regular.
@@ -741,6 +845,20 @@ Proof.
   induction Hv;
     auto using valid_kind.
 Qed.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_kind E _ |- _ =>
+      apply (proj1 (valid_kind_regular_wellformed
+                      (regular_valid_kind H)))
+  end : valid_kind_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : valid_kind _ K |- _ =>
+      apply (proj2 (valid_kind_regular_wellformed
+                      (regular_valid_kind H)))
+  end : valid_kind_regular.
 
 Inductive kinding_scheme_vars_regular
   : env -> sch -> list var -> Prop :=
@@ -788,12 +906,8 @@ Lemma regular_kinding_scheme_vars : forall E M Xs,
 Proof.
   introv Hs.
   induction Hs.
-  - assert (kinding_regular E T knd_type)
-      by auto using regular_kinding.
-    auto with kinding_regular kinding_scheme_vars_regular.
-  - assert (valid_kind_regular E K)
-      by auto using regular_valid_kind.
-    apply kinding_scheme_vars_regular_bind;
+  - auto with kinding_regular kinding_scheme_vars_regular.
+  - apply kinding_scheme_vars_regular_bind;
       auto with kinding_scheme_vars_regular valid_kind_regular.
 Qed.
 
@@ -804,6 +918,20 @@ Proof.
   induction Hs;
     auto using kinding_scheme_vars.
 Qed.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : kinding_scheme_vars E _ _ |- _ =>
+      apply (proj1 (kinding_scheme_vars_regular_wellformed
+                      (regular_kinding_scheme_vars H)))
+  end : kinding_scheme_vars_regular.
+
+Hint Extern 1 (scheme_vars ?M ?Xs) =>
+  match goal with
+  | H : kinding_scheme_vars _ M Xs |- _ =>
+      apply (proj2 (kinding_scheme_vars_regular_wellformed
+                      (regular_kinding_scheme_vars H)))
+  end : kinding_scheme_vars_regular.
 
 Definition kinding_scheme_regular E M :=
   (exists L, forall Xs,
@@ -860,6 +988,20 @@ Proof.
   assumption.
 Qed.
 
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : kinding_scheme E _ |- _ =>
+      apply (proj1 (kinding_scheme_regular_wellformed
+                      (regular_kinding_scheme H)))
+  end : kinding_scheme_regular.
+
+Hint Extern 1 (scheme ?M) =>
+  match goal with
+  | H : kinding_scheme _ M |- _ =>
+      apply (proj2 (kinding_scheme_regular_wellformed
+                      (regular_kinding_scheme H)))
+  end : kinding_scheme_regular.
+
 Inductive kinding_instance_regular : env -> list typ -> sch -> Prop :=
   | kinding_instance_regular_empty : forall E T,
       types (sch_arity (sch_empty T)) nil ->
@@ -891,9 +1033,7 @@ Lemma regular_kinding_instance : forall E Ts M,
 Proof.
   introv Hi.
   induction Hi; auto with kinding_instance_regular.
-  - assert (kinding_regular E T K)
-        by auto using regular_kinding.
-    assert (type T) by auto with kinding_regular.
+  - assert (type T) by auto with kinding_regular.
     assert (types (sch_arity (sch_open M T)) Ts) as Hts
       by auto with kinding_instance_regular.
     destruct Hts as [Hl Hts].
@@ -910,6 +1050,13 @@ Proof.
   introv Hi.
   induction Hi; auto using kinding_instance.
 Qed.
+
+Hint Extern 1 (types (sch_arity ?M) ?Ts) =>
+  match goal with
+  | H : kinding_instance _ Ts M |- _ =>
+      apply (kinding_instance_regular_wellformed
+               (regular_kinding_instance H))
+  end : kinding_instance_regular.
 
 Inductive kinding_env_regular : env -> Prop :=
   | kinding_env_regular_empty :
@@ -951,12 +1098,8 @@ Lemma regular_kinding_env : forall E,
 Proof.
   introv He.
   induction He; auto with kinding_env_regular.
-  - assert (valid_kind_regular E K)
-      by auto using regular_valid_kind.
-    auto with kinding_env_regular valid_kind_regular.
-  - assert (kinding_scheme_regular E M)
-      by auto using regular_kinding_scheme.
-    auto with kinding_env_regular kinding_scheme_regular.
+  - auto with kinding_env_regular valid_kind_regular.
+  - auto with kinding_env_regular kinding_scheme_regular.
 Qed.
 
 Lemma regular_kinding_env_inv : forall E,
@@ -965,6 +1108,13 @@ Proof.
   introv He.
   induction He; auto using kinding_env.
 Qed.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : kinding_env E |- _ =>
+      apply (kinding_env_regular_wellformed
+               (regular_kinding_env H))
+  end : kinding_env_regular.
 
 Inductive typing_regular : env -> trm -> typ -> Prop :=
   | typing_regular_var : forall E x M Us,
@@ -978,14 +1128,14 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       typing_regular E (trm_fvar x) (instance M Us)
   | typing_regular_abs : forall L E T1 T2 t1,
       environment E ->
+      (forall x, x \notin L ->
+         environment (E & x ~ bind_typ (sch_empty T1))) ->
       type T1 ->
       type T2 ->
-      term (trm_abs t1) ->
+      term_body t1 ->
       (forall x, x \notin L -> 
         typing_regular
-          (E & x ~ bind_typ (sch_empty T1)) (t1 ^ x) T2
-        /\ environment (E & x ~ bind_typ (sch_empty T1))
-        /\ term (t1 ^ x)) -> 
+          (E & x ~ bind_typ (sch_empty T1)) (t1 ^ x) T2) -> 
       typing_regular E (trm_abs t1) (typ_arrow T1 T2)
   | typing_regular_app : forall E S T t1 t2, 
       environment E ->
@@ -998,20 +1148,22 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       typing_regular E (trm_app t1 t2) T
   | typing_regular_let : forall M L E T2 t1 t2,
       environment E ->
+      (forall Xs, fresh L (sch_arity M) Xs ->
+         environment (E & Xs ~::* M)) ->
+      (forall x, x \notin L ->
+         environment (E & x ~ (bind_typ M))) -> 
       type T2 ->
+      (forall Xs, fresh L (sch_arity M) Xs ->
+         type (instance_vars M Xs)) ->
       scheme M ->
       term t1 ->
-      term (trm_let t1 t2) ->
+      term_body t2 ->
       (forall Xs, fresh L (sch_arity M) Xs ->
          typing_regular
            (E & Xs ~::* M)
-           t1 (instance_vars M Xs)
-         /\ environment (E & Xs ~::* M)
-         /\ type (instance_vars M Xs)) ->
+           t1 (instance_vars M Xs)) ->
       (forall x, x \notin L ->
-         typing_regular (E & x ~ (bind_typ M)) (t2 ^ x) T2
-         /\ environment (E & x ~ (bind_typ M))
-         /\ term (t2 ^ x)) -> 
+         typing_regular (E & x ~ (bind_typ M)) (t2 ^ x) T2) -> 
       typing_regular E (trm_let t1 t2) T2
   | typing_regular_constructor : forall c E T1 T2 t,
       environment E ->
@@ -1027,6 +1179,10 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
   | typing_regular_match : forall c L E T1 T2 T3 T4 T5
                           T6 T7 t1 t2 t3,
       environment E ->
+      (forall x, x \notin L ->
+         environment (E & x ~: (sch_empty (typ_variant T5)))) ->
+      (forall y, y \notin L -> 
+         environment (E & y ~: (sch_empty (typ_variant T6)))) ->
       type T1 ->
       type T2 ->
       type T3 ->
@@ -1035,7 +1191,8 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       type T6 ->
       type T7 ->
       term t1 ->
-      term (trm_match t1 c t2 t3) ->
+      term_body t2 ->
+      term_body t3 ->
       kinding E T1
         (knd_range (typ_or (typ_constructor c T2)
                            (typ_top (CSet.cosingleton c)))
@@ -1053,22 +1210,20 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       typing_regular E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
          typing_regular (E & x ~: (sch_empty (typ_variant T5)))
-                (t2 ^ x) T7
-         /\ environment (E & x ~: (sch_empty (typ_variant T5)))
-         /\ term (t2 ^ x)) ->
+                (t2 ^ x) T7) ->
       (forall y, y \notin L -> 
          typing_regular (E & y ~: (sch_empty (typ_variant T6)))
-                (t3 ^ y) T7
-         /\ environment (E & y ~: (sch_empty (typ_variant T6)))
-         /\ term (t3 ^ y)) ->
+                (t3 ^ y) T7) ->
       typing_regular E (trm_match t1 c t2 t3) T7
   | typing_regular_destruct : forall c L E T1 T2 T3 t1 t2,
       environment E ->
+      (forall x, x \notin L ->
+         environment (E & x ~: (sch_empty T2))) ->
       type T1 ->
       type T2 ->
       type T3 ->
       term t1 ->
-      term (trm_destruct t1 c t2) ->
+      term_body t2 ->
       kinding E T1
         (knd_range (typ_or (typ_constructor c T2)
                            (typ_bot (CSet.cosingleton c)))
@@ -1076,9 +1231,7 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       typing_regular E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
          typing_regular (E & x ~: (sch_empty T2))
-                (t2 ^ x) T3
-         /\ environment (E & x ~: (sch_empty T2))
-         /\ term (t2 ^ x)) ->
+                (t2 ^ x) T3) ->
       typing_regular E (trm_destruct t1 c t2) T3
   | typing_regular_absurd : forall E T1 T2 t1,
       environment E ->
@@ -1124,11 +1277,7 @@ Lemma regular_typing : forall E t T,
 Proof.
   introv Ht.
   induction Ht.
-  - assert (kinding_env_regular E)
-      by auto using regular_kinding_env.
-    assert (kinding_instance_regular E Us M)
-      by auto using regular_kinding_instance.
-    assert (environment E)
+  - assert (environment E)
       by auto with kinding_env_regular.
     assert (scheme M)
       by (eapply scheme_from_env; eassumption).
@@ -1142,14 +1291,14 @@ Proof.
       by auto.
     apply typing_regular_abs with (L := L); auto with typing_regular.
     + eauto using environment_retract with typing_regular.
-    + rewrite scheme_empty_type.
-      eauto using scheme_from_env with typing_regular.
-    + apply term_abs with (L := L).
-      intros y Hn.
+    + intros y Hn.
       assert (typing_regular (E & y ~: sch_empty T1) (t1 ^ y) T2)
         by auto.
       auto with typing_regular.
-    + intros y Hn.
+    + rewrite scheme_empty_type.
+      eauto using scheme_from_env with typing_regular.
+    + exists L.
+      intros y Hny.
       assert (typing_regular (E & y ~: sch_empty T1) (t1 ^ y) T2)
         by auto.
       auto with typing_regular.
@@ -1165,48 +1314,27 @@ Proof.
     apply typing_regular_let with (M := M) (L := L);
       auto with typing_regular.
     + eauto using environment_retract with typing_regular.
-    + eauto using scheme_from_env with typing_regular.
-    + apply term_let with (L := L); auto with typing_regular.
-      intros y Hn.
-      assert (typing_regular (E & y ~: M) (t2 ^ y) T2) by auto.
-      auto with typing_regular.
     + intros Ys Hf.
       assert (typing_regular (E & Ys ~::* M) t1 (instance_vars M Ys))
         by auto.
       auto with typing_regular.
     + intros y Hn.
-      assert (typing_regular (E & y ~: M) (t2 ^ y) T2) by auto.
+      assert (typing_regular (E & y ~: M) (t2 ^ y) T2)
+        by auto.
       auto with typing_regular.
-  - assert
-      (kinding_regular E T1
-         (knd_range (typ_top CSet.universe)
-                    (typ_or (typ_constructor c T2)
-                            (typ_bot (CSet.cosingleton c)))))
-      by auto using regular_kinding.
-    apply typing_regular_constructor with (T2 := T2);
+    + intros Ys Hl.
+      assert (typing_regular (E & Ys ~::* M) t1 (instance_vars M Ys))
+        by auto.
+      auto with typing_regular.
+    + eauto using scheme_from_env with typing_regular.
+    + exists L.
+      intros y Hny.
+      assert (typing_regular (E & y ~: M) (t2 ^ y) T2)
+        by auto.
+      auto with typing_regular.
+  - apply typing_regular_constructor with (T2 := T2);
       auto with typing_regular kinding_regular.
   - assert
-      (kinding_regular E T1
-        (knd_range
-           (typ_or (typ_constructor c T2)
-              (typ_top (CSet.cosingleton c)))
-           (typ_bot CSet.universe)))
-      by auto using regular_kinding.
-    assert
-      (kinding_regular E T1
-               (knd_range (typ_or T3 T4) (typ_bot CSet.universe)))
-      by auto using regular_kinding.
-    assert
-      (kinding_regular E T5
-         (knd_range (typ_top CSet.universe)
-            (typ_or T3 (typ_bot (CSet.cosingleton c)))))
-      by auto using regular_kinding.
-    assert
-      (kinding_regular E T6
-         (knd_range (typ_top CSet.universe)
-            (typ_or (typ_bot (CSet.singleton c)) T4)))
-      by auto using regular_kinding.
-    assert
       (kind (knd_range
                (typ_or (typ_constructor c T2)
                        (typ_top (CSet.cosingleton c)))
@@ -1223,6 +1351,18 @@ Proof.
       with (L := L) (T1 := T1) (T2 := T2) (T3 := T3)
            (T4 := T4) (T5 := T5) (T6 := T6);
       auto with typing_regular kinding_regular.
+    + intros y Hny.
+      assert
+        (typing_regular (E & y ~: sch_empty (typ_variant T5)) 
+                        (t2 ^ y) T7)
+        by auto.
+      auto with typing_regular.
+    + intros y Hny.
+      assert
+        (typing_regular (E & y ~: sch_empty (typ_variant T6)) 
+                        (t3 ^ y) T7)
+        by auto.
+      auto with typing_regular.
     + inversion Hk1; subst.
       assert (type
                 (typ_or (typ_constructor c T2)
@@ -1237,17 +1377,225 @@ Proof.
     + inversion Hk2; subst.
       assert (type (typ_or T3 T4)) as Hto by assumption.
       inversion Hto; auto.
-    + 
+    + exists L.
+      intros y Hny.
+      assert
+        (typing_regular (E & y ~: sch_empty (typ_variant T5)) 
+                        (t2 ^ y) T7)
+        by auto.
+      auto with typing_regular.
+    + exists L.
+      intros y Hny.
+      assert
+        (typing_regular (E & y ~: sch_empty (typ_variant T6)) 
+                        (t3 ^ y) T7)
+        by auto.
+      auto with typing_regular.
+  - assert (type (typ_variant T1)) as Htv
+      by auto with typing_regular.
+    inversion Htv; subst.
+    pick_fresh_gen L x.
+    assert (typing_regular (E & x ~: sch_empty T2) (t2 ^ x) T3)
+      by auto.
+    apply typing_regular_destruct
+      with (L := L) (T1 := T1) (T2 := T2);
+      auto with typing_regular.
+    + intros y Hfy.
+      assert (typing_regular (E & y ~: sch_empty T2) (t2 ^ y) T3)
+        by auto.
+      auto with typing_regular.
+    + rewrite scheme_empty_type.
+      eauto using scheme_from_env with typing_regular.
+    + exists L.
+      intros y Hny.
+      assert
+        (typing_regular (E & y ~: sch_empty T2) (t2 ^ y) T3)
+        by auto.
+      auto with typing_regular.
+  - apply typing_regular_absurd with (T1 := T1);
+      auto with typing_regular kinding_regular.
 Qed.
 
 Lemma regular_typing_inv : forall E t T,
     typing_regular E t T -> typing E t T.
 Proof.
-  introv He.
-  induction He; auto using typing.
+  introv Ht.
+  induction Ht; eauto using typing.
 Qed.
 
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : typing E _ _ |- _ =>
+      apply (proj31 (typing_regular_wellformed (regular_typing H)))
+  end : typing_regular.
 
+Hint Extern 1 (term ?t) =>
+  match goal with
+  | H : typing _ t _ |- _ =>
+      apply (proj32 (typing_regular_wellformed (regular_typing H)))
+  end : typing_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : typing _ _ T |- _ =>
+      apply (proj33 (typing_regular_wellformed (regular_typing H)))
+  end : typing_regular.
+
+Inductive value_regular : trm -> Prop :=
+  | value_regular_constructor : forall c t,
+      term t ->
+      value t ->
+      value_regular (trm_constructor c t)
+  | value_regular_abs : forall t,
+      term_body t ->
+      value_regular (trm_abs t).
+
+Lemma value_regular_wellformed : forall t,
+    value_regular t -> term t.
+Proof.
+  introv Hv.
+  induction Hv; auto.
+Qed.
+
+Hint Constructors value_regular : value_regular.
+
+Hint Extern 1 (term ?t) =>
+  match goal with
+  | H : value_regular t |- _ =>
+      apply (value_regular_wellformed H)
+  end : value_regular.
+
+Lemma regular_value : forall t,
+    value t -> value_regular t.
+Proof.
+  introv Hv.
+  induction Hv; auto with value_regular.
+  assert (term (trm_abs t)) as Ht by assumption.
+  inversion Ht; subst.
+  apply value_regular_abs; try assumption.
+  exists L.
+  auto.
+Qed.
+
+Lemma regular_value_inv : forall t,
+    value_regular t -> value t.
+Proof.
+  introv Hv.
+  induction Hv; auto using value.
+Qed.
+
+Hint Extern 1 (term ?t) =>
+  match goal with
+  | H : value t |- _ =>
+      apply (value_regular_wellformed (regular_value H))
+  end : value_regular.
+
+Inductive red_regular : trm -> trm -> Prop :=
+  | red_regular_let : forall t1 t2, 
+      term t1 ->
+      term_body t2 ->
+      value t1 -> 
+      red_regular (trm_let t1 t2) (t2 ^^ t1)
+  | red_regular_let_1 : forall t1 t1' t2, 
+      term t1 ->
+      term t1' ->
+      term_body t2 ->
+      red_regular t1 t1' -> 
+      red_regular (trm_let t1 t2) (trm_let t1' t2)
+  | red_regular_app_1 : forall t1 t1' t2,
+      term t1 ->
+      term t1' ->
+      term t2 ->
+      red_regular t1 t1' -> 
+      red_regular (trm_app t1 t2) (trm_app t1' t2)
+  | red_regular_app_2 : forall t1 t2 t2', 
+      term t1 ->
+      term t2 ->
+      term t2' ->
+      value t1 ->
+      red_regular t2 t2' ->
+      red_regular (trm_app t1 t2) (trm_app t1 t2')
+  | red_regular_app_3 : forall t1 t2, 
+      term t2 ->
+      term_body t1 ->
+      value t2 ->  
+      red_regular (trm_app (trm_abs t1) t2) (t1 ^^ t2)
+  | red_regular_constructor : forall c t t',
+      term t ->
+      term t' ->
+      red_regular t t' ->
+      red_regular (trm_constructor c t) (trm_constructor c t')
+  | red_regular_match_1 : forall c t1 t1' t2 t3,
+      term t1 ->
+      term t1' ->
+      term_body t2 ->
+      term_body t3 ->
+      red_regular t1 t1' ->
+      red_regular (trm_match t1 c t2 t3) (trm_match t1' c t2 t3)
+  | red_regular_match_2 : forall c1 c2 t1 t2 t3,
+      term t1 ->
+      term_body t2 ->
+      term_body t3 ->
+      c1 = c2 ->
+      value (trm_constructor c1 t1) ->
+      red_regular (trm_match (trm_constructor c1 t1) c2 t2 t3)
+          (t2 ^^ (trm_constructor c1 t1))
+  | red_regular_match_3 : forall c1 c2 t1 t2 t3,
+      term t1 ->
+      term_body t2 ->
+      term_body t3 ->
+      c1 <> c2 ->
+      value (trm_constructor c1 t1) ->
+      red_regular (trm_match (trm_constructor c1 t1) c2 t2 t3)
+          (t3 ^^ (trm_constructor c1 t1))
+  | red_regular_destruct_1 : forall c t1 t1' t2,
+      term t1 ->
+      term t1' ->
+      term_body t2 ->
+      red_regular t1 t1' ->
+      red_regular (trm_destruct t1 c t2) (trm_destruct t1' c t2)
+  | red_regular_destruct_2 : forall c1 c2 t1 t2,
+      term t1 ->
+      term_body t2 ->
+      c1 = c2 ->
+      value (trm_constructor c1 t1) ->
+      term_body t2 ->
+      red_regular (trm_destruct (trm_constructor c1 t1) c2 t2)
+          (t2 ^^ t1).
+
+Lemma red_regular_wellformed : forall t,
+    red_regular t -> term t.
+Proof.
+  introv Hv.
+  induction Hv; auto.
+Qed.
+
+Hint Constructors red_regular : red_regular.
+
+Hint Extern 1 (term ?t) =>
+  match goal with
+  | H : red_regular t |- _ =>
+      apply (red_regular_wellformed H)
+  end : red_regular.
+
+Lemma regular_red : forall t,
+    red t -> red_regular t.
+Proof.
+
+Qed.
+
+Lemma regular_red_inv : forall t,
+    red_regular t -> red t.
+Proof.
+  introv Hr.
+  induction Hr; auto using red.
+Qed.
+
+Hint Extern 1 (term ?t) =>
+  match goal with
+  | H : red t |- _ =>
+      apply (red_regular_wellformed (regular_red H))
+  end : red_regular.
 
 (* =============================================================== *)
 (** * Properties of judgments *)
