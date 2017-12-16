@@ -1563,8 +1563,8 @@ Inductive red_regular : trm -> trm -> Prop :=
       red_regular (trm_destruct (trm_constructor c1 t1) c2 t2)
           (t2 ^^ t1).
 
-Lemma red_regular_wellformed : forall t,
-    red_regular t -> term t.
+Lemma red_regular_wellformed : forall t1 t2,
+    red_regular t1 t2 -> term t1 /\ term t2.
 Proof.
   introv Hv.
   induction Hv; auto.
@@ -1574,18 +1574,38 @@ Hint Constructors red_regular : red_regular.
 
 Hint Extern 1 (term ?t) =>
   match goal with
-  | H : red_regular t |- _ =>
-      apply (red_regular_wellformed H)
+  | H : red_regular t _ |- _ =>
+      apply (proj1 (red_regular_wellformed H))
+  | H : red_regular _ t |- _ =>
+      apply (proj2 (red_regular_wellformed H))
   end : red_regular.
 
-Lemma regular_red : forall t,
-    red t -> red_regular t.
+Lemma regular_red : forall t1 t2,
+    red t1 t2 -> red_regular t1 t2.
 Proof.
-
+  introv Hr.
+  induction Hr; auto with red_regular value_regular.
+  - assert (term (trm_let t1 t2)) as Ht by assumption.
+    inversion Ht; subst.
+    assert (term_body t2)
+      by (exists L; auto).
+    auto with red_regular.
+  - assert (term (trm_constructor c1 t1)) as Ht
+        by auto with value_regular.
+    inversion Ht; subst.
+    auto with red_regular.
+  - assert (term (trm_constructor c1 t1)) as Ht
+        by auto with value_regular.
+    inversion Ht; subst.
+    auto with red_regular.
+  - assert (term (trm_constructor c1 t1)) as Ht
+        by auto with value_regular.
+    inversion Ht; subst.
+    auto with red_regular.
 Qed.
 
-Lemma regular_red_inv : forall t,
-    red_regular t -> red t.
+Lemma regular_red_inv : forall t1 t2,
+    red_regular t1 t2 -> red t1 t2.
 Proof.
   introv Hr.
   induction Hr; auto using red.
@@ -1593,387 +1613,8 @@ Qed.
 
 Hint Extern 1 (term ?t) =>
   match goal with
-  | H : red t |- _ =>
-      apply (red_regular_wellformed (regular_red H))
+  | H : red t _ |- _ =>
+      apply (proj1 (red_regular_wellformed (regular_red H)))
+  | H : red _ t |- _ =>
+      apply (proj2 (red_regular_wellformed (regular_red H)))
   end : red_regular.
-
-(* =============================================================== *)
-(** * Properties of judgments *)
-
-(* *************************************************************** *)
-(** ** Regularity of relations *)
-
-(** A kinding relation is restricted to well-formed objects. *)
-
-Lemma kinding_regular : forall E T K,
-  kinding E T K -> environment E /\ type T /\ kind K.
-Proof.
-  split; induction H; subst;
-    intuition eauto using kind_from_env with constrs.
-  - inversion H3.
-    inversion H5.
-    auto with constrs.
-Qed.
-
-Lemma kindings_regular : forall E n Ts Ks,
-  kindings E n Ts Ks ->
-  environment E /\ types n Ts /\ kinds n Ks.
-Proof.
-  split; induction* H.
-  split.
-  - split.
-    + simpl.
-      f_equal.
-      destruct IHkindings as [[Hl Ht] Hk]; auto.
-    + lets [_ [Ht Hk]] : (kinding_regular H).
-      lets [[_ Hts] Hks] : IHkindings.
-      apply* Forall_cons.
-  - split.
-    + simpl.
-      f_equal.
-      destruct IHkindings as [_ [Hl Hks]]; auto.
-    + destruct IHkindings as [_ [Hl Hks]]; auto.
-      lets [_ [Ht Hk]] : (kinding_regular H).
-      apply* Forall_cons.
-Qed.  
-
-Lemma kindings_length : forall E n Ts Ks,
-    kindings E n Ts Ks ->
-    length Ts = n /\ length Ks = n.
-Proof.
-  intros.
-  induction H; simpl; iauto.
-Qed.
-
-Lemma kinding_body_regular : forall E n Ks T,
-    kinding_body E n Ks T ->
-    environment E /\ kinds n Ks /\ type_body n T.
-Proof.
-  introv H.
-  destruct H as [L H].
-  splits.
-  - pick_freshes n Xs.
-    destruct H with Xs as [_ Hk]; auto.
-    eapply kinding_regular in Hk; auto.
-    destruct* Hk.
-  - pick_freshes n Xs.
-    destruct H with Xs as [Hkd _]; auto.
-  - exists_fresh Xs Hf.
-    destruct H with Xs as [_ Hk]; auto.
-    eapply kinding_regular in Hk; auto.
-    destruct* Hk.
-Qed.
-
-Lemma kinding_scheme_regular : forall E M,
-    kinding_scheme E M -> environment E /\ scheme M.
-Proof.
-  introv Hks.
-  destruct (kinding_body_regular Hks) as [He [Hk Ht]].
-  split; auto.
-  split; auto.
-Qed.
-
-Lemma kinding_env_regular : forall E,
-    kinding_env E -> environment E.
-Proof.
-  introv H.
-  induction* H.
-  apply* environment_typ.
-  apply kinding_scheme_regular in H0.
-  iauto.
-Qed.
-
-(* Automation of kinding regularity lemmas *)
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : kinding _ _ K |- _ =>
-      apply (proj33 (kinding_regular H))
-  | H1 : environment ?E, H2 : binds _ (bind_knd K) ?E |- _ =>
-      apply (kind_from_env H1 H2)
-  | H1 : kinding_env ?E, H2 : binds _ (bind_knd K) ?E |- _ =>
-      apply (kind_from_env (kinding_env_regular H1) H2)
-  end.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H: kinding _ T _ |- _ =>
-      apply (proj32 (kinding_regular H))
-  end.
-
-Hint Extern 1 (scheme ?M) =>
-  match goal with
-  | H: kinding_scheme _ M |- _ =>
-      apply (proj2 (kinding_scheme_regular H))
-  | H1 : environment ?E, H2 : binds _ (bind_typ M) ?E |- _ =>
-      apply (scheme_from_env H1 H2)
-  | H1 : kinding_env ?E, H2 : binds _ (bind_typ M) ?E |- _ =>
-      apply (scheme_from_env (kinding_env_regular H1) H2)
-end.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H: kinding_env E |- _ =>
-      apply (kinding_env_regular H)
-  | H: kinding E _ _ |- _ =>
-      apply (proj31 (kinding_regular H))
-  | H: kindings E _ _ _ |- _ =>
-      apply (proj31 (kindings_regular H))
-  | H: kinding_body E _ _ _ |- _ =>
-      apply (proj31 (kinding_body_regular H))
-  | H: kinding_scheme E _ |- _ =>
-      apply (proj1 (kinding_scheme_regular H))
-  end.
-
-Hint Extern 1 (environment (?E & ?F)) =>
-  match goal with
-  | H: environment (E & _ & F) |- _ =>
-      apply (environment_concat_inv H)
-  end.
-
-Hint Extern 1 (kinds ?n ?Ks) =>
-  match goal with
-  | H: kindings _ n _ Ks |- _ =>
-      apply (proj33 (kindings_regular H))
-  | H : kinding_body _ n Ks _ |- _ =>
-      apply (proj32 (kinding_body_regular H))
-  end.
-
-Hint Extern 1 (types ?n ?Ts) =>
-  match goal with
-  | H: kindings _ n Ts _ |- _ =>
-      apply (proj32 (kindings_regular H))
-  end.
-
-Hint Extern 1 (type_body ?n ?T) =>
-  match goal with
-  | H: kinding_body _ n _ T |- _ =>
-      apply (proj33 (kinding_body_regular H))
-  end.
-
-Ltac invert_kind_rec Hs :=
-  try match goal with
-  | [ H : kind (knd_row _) |- _ ] =>
-    let b := inList H Hs in
-    match b with
-    | true => fail 1
-    | false =>
-      try invert_kind_rec (H, Hs);
-      inversion H
-    end
-  | [ H : kinding _ _ (knd_row ?cs) |- _ ] =>
-    let b := inList H Hs in
-    match b with
-    | true => fail 1
-    | false =>
-      try invert_kind_rec (H, Hs);
-      let Hk := fresh "Hk" in
-      assert (kind (knd_row cs))
-        as Hk by (apply (proj33 (kinding_regular H)));
-      inversion Hk
-    end
-  end.
-
-Ltac invert_kind :=
-  invert_kind_rec tt;
-  subst.
-
-Ltac invert_type_rec Hs :=
-  try match goal with
-  | [ H : type (typ_constructor _ _)  |- _ ] =>
-    invert_type_rec_body H Hs
-  | [ H : type (typ_or _ _)  |- _ ] =>
-    invert_type_rec_body H Hs
-  | [ H : type (typ_variant _ _)  |- _ ] =>
-    invert_type_rec_body H Hs
-  | [ H : type (typ_arrow _ _)  |- _ ] =>
-    invert_type_rec_body H Hs
-  | [ H : type (typ_meet _ _)  |- _ ] =>
-    invert_type_rec_body H Hs
-  | [ H : type (typ_join _ _)  |- _ ] =>
-    invert_type_rec_body H Hs
-  end
-
-with invert_type_rec_body H Hs :=
-  let b := inList H Hs in
-  match b with
-  | true => fail 1
-  | false =>
-    try invert_type_rec (H, Hs);
-    inversion H
-  end.
-
-Ltac invert_type :=
-  invert_type_rec tt;
-  subst.
-
-Lemma type_equal_step_regular : forall E T1 T2,
-  type_equal_step E T1 T2 ->
-  environment E ->
-  (type T1 -> type T2) /\ (type T2 -> type T1).
-Proof.
-  introv Hs.
-  induction Hs; intuition auto;
-    match goal with
-    | [ |- type _ ] =>
-      subst;
-      invert_type;
-      invert_type;
-      subst;
-      auto
-    end.
-Qed.
-
-(** Type equality preserves regularity *)
-
-Lemma type_equal_regular : forall E T1 T2 K,
-  type_equal E T1 T2 K ->
-  environment E /\ type T1 /\ type T2 /\ kind K.
-Proof.
-  introv He.
-  induction He; intuition auto.
-  - destruct (type_equal_step_regular H); auto.
-  - destruct (type_equal_step_regular H); auto.
-Qed.
-
-Lemma subtype_regular : forall E T1 T2,
-    subtype E T1 T2 -> environment E /\ type T1 /\ type T2.
-Proof.
-  introv Hs.
-  destruct (type_equal_regular Hs) as [ He [ _ [ Ht Hk ] ] ].
-  inversion* Ht.
-Qed.
-
-(* Automation of equality regularity lemmas *)
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : type_equal _ _ _ K |- _ =>
-      apply (proj44 (type_equal_regular H))
-  end.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H: type_equal _ T _ _ |- _ =>
-      apply (proj42 (type_equal_regular H))
-  | H: type_equal _ _ T _ |- _ =>
-      apply (proj43 (type_equal_regular H))
-  | H: subtype _ T _ |- _ =>
-      apply (proj32 (subtype_regular H))
-  | H: subtype _ _ T |- _ =>
-      apply (proj33 (subtype_regular H))
-  end.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H: type_equal E _ _ _ |- _ =>
-      apply (proj41 (type_equal_regular H))
-  | H: subtype E _ _ |- _ =>
-      apply (proj31 (subtype_regular H))
-  end.
-
-Hint Extern 1 (environment (?E & environment_subst ?X ?T ?F)) =>
-  match goal with
-  | H1: environment (E & X ~:: ?K & F), H2: kinding E T ?K |- _ =>
-      apply (environment_subst_inv_r X
-               (environment_concat_inv H1)
-               (proj32 (kinding_regular H2)))
-  | H1: environment (E & X ~:: ?K & F), H2: type_equal E T T ?K |- _ =>
-      apply (environment_subst_inv_r X
-               (environment_concat_inv H1)
-               (proj41 (type_equal_regular H2)))
-  | H1: environment (E & X ~:: _ & F), H2: type T |- _ =>
-      apply (environment_subst_inv_r X (environment_concat_inv H1) H2)
-  | H1: environment (E & F), H2: type T |- _ =>
-      apply (environment_subst_inv_r X H1 H2)
-  end.
-
-(** A typing relation is restricted to well-formed objects. *)
-
-Lemma typing_regular : forall E e T,
-  typing E e T -> environment E /\ term e /\ type T.
-Proof.
-  splits 3.
-  - induction* H.
-    pick_freshes (sch_arity M) Xs.
-    eapply environment_concat_inv_l.
-    apply* H0.
-  - induction H; eauto.
-  - induction* H.
-    inversion* IHtyping1.
-Qed.
-
-Lemma typing_scheme_regular : forall E e M,
-    typing_scheme E e M -> environment E /\ term e /\ scheme M.
-Proof.
-  unfold typing_scheme.
-  introv [Hks [L Ht]].
-  splits*.
-  - pick_freshes (sch_arity M) Xs.
-    eapply typing_regular in Ht; auto.
-    eapply environment_concat_inv_l; iauto.
-  - pick_freshes (sch_arity M) Xs.
-    eapply typing_regular in Ht; iauto.
-  - unfold scheme, type_body.
-    split*.
-    exists L.
-    introv Hf.
-    eapply typing_regular in Ht; iauto.
-Qed.
-
-(** Automation of typing regularity lemma *)
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H: typing E _ _ |- _ =>
-      apply (proj31 (typing_regular H))
-  | H: typing_scheme E _ _ |- _ =>
-      apply (proj31 (typing_scheme_regular H))
-  end.
-
-Hint Extern 1 (term ?e) =>
-  match goal with
-  | H: typing _ e _ |- _ =>
-      apply (proj32 (typing_regular H))
-  | H: typing_scheme _ e _ |- _ =>
-      apply (proj32 (typing_scheme_regular H))
-  end.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H: typing _ _ T |- _ =>
-      apply (proj33 (typing_regular H))
-  end.
-
-Hint Extern 1 (scheme ?M) =>
-  match goal with
-  | H: typing_scheme _ _ M |- _ =>
-      apply (proj33 (typing_scheme_regular H))
-  end.
-
-(** The value predicate is restricted to well-formed terms. *)
-
-Lemma value_regular : forall e,
-  value e -> term e.
-Proof.
-  introv Hv.
-  induction* Hv.
-Qed.
-
-Hint Resolve value_regular.
-
-(** A reduction relation is restricted to well-formed terms. *)
-
-Lemma red_regular : forall e e',
-  red e e' -> term e /\ term e'.
-Proof.
-  introv Hr.
-  induction Hr; iauto.
-  inversion* H0.
-Qed.
-
-Hint Extern 1 (term ?t) =>
-  match goal with
-  | H: red t _ |- _ => apply (proj1 (red_regular H))
-  | H: red _ t |- _ => apply (proj2 (red_regular H))
-  end.
