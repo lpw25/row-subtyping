@@ -4,38 +4,7 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import LibLN Definitions Infrastructure.
-
-(* *************************************************************** *)
-(** Uniqueness *)
-
-Lemma kinding_unique : forall E T K1 K2,
-    kinding E T K1 ->
-    kinding E T K2 ->
-    K1 = K2.
-Proof.
-  introv Hk1 Hk2.
-  gen K2.
-  induction Hk1; introv Hk2; inversion Hk2; subst; auto.
-  - lets Hke : (binds_func H0 H4).
-    inversion Hke; auto.
-  - lets Hke1 : (IHHk1_1 _ H3).
-    lets Hke2 : (IHHk1_2 _ H4).
-    inversion Hke1.
-    inversion Hke2.
-    reflexivity.
-Qed.
-
-Lemma kinding_unique_row : forall E T cs1 cs2,
-    kinding E T (knd_row cs1) ->
-    kinding E T (knd_row cs2) ->
-    cs1 = cs2.
-Proof.
-  introv H1 H2.
-  remember (kinding_unique H1 H2) as Heq.
-  inversion Heq.
-  easy.
-Qed.
+Require Import LibLN Cofinite Definitions Substitution Wellformedness.
 
 (* =============================================================== *)
 (** ** Automation for kinding *)

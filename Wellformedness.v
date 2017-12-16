@@ -11,8 +11,6 @@ Require Import List LibLN Cofinite Definitions Substitution.
 
 Hint Constructors kind type scheme_vars term environment.
 
-Hint Unfold is_row_kind.
-
 Hint Extern 1 (types _ _) => split; auto.
 
 Hint Extern 1 (CSet.Equal _ _) => csetdec.
@@ -513,101 +511,186 @@ Proof.
     auto using regular_type_equal_cong_inv, type_equal_symm.
 Qed.
 
-Inductive kinding_regular : env -> typ -> knd -> Prop :=
-  | kinding_regular_var : forall E X K,
+Inductive kinding_core_regular : env -> typ -> knd -> Prop :=
+  | kinding_core_regular_var : forall E X K,
       environment E ->
       kind K ->
       binds X (bind_knd K) E ->
-      kinding_regular E (typ_fvar X) K
-  | kinding_regular_constructor : forall E c T K,
+      kinding_core_regular E (typ_fvar X) K
+  | kinding_core_regular_constructor : forall E c T,
       environment E ->
       type T ->
-      kind K ->
-      kinding_regular E T knd_type ->
-      K = knd_row (CSet.singleton c) ->
-      kinding_regular E (typ_constructor c T) K
-  | kinding_regular_or : forall E T1 cs1 T2 cs2 K,
+      kinding_core_regular E T knd_type ->
+      kinding_core_regular E (typ_constructor c T)
+                   (knd_row (CSet.singleton c))
+  | kinding_core_regular_or : forall E T1 cs1 T2 cs2,
       environment E ->
       type T1 ->
       type T2 ->
-      kind (knd_row cs1) ->
-      kind (knd_row cs2) ->
-      kind K ->
-      kinding_regular E T1 (knd_row cs1) ->
-      kinding_regular E T2 (knd_row cs2) ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_core_regular E T1 (knd_row cs1) ->
+      kinding_core_regular E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
-      K = knd_row (CSet.union cs1 cs2) ->
-      kinding_regular E (typ_or T1 T2) K
-  | kinding_regular_row : forall E T K,
+      kinding_core_regular E (typ_or T1 T2)
+             (knd_row (CSet.union cs1 cs2))
+  | kinding_core_regular_row : forall E T,
       environment E ->
       type T ->
-      kind K ->
-      kinding_regular E T (knd_row CSet.universe) ->
-      K = knd_range T T ->
-      kinding_regular E (typ_row T) K
-  | kinding_regular_variant : forall E T T1 T2 K,
+      kinding_core_regular E T (knd_row CSet.universe) ->
+      kinding_core_regular E (typ_row T) (knd_range T T)
+  | kinding_core_regular_variant : forall E T T1 T2,
       environment E ->
       type T ->
       type T1 ->
       type T2 ->
-      kind K ->
-      kinding_regular E T (knd_range T1 T2) ->
-      K = knd_type ->
-      kinding_regular E (typ_variant T) K
-  | kinding_regular_arrow : forall E T1 T2 K,
+      kinding_core_regular E T (knd_range T1 T2) ->
+      kinding_core_regular E (typ_variant T) knd_type
+  | kinding_core_regular_arrow : forall E T1 T2,
       environment E ->
       type T1 ->
       type T2 ->
-      kind K ->
-      kinding_regular E T1 knd_type -> 
-      kinding_regular E T2 knd_type -> 
-      K = knd_type ->
-      kinding_regular E (typ_arrow T1 T2) K
-  | kinding_regular_top : forall E cs K,
-      environment E ->
-      kind K ->
+      kinding_core_regular E T1 knd_type -> 
+      kinding_core_regular E T2 knd_type -> 
+      kinding_core_regular E (typ_arrow T1 T2) knd_type
+  | kinding_core_regular_top : forall E cs,
       CSet.Nonempty cs ->
       environment E ->
-      K = knd_row cs ->
-      kinding_regular E (typ_top cs) K
-  | kinding_regular_bot : forall E cs K,
-      environment E ->
-      kind K ->
+      kinding_core_regular E (typ_top cs) (knd_row cs)
+  | kinding_core_regular_bot : forall E cs,
       CSet.Nonempty cs ->
       environment E ->
-      K = knd_row cs ->
-      kinding_regular E (typ_bot cs) K
-  | kinding_regular_meet : forall E T1 T2 K,
+      kinding_core_regular E (typ_bot cs) (knd_row cs)
+  | kinding_core_regular_meet : forall E T1 T2 cs,
       environment E ->
       type T1 ->
       type T2 ->
-      kind K ->
-      kinding_regular E T1 K ->
-      kinding_regular E T2 K ->
-      is_row_kind K ->
-      kinding_regular E (typ_meet T1 T2) K
-  | kinding_regular_join : forall E T1 T2 K,
+      CSet.Nonempty cs ->
+      kinding_core_regular E T1 (knd_row cs) ->
+      kinding_core_regular E T2 (knd_row cs) ->
+      kinding_core_regular E (typ_meet T1 T2) (knd_row cs)
+  | kinding_core_regular_join : forall E T1 T2 cs,
       environment E ->
       type T1 ->
       type T2 ->
-      kind K ->
-      kinding_regular E T1 K ->
-      kinding_regular E T2 K ->
-      is_row_kind K ->
-      kinding_regular E (typ_join T1 T2) K
-  | kinding_regular_subsumption : forall E T T1 T2 T1' T2' K,
+      CSet.Nonempty cs ->
+      kinding_core_regular E T1 (knd_row cs) ->
+      kinding_core_regular E T2 (knd_row cs) ->
+      kinding_core_regular E (typ_join T1 T2) (knd_row cs).
+
+Lemma kinding_core_regular_wellformed : forall E T K,
+    kinding_core_regular E T K ->
+    environment E /\ type T /\ kind K.
+Proof.
+  introv Hk.
+  destruct Hk; auto.
+Qed.
+
+Hint Constructors kinding_core_regular : kinding_core_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : kinding_core_regular E _ _ |- _ =>
+      apply (proj31 (kinding_core_regular_wellformed H))
+  end : kinding_core_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : kinding_core_regular _ T _ |- _ =>
+      apply (proj32 (kinding_core_regular_wellformed H))
+  end : kinding_core_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : kinding_core_regular _ _ K |- _ =>
+      apply (proj33 (kinding_core_regular_wellformed H))
+  end : kinding_core_regular.
+
+Lemma regular_kinding_core : forall E T K,
+    kinding_core E T K -> kinding_core_regular E T K.
+Proof.
+  introv Hk.
+  induction Hk; auto with kinding_core_regular.
+  - assert (kind K) by (eapply kind_from_env; eassumption).
+    auto with kinding_core_regular.
+  - assert (kind (knd_row cs1)) as Hknd1
+        by auto with kinding_core_regular.
+    inversion Hknd1; subst.
+    assert (kind (knd_row cs2)) as Hknd2
+        by auto with kinding_core_regular.
+    inversion Hknd2; subst.
+    apply kinding_core_regular_or with (cs1 := cs1) (cs2 := cs2);
+      auto with kinding_core_regular.
+  - assert (kind (knd_range T1 T2)) as Hknd
+      by auto with kinding_core_regular.
+    inversion Hknd; subst.
+    apply kinding_core_regular_variant with (T1 := T1) (T2 := T2);
+      auto with kinding_core_regular.
+  - assert (kind (knd_row cs)) as Hknd
+        by auto with kinding_core_regular.
+    inversion Hknd; subst.
+    apply kinding_core_regular_meet;
+      auto with kinding_core_regular.
+  - assert (kind (knd_row cs)) as Hknd
+        by auto with kinding_core_regular.
+    inversion Hknd; subst.
+    apply kinding_core_regular_join;
+      auto with kinding_core_regular.
+Qed.
+
+Lemma regular_kinding_core_inv : forall E T K,
+    kinding_core_regular E T K -> kinding_core E T K.
+Proof.
+  introv Hk.
+  induction Hk; eauto using kinding_core.
+Qed.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : kinding_core E _ _ |- _ =>
+      apply (proj31 (kinding_core_regular_wellformed
+                       (regular_kinding_core H)))
+  end : kinding_core_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : kinding_core _ T _ |- _ =>
+      apply (proj32 (kinding_core_regular_wellformed
+                       (regular_kinding_core H)))
+  end : kinding_core_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : kinding_core _ _ K |- _ =>
+      apply (proj33 (kinding_core_regular_wellformed
+                       (regular_kinding_core H)))
+  end : kinding_core_regular.
+
+Inductive kinding_regular : env -> typ -> knd -> Prop :=
+  | kinding_regular_typ : forall E T,
+      environment E ->
+      type T ->
+      kinding_core_regular E T knd_type ->
+      kinding_regular E T knd_type
+  | kinding_regular_row : forall E T cs,
+      environment E ->
+      type T ->
+      CSet.Nonempty cs ->
+      kinding_core_regular E T (knd_row cs) ->
+      kinding_regular E T (knd_row cs)
+  | kinding_regular_range : forall E T T1 T2 T1' T2',
       environment E ->
       type T1 ->
       type T2 ->
       type T1' ->
       type T2' ->
       type T ->
-      kind K ->
-      kinding_regular E T (knd_range T1 T2) ->
-      subtype E T1 T1' ->
-      subtype E T2' T2 ->
-      K = knd_range T1' T2' ->
-      kinding_regular E T K.
+      kinding_core_regular E T (knd_range T1 T2) ->
+      (* subtype E T1 T1' *)
+      type_equal E T1 (typ_meet T1 T1') (knd_row CSet.universe) ->
+      (* subtype E T2' T2 *)
+      type_equal E T2' (typ_meet T2' T2) (knd_row CSet.universe) ->
+      kinding_regular E T (knd_range T1' T2').
 
 Inductive type_equal_regular : env -> typ -> typ -> knd -> Prop :=
   | type_equal_regular_refl : forall E T K,
@@ -691,28 +774,24 @@ Lemma regular_kinding_type_equal :
        type_equal E T1 T2 K ->type_equal_regular E T1 T2 K).
 Proof.
   apply kinding_type_equal_mutind;
-    intros; subst; auto with kinding_regular type_equal_regular.
-  - assert (kind K) by (eapply kind_from_env; eassumption).
-    auto with kinding_regular.
-  - assert (kind (knd_row cs1)) as Hk
-        by auto with kinding_regular.
+    intros; subst;
+      auto using regular_kinding_core
+        with kinding_regular type_equal_regular kinding_core_regular.
+  - assert (kind (knd_row cs)) as Hk
+        by auto with kinding_core_regular.
     inversion Hk; subst.
-    apply kinding_regular_or with (cs1 := cs1) (cs2 := cs2);
-      auto with kinding_regular.
-  - assert (kind (knd_range T1 T2)) as Hk
-      by auto with kinding_regular.
-    inversion Hk.
-    apply kinding_regular_variant with (T1 := T1) (T2 := T2);
-      auto with kinding_regular.
+    auto using regular_kinding_core
+      with kinding_regular kinding_core_regular.
   - assert (type (typ_meet T1 T1')) as Ht1
         by auto with type_equal_regular.
     inversion Ht1; subst.
     assert (type (typ_meet T2' T2)) as Ht2
         by auto with type_equal_regular.
     inversion Ht2; subst.
-    apply kinding_regular_subsumption
+    apply kinding_regular_range
       with (T1 := T1) (T2 := T2) (T1' := T1') (T2' := T2');
-      unfold subtype; auto with kinding_regular.
+      auto using regular_kinding_core
+        with type_equal_regular kinding_regular kinding_core_regular.
   - apply type_equal_regular_step with (T2 := T2);
       auto using regular_type_equal_symm
         with kinding_regular type_equal_regular.
@@ -729,7 +808,7 @@ Lemma regular_kinding_inv : forall E T K,
     kinding_regular E T K -> kinding E T K.
 Proof.
   introv Hk.
-  induction Hk; eauto using kinding.
+  induction Hk; eauto using regular_kinding_core_inv, kinding.
 Qed.
 
 Hint Extern 1 (environment ?E) =>

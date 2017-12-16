@@ -442,67 +442,65 @@ Inductive type_equal_symm : typ -> typ -> Prop :=
       type_equal_cong T2 T1 ->
       type_equal_symm T2 T1.
 
-(** The kinding relation *)
+(** Core of the kinding judgement *)
 
-Definition is_row_kind (K : knd) :=
-  exists cs, K = knd_row cs.
-
-Inductive kinding : env -> typ -> knd -> Prop :=
-  | kinding_var : forall E X K,
+Inductive kinding_core : env -> typ -> knd -> Prop :=
+  | kinding_core_var : forall E X K,
       environment E ->
       binds X (bind_knd K) E ->
-      kinding E (typ_fvar X) K
-  | kinding_constructor : forall E c T K,
-      kinding E T knd_type ->
-      K = knd_row (CSet.singleton c) ->
-      kinding E (typ_constructor c T) K
-  | kinding_or : forall E T1 cs1 T2 cs2 K,
-      kinding E T1 (knd_row cs1) ->
-      kinding E T2 (knd_row cs2) ->
+      kinding_core E (typ_fvar X) K
+  | kinding_core_constructor : forall E c T,
+      kinding_core E T knd_type ->
+      kinding_core E (typ_constructor c T)
+                   (knd_row (CSet.singleton c))
+  | kinding_core_or : forall E T1 cs1 T2 cs2,
+      kinding_core E T1 (knd_row cs1) ->
+      kinding_core E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
-      K = knd_row (CSet.union cs1 cs2) ->
-      kinding E (typ_or T1 T2) K
-  | kinding_row : forall E T K,
-      kinding E T (knd_row CSet.universe) ->
-      K = knd_range T T ->
-      kinding E (typ_row T) K
-  | kinding_variant : forall E T T1 T2 K,
-      kinding E T (knd_range T1 T2) ->
-      K = knd_type ->
-      kinding E (typ_variant T) K
-  | kinding_arrow : forall E T1 T2 K,
-      kinding E T1 knd_type -> 
-      kinding E T2 knd_type -> 
-      K = knd_type ->
-      kinding E (typ_arrow T1 T2) K
-  | kinding_top : forall E cs K,
+      kinding_core E (typ_or T1 T2) (knd_row (CSet.union cs1 cs2))
+  | kinding_core_row : forall E T,
+      kinding_core E T (knd_row CSet.universe) ->
+      kinding_core E (typ_row T) (knd_range T T)
+  | kinding_core_variant : forall E T T1 T2,
+      kinding_core E T (knd_range T1 T2) ->
+      kinding_core E (typ_variant T) knd_type
+  | kinding_core_arrow : forall E T1 T2,
+      kinding_core E T1 knd_type -> 
+      kinding_core E T2 knd_type -> 
+      kinding_core E (typ_arrow T1 T2) knd_type
+  | kinding_core_top : forall E cs,
       CSet.Nonempty cs ->
       environment E ->
-      K = knd_row cs ->
-      kinding E (typ_top cs) K
-  | kinding_bot : forall E cs K,
+      kinding_core E (typ_top cs) (knd_row cs)
+  | kinding_core_bot : forall E cs,
       CSet.Nonempty cs ->
       environment E ->
-      K = knd_row cs ->
-      kinding E (typ_bot cs) K
-  | kinding_meet : forall E T1 T2 K,
-      kinding E T1 K ->
-      kinding E T2 K ->
-      is_row_kind K ->
-      kinding E (typ_meet T1 T2) K
-  | kinding_join : forall E T1 T2 K,
-      kinding E T1 K ->
-      kinding E T2 K ->
-      is_row_kind K ->
-      kinding E (typ_join T1 T2) K
-  | kinding_subsumption : forall E T T1 T2 T1' T2' K,
-      kinding E T (knd_range T1 T2) ->
+      kinding_core E (typ_bot cs) (knd_row cs)
+  | kinding_core_meet : forall E T1 T2 cs,
+      kinding_core E T1 (knd_row cs) ->
+      kinding_core E T2 (knd_row cs) ->
+      kinding_core E (typ_meet T1 T2) (knd_row cs)
+  | kinding_core_join : forall E T1 T2 cs,
+      kinding_core E T1 (knd_row cs) ->
+      kinding_core E T2 (knd_row cs) ->
+      kinding_core E (typ_join T1 T2) (knd_row cs).
+
+(** The kinding judgement *)
+
+Inductive kinding : env -> typ -> knd -> Prop :=
+  | kinding_typ : forall E T,
+      kinding_core E T knd_type ->
+      kinding E T knd_type
+  | kinding_row : forall E T cs,
+      kinding_core E T (knd_row cs) ->
+      kinding E T (knd_row cs)
+  | kinding_range : forall E T T1 T2 T1' T2',
+      kinding_core E T (knd_range T1 T2) ->
       (* subtype E T1 T1' *)
       type_equal E T1 (typ_meet T1 T1') (knd_row CSet.universe) ->
       (* subtype E T2' T2 *)
       type_equal E T2' (typ_meet T2' T2) (knd_row CSet.universe) ->
-      K = knd_range T1' T2' ->
-      kinding E T K
+      kinding E T (knd_range T1' T2')
       
 with type_equal : env -> typ -> typ -> knd -> Prop :=
   | type_equal_refl : forall E T K,
