@@ -6,146 +6,108 @@
 Set Implicit Arguments.
 Require Import LibLN Cofinite Definitions Substitution Wellformedness.
 
-(* =============================================================== *)
-(** ** Automation for kinding *)
-
-Hint Resolve cons_non_empty_kind : kinding.
-
-Ltac unlessInList X Xs T :=
-  let b := inList X Xs in
-  match b with
-  | true => fail 1
-  | false => constr:T
-  end.
-
-Ltac find_kinding Ts :=
-  match goal with
-  | [ H : kinding _ (typ_constructor ?c ?T) _ |- _ ] =>
-    unlessInList (typ_constructor c T) Ts H
-  | [ H : kinding _ (typ_or ?T1 ?T2) _ |- _ ] =>
-    unlessInList (typ_or T1 T2) Ts H
-  | [ H : kinding _ (typ_variant ?T1 ?T2) _ |- _ ] =>
-    unlessInList (typ_variant T1 T2) Ts H
-  | [ H : kinding _ (typ_arrow ?T1 ?T2) _ |- _ ] =>
-    unlessInList (typ_arrow T1 T2) Ts H
-  | [ H : kinding _ (typ_meet ?T1 ?T2) _ |- _ ] =>
-    unlessInList (typ_meet T1 T2) Ts H
-  | [ H : kinding _ (typ_join ?T1 ?T2) _ |- _ ] =>
-    unlessInList (typ_join T1 T2) Ts H
-  | [ H : kinding _ (typ_top ?cs) _ |- _ ] =>
-    unlessInList (typ_top cs) Ts H
-  | [ H : kinding _ (typ_bot ?cs) _ |- _ ] =>
-    unlessInList (typ_bot cs) Ts H
-  end.
-
-Ltac kinding_type H :=
-  match type of H with
-  | kinding _ ?T _ => constr:T
-  end.
-
-Ltac invert_kinding_rec Ts :=
-  try
-    (let H := find_kinding Ts in
-     let T := kinding_type H in
-     inversion H;
-     invert_kinding_rec (T, Ts)).
-
-Ltac is_simple cs :=
-  match cs with
-  | cons_union _ _ => constr:false
-  | cons_inter _ _ => constr:false
-  | cons_universe => constr:false
-  | cons_diff _ _ => constr:false
-  | _ => constr:true
-  end.
-
-Ltac invert_knd_row_equal :=
-  repeat
-    match goal with
-    | H : knd_row ?cs = knd_row ?cs |- _ =>
-      clear H
-    | H : knd_row ?cs1 = knd_row ?cs2 |- _ =>
-      let var1 := is_simple cs1 in
-      match var1 with
-      | true =>
-        replace cs1 with cs2 in * by
-            (inversion H; reflexivity)
-      | false =>
-        let var2 := is_simple cs2 in
-        match var2 with
-        | true =>
-          replace cs2 with cs1 in * by
-              (inversion H; reflexivity)
-        | false =>
-          idtac
-        end
-      end
-    end.
-
-Ltac unique_kinding :=
-  repeat
-    match goal with
-    | H1 : kinding ?E ?T ?K,
-      H2 : kinding ?E ?T ?K |- _ =>
-      clear H1
-    | H1 : kinding ?E ?T (knd_row ?cs1),
-      H2 : kinding ?E ?T (knd_row ?cs2) |- _ =>
-      replace cs1 with cs2 in *
-        by (apply (kinding_unique_row H2 H1))
-    | H1 : kinding ?E ?T ?K1,
-      H2 : kinding ?E ?T ?K2 |- _ =>
-      replace K1 with K2 in *
-        by apply (kinding_unique H2 H1)
-    end.
-
-Ltac invert_kinding :=
-  invert_kinding_rec tt;
-  subst;
-  invert_knd_row_equal;
-  unique_kinding.
+Hint Constructors
+     kinding_core kinding
+     type_equal_or type_equal_meet type_equal_join type_equal_core
+     type_equal_cong type_equal_symm type_equal
+     valid_kind kinding_scheme_vars kinding_instance kinding_env.
 
 (* *************************************************************** *)
 (** Weakening *)
 
-Hint Resolve binds_weaken : weaken.
+Lemma kinding_core_weakening : forall E F G T K,
+   kinding_core (E & G) T K ->
+   environment (E & F & G) ->
+   kinding_core (E & F & G) T K.
+Proof.
+  introv Hk He.
+  remember (E & G) as EG.
+  induction Hk; subst; auto.
+  - auto using binds_weakening.
+  - eauto.
+Qed.
+
+Lemma kinding_type_equal_weakening :
+  (forall EG T K,
+      kinding EG T K ->
+      (forall E F G,
+          EG = E & G ->
+          environment (E & F & G) ->
+          kinding (E & F & G) T K))
+  /\ (forall EG T1 T2 K,
+      type_equal EG T1 T2 K ->
+      (forall E F G,
+          EG = E & G ->
+          environment (E & F & G) ->
+          type_equal (E & F & G) T1 T2 K)).
+Proof.
+  apply kinding_type_equal_mutind; intros; subst;
+    eauto using kinding_core_weakening.
+Qed.
 
 Lemma kinding_weakening : forall E F G T K,
    kinding (E & G) T K -> 
    environment (E & F & G) ->
    kinding (E & F & G) T K.
 Proof.
-  introv Hk He.
-  inductions Hk; eauto with weaken.
+  destruct kinding_type_equal_weakening.
+  eauto.
 Qed.
 
-Hint Resolve kinding_weakening : weaken.
-
-Lemma kinding_weakening_l : forall E F T K,
-    kinding E T K ->
-    environment (E & F) ->
-    kinding (E & F) T K.
+Lemma type_equal_weakening : forall E F G T1 T2 K,
+   type_equal (E & G) T1 T2 K -> 
+   environment (E & F & G) ->
+   type_equal (E & F & G) T1 T2 K.
 Proof.
-  introv Hk He.
-  rewrite <- (concat_empty_r E) in Hk.
-  rewrite <- (concat_empty_r F) in *.
-  rewrite (concat_assoc E F empty) in *.
-  apply* kinding_weakening.
+  destruct kinding_type_equal_weakening.
+  eauto.
 Qed.
 
-Hint Resolve kinding_weakening_l : weaken.
-
-Lemma kinding_weakening_r : forall E F T K,
-    kinding E T K ->
-    environment (F & E) ->
-    kinding (F & E) T K.
+Lemma subtype_weakening : forall E F G T1 T2,
+    subtype (E & G) T1 T2 ->
+    environment (E & F & G) ->
+    subtype (E & F & G) T1 T2.
 Proof.
-  introv Hk He.
-  rewrite <- (concat_empty_l E) in Hk.
-  rewrite <- (concat_empty_l F) in *.
-  apply* kinding_weakening.
+  unfold subtype.
+  intros.
+  apply type_equal_weakening; assumption.
 Qed.
 
-Hint Resolve kinding_weakening_r : weaken.
+Lemma valid_kind_weakening : forall E F G K,
+    valid_kind (E & G) K ->
+    environment (E & F & G) ->
+    valid_kind (E & F & G) K.
+Proof.
+  introv Hv He.
+  remember (E & G) as EG.
+  induction Hv; subst; auto using subtype_weakening.
+Qed.
+
+Lemma kinding_scheme_vars_weakening : forall E F G M Xs,
+    fresh (dom F) (sch_arity M) Xs ->
+    kinding_scheme_vars (E & G) M Xs ->
+    environment (E & F & G) ->
+    kinding_scheme_vars (E & F & G) M Xs.
+Proof.
+  introv Hf Hk He.
+  apply regular_kinding_scheme_vars in Hk.
+  remember (E & G) as EG.
+  generalize dependent E.
+  generalize dependent G.
+  induction Hk; intros; subst.
+  - auto using kinding_weakening.
+  - destruct Hf.
+    apply kinding_scheme_vars_bind; auto using valid_kind_weakening.
+    rewrite <- concat_assoc.
+    apply IHHk;
+      autorewrite with rew_sch_arity; rewrite? concat_assoc; auto.
+    apply environment_knd_weakening; assumption.
+Qed.
+    
+Lemma kinding_scheme_weakening
+
+Lemma kinding_instance_weakening
+
 
 Lemma kindings_weakening : forall E F G n Ts Ks,
    kindings (E & G) n Ts Ks -> 

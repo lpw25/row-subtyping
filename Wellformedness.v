@@ -274,6 +274,17 @@ Proof.
   induction He; auto. 
 Qed.
 
+Lemma binds_weakening : forall E F G X B,
+    binds X B (E & G) ->
+    environment (E & F & G) ->
+    binds X B (E & F & G).
+Proof.
+  introv Hb He.
+  assert (ok (E & F & G))
+    by auto using ok_from_environment.
+  apply binds_weaken; assumption.
+Qed.
+
 Lemma env_subst_environment : forall X U E,
     type U ->
     environment E -> environment (env_subst X U E).
@@ -333,6 +344,90 @@ Proof.
         - autorewrite with rew_env_dom in *.
           autorewrite with rew_sch_arity.
           auto. }
+Qed.
+
+Lemma environment_knd_inv : forall E X K,
+    environment (E & X ~:: K) ->
+    kind K /\ X # E.
+Proof.
+  introv He.
+  remember (E & X ~:: K) as F eqn:Hf.
+  destruct He.
+  - apply empty_push_inv in Hf; contradiction.
+  - destruct (eq_push_inv Hf) as [? [Hk ?]].
+    inversion Hk.
+    subst.
+    auto.
+  - destruct (eq_push_inv Hf) as [_ [Hk _]].
+    discriminate.
+Qed.
+
+Lemma environment_typ_inv : forall E x M,
+    environment (E & x ~: M) ->
+    scheme M /\ x # E.
+Proof.
+  introv He.
+  remember (E & x ~: M) as F eqn:Hf.
+  destruct He.
+  - apply empty_push_inv in Hf; contradiction.
+  - destruct (eq_push_inv Hf) as [_ [Hm _]].
+    discriminate.
+  - destruct (eq_push_inv Hf) as [? [Hm ?]].
+    inversion Hm.
+    subst.
+    auto.
+Qed.
+
+Lemma environment_knd_weakening : forall E F G X K,
+    X # F ->
+    environment (E & G & X ~:: K) ->
+    environment (E & F & G) ->
+    environment (E & F & G & X ~:: K).
+Proof.
+  introv Hin He1 He2.
+  destruct (environment_knd_inv He1).
+  auto.
+Qed.
+
+Lemma environment_typ_weakening : forall E F G x M,
+    x # F ->
+    environment (E & G & x ~: M) ->
+    environment (E & F & G) ->
+    environment (E & F & G & x ~: M).
+Proof.
+  introv Hin He1 He2.
+  destruct (environment_typ_inv He1).
+  auto.
+Qed.
+
+Lemma environment_kinds_weakening : forall E F G Xs M,
+    fresh (dom F) (sch_arity M) Xs ->
+    environment (E & G & Xs ~::* M) ->
+    environment (E & F & G) ->
+    environment (E & F & G & Xs ~::* M).
+Proof.
+  introv Hf He1 He2.
+  fresh_length Hf as Hl.
+  remember (E & G) as EG.
+  generalize dependent E.
+  generalize dependent G.
+  generalize dependent EG.
+  generalize dependent F.
+  generalize dependent M.
+  induction Xs; introv Hl Hf He1 Heq He2; subst; simpl.
+  - autorewrite with rew_env_concat; auto.
+  - destruct M; simpl in Hl; try discriminate.
+    simpl in He1.
+    autorewrite with rew_env_concat in *.
+    destruct Hf.
+    inversion Hl.
+    rewrite <- concat_assoc with (E := E & F).
+    apply IHXs with (EG := E & G & a ~:: k);
+      autorewrite with rew_sch_arity;
+      autorewrite with rew_env_dom;
+      autorewrite with rew_env_concat; auto.
+    apply environment_knd_weakening;
+      eauto using environment_retract.
 Qed.
 
 Lemma scheme_from_env : forall E x M,
@@ -474,6 +569,8 @@ Proof.
   induction Hte; auto using type_equal_cong.
 Qed.
 
+Hint Resolve regular_type_equal_cong_inv.
+
 Inductive type_equal_symm_regular : typ -> typ -> Prop :=
   | type_equal_symm_regular_l : forall T1 T2,
       type T1 ->
@@ -510,6 +607,8 @@ Proof.
   induction Hte;
     auto using regular_type_equal_cong_inv, type_equal_symm.
 Qed.
+
+Hint Resolve regular_type_equal_symm_inv.
 
 Inductive kinding_core_regular : env -> typ -> knd -> Prop :=
   | kinding_core_regular_var : forall E X K,
@@ -645,6 +744,8 @@ Proof.
   induction Hk; eauto using kinding_core.
 Qed.
 
+Hint Resolve regular_kinding_core_inv.
+
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : kinding_core E _ _ |- _ =>
@@ -687,17 +788,19 @@ Inductive kinding_regular : env -> typ -> knd -> Prop :=
       type T ->
       kinding_core_regular E T (knd_range T1 T2) ->
       (* subtype E T1 T1' *)
-      type_equal E T1 (typ_meet T1 T1') (knd_row CSet.universe) ->
+      type_equal_regular E T1
+        (typ_meet T1 T1') (knd_row CSet.universe) ->
       (* subtype E T2' T2 *)
-      type_equal E T2' (typ_meet T2' T2) (knd_row CSet.universe) ->
-      kinding_regular E T (knd_range T1' T2').
+      type_equal_regular E T2'
+        (typ_meet T2' T2) (knd_row CSet.universe) ->
+      kinding_regular E T (knd_range T1' T2')
 
-Inductive type_equal_regular : env -> typ -> typ -> knd -> Prop :=
+with type_equal_regular : env -> typ -> typ -> knd -> Prop :=
   | type_equal_regular_refl : forall E T K,
       environment E ->
       type T ->
       kind K ->
-      kinding E T K ->
+      kinding_regular E T K ->
       type_equal_regular E T T K
   | type_equal_regular_step : forall E T1 T2 T3 K,
       environment E ->
@@ -705,10 +808,19 @@ Inductive type_equal_regular : env -> typ -> typ -> knd -> Prop :=
       type T2 ->
       type T3 ->
       kind K ->
-      kinding E T1 K ->
+      kinding_regular E T1 K ->
       type_equal_symm_regular T1 T2 ->
       type_equal_regular E T2 T3 K ->
       type_equal_regular E T1 T3 K.
+
+Scheme kinding_type_equal_regular_ind :=
+    Induction for kinding_regular Sort Prop
+  with type_equal_kinding_regular_ind :=
+    Induction for type_equal_regular Sort Prop.
+
+Combined Scheme kinding_type_equal_regular_mutind
+  from kinding_type_equal_regular_ind,
+       type_equal_kinding_regular_ind.
 
 Lemma kinding_regular_wellformed : forall E T K,
     kinding_regular E T K ->
@@ -797,6 +909,17 @@ Proof.
         with kinding_regular type_equal_regular.
 Qed.
 
+Lemma regular_kinding_type_equal_inv :
+  (forall E T K, kinding_regular E T K -> kinding E T K)
+  /\ (forall E T1 T2 K,
+       type_equal_regular E T1 T2 K -> type_equal E T1 T2 K).
+Proof.
+  apply kinding_type_equal_regular_mutind; intros;
+    eauto using
+      regular_kinding_core_inv, regular_type_equal_symm_inv,
+      kinding, type_equal.
+Qed.
+
 Lemma regular_kinding : forall E T K,
     kinding E T K -> kinding_regular E T K.
 Proof.
@@ -807,9 +930,11 @@ Qed.
 Lemma regular_kinding_inv : forall E T K,
     kinding_regular E T K -> kinding E T K.
 Proof.
-  introv Hk.
-  induction Hk; eauto using regular_kinding_core_inv, kinding.
+  destruct regular_kinding_type_equal_inv.
+  assumption.
 Qed.
+
+Hint Resolve regular_kinding_inv.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -839,10 +964,11 @@ Qed.
 Lemma regular_type_equal_inv : forall E T1 T2 K,
     type_equal_regular E T1 T2 K -> type_equal E T1 T2 K.
 Proof.
-  introv Hte.
-  induction Hte;
-    eauto using type_equal, regular_type_equal_symm_inv.
+  destruct regular_kinding_type_equal_inv.
+  assumption.
 Qed.
+
+Hint Resolve regular_type_equal_inv.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -925,6 +1051,8 @@ Proof.
     auto using valid_kind.
 Qed.
 
+Hint Resolve regular_valid_kind_inv.
+
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_kind E _ |- _ =>
@@ -998,6 +1126,8 @@ Proof.
     auto using kinding_scheme_vars.
 Qed.
 
+Hint Resolve regular_kinding_scheme_vars_inv.
+
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : kinding_scheme_vars E _ _ |- _ =>
@@ -1067,6 +1197,8 @@ Proof.
   assumption.
 Qed.
 
+Hint Resolve regular_kinding_scheme_inv.
+
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : kinding_scheme E _ |- _ =>
@@ -1130,6 +1262,8 @@ Proof.
   induction Hi; auto using kinding_instance.
 Qed.
 
+Hint Resolve regular_kinding_instance_inv.
+
 Hint Extern 1 (types (sch_arity ?M) ?Ts) =>
   match goal with
   | H : kinding_instance _ Ts M |- _ =>
@@ -1187,6 +1321,8 @@ Proof.
   introv He.
   induction He; auto using kinding_env.
 Qed.
+
+Hint Resolve regular_kinding_env_inv.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -1502,6 +1638,8 @@ Proof.
   induction Ht; eauto using typing.
 Qed.
 
+Hint Resolve regular_typing_inv.
+
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : typing E _ _ |- _ =>
@@ -1562,6 +1700,8 @@ Proof.
   introv Hv.
   induction Hv; auto using value.
 Qed.
+
+Hint Resolve regular_value_inv.
 
 Hint Extern 1 (term ?t) =>
   match goal with
@@ -1689,6 +1829,8 @@ Proof.
   introv Hr.
   induction Hr; auto using red.
 Qed.
+
+Hint Resolve regular_red_inv.
 
 Hint Extern 1 (term ?t) =>
   match goal with
