@@ -10,7 +10,7 @@ Hint Constructors
      kinding_core kinding
      type_equal_or type_equal_meet type_equal_join type_equal_core
      type_equal_cong type_equal_symm type_equal
-     valid_kind kinding_scheme_vars kinding_instance kinding_env.
+     valid_kind valid_scheme_vars valid_instance valid_env.
 
 (* *************************************************************** *)
 (** Weakening *)
@@ -83,93 +83,257 @@ Proof.
   induction Hv; subst; auto using subtype_weakening.
 Qed.
 
-Lemma kinding_scheme_vars_weakening : forall E F G M Xs,
+Lemma valid_scheme_vars_weakening : forall E F G M Xs,
     fresh (dom F) (sch_arity M) Xs ->
-    kinding_scheme_vars (E & G) M Xs ->
+    valid_scheme_vars (E & G) M Xs ->
     environment (E & F & G) ->
-    kinding_scheme_vars (E & F & G) M Xs.
+    valid_scheme_vars (E & F & G) M Xs.
 Proof.
   introv Hf Hk He.
-  apply regular_kinding_scheme_vars in Hk.
+  apply regular_valid_scheme_vars in Hk.
   remember (E & G) as EG.
   generalize dependent E.
   generalize dependent G.
   induction Hk; intros; subst.
   - auto using kinding_weakening.
   - destruct Hf.
-    apply kinding_scheme_vars_bind; auto using valid_kind_weakening.
+    apply valid_scheme_vars_bind; auto using valid_kind_weakening.
     rewrite <- concat_assoc.
     apply IHHk;
       autorewrite with rew_sch_arity; rewrite? concat_assoc; auto.
     apply environment_knd_weakening; assumption.
 Qed.
     
-Lemma kinding_scheme_weakening
-
-Lemma kinding_instance_weakening
-
-
-Lemma kindings_weakening : forall E F G n Ts Ks,
-   kindings (E & G) n Ts Ks -> 
-   environment (E & F & G) ->
-   kindings (E & F & G) n Ts Ks.
-Proof.
-  introv Hk He.
-  gen_eq EG : (E & G).
-  induction Hk; intro; subst; auto.
-  - apply kindings_nil; auto.
-  - apply kindings_cons; auto with weaken.
-Qed.
-
-Hint Resolve kindings_weakening : weaken.
-
-Lemma kinding_body_weakening : forall E F G n Ks T,
-    kinding_body (E & G) n Ks T ->
-    length Ks = n ->
+Lemma valid_scheme_weakening : forall E F G M,
+    valid_scheme (E & G) M ->
     environment (E & F & G) ->
-    kinding_body (E & F & G) n Ks T.
+    valid_scheme (E & F & G) M.
 Proof.
-  introv Hk He.
-  destruct (kinding_body_regular Hk) as [_ [Hkd _]].
-  unfold kinding_body in *.
-  destruct Hk as [L Hk].
-  exists_fresh Xs Hf.
-  split; auto.
-  apply_ih_bind kinding_weakening.
-  - apply Hk; auto.
-  - apply environment_kinds with n; auto.
-    + rewrite! dom_concat.
-      auto.
-    + destruct Hkd; auto.
-Qed.
-
-Hint Resolve kinding_body_weakening : weaken.
-
-Lemma kinding_scheme_weakening : forall E F G M,
-    kinding_scheme (E & G) M ->
-    environment (E & F & G) ->
-    kinding_scheme (E & F & G) M.
-Proof.
-  unfold kinding_scheme.
-  introv Hk He.
-  apply* kinding_body_weakening.
-Qed.
-
-Hint Resolve kinding_scheme_weakening : weaken.
-
-Lemma kinding_scheme_weakening_l : forall E F M,
-    kinding_scheme E M ->
-    environment (E & F) ->
-    kinding_scheme (E & F) M.
-Proof.
-  introv Hk He.
-  rewrite <- (concat_empty_r E) in Hk.
-  rewrite <- (concat_empty_r F) in *.
-  rewrite (concat_assoc E F empty) in *.
-  apply* kinding_scheme_weakening.
+  introv [L Hk] He.
+  exists (L \u dom F); introv Hf.
+  apply valid_scheme_vars_weakening; auto.
 Qed.  
 
-Hint Resolve kinding_scheme_weakening_l : weaken.
+Lemma valid_instance_weakening : forall E F G Ts M,
+  valid_instance (E & G) Ts M ->
+  environment (E & F & G) ->
+  valid_instance (E & F & G) Ts M.
+Proof.
+  introv Hk He.
+  remember (E & G) as EG.
+  induction Hk; subst.
+  - apply valid_instance_empty.
+  - auto using kinding_weakening.
+Qed.
+
+Lemma valid_env_retract : forall E F,
+    valid_env (E & F) -> valid_env E.
+Proof.
+  introv He.
+  induction F using env_ind;
+    autorewrite with rew_env_concat in *; auto.
+  remember (E & F & x ~ v) as G.
+  destruct He.
+  - destruct (empty_concat_inv HeqG) as [_ Hem].
+    apply empty_single_inv in Hem.
+    contradiction.
+  - destruct (eq_push_inv HeqG) as [_ [_ Hem]].
+    rewrite Hem in He.
+    auto.
+  - destruct (eq_push_inv HeqG) as [_ [_ Hem]].
+    rewrite Hem in He.
+    auto.
+Qed.
+
+Lemma valid_env_kind_inv : forall E X K,
+    valid_env (E & X ~:: K) ->
+    valid_kind E K /\ X # E.
+Proof.
+  introv He.
+  remember (E & X ~:: K) as F eqn:Hf.
+  destruct He.
+  - apply empty_push_inv in Hf; contradiction.
+  - destruct (eq_push_inv Hf) as [? [Hk ?]].
+    inversion Hk.
+    subst.
+    auto.
+  - destruct (eq_push_inv Hf) as [_ [Hk _]].
+    discriminate.
+Qed.
+
+Lemma valid_env_type_inv : forall E x M,
+    valid_env (E & x ~: M) ->
+    valid_scheme E M /\ x # E.
+Proof.
+  introv He.
+  remember (E & x ~: M) as F eqn:Hf.
+  destruct He.
+  - apply empty_push_inv in Hf; contradiction.
+  - destruct (eq_push_inv Hf) as [_ [Hm _]].
+    discriminate.
+  - destruct (eq_push_inv Hf) as [? [Hm ?]].
+    inversion Hm.
+    subst.
+    auto.
+Qed.
+
+Lemma valid_env_kind_weakening : forall E F G X K,
+    X # F ->
+    valid_env (E & G & X ~:: K) ->
+    valid_env (E & F & G) ->
+    valid_env (E & F & G & X ~:: K).
+Proof.
+  introv Hin He1 He2.
+  assert (environment (E & F & G))
+    by auto with valid_env_regular.
+  destruct (valid_env_kind_inv He1).
+  auto using valid_kind_weakening.
+Qed.
+
+Lemma valid_env_type_weakening : forall E F G x M,
+    x # F ->
+    valid_env (E & G & x ~: M) ->
+    valid_env (E & F & G) ->
+    valid_env (E & F & G & x ~: M).
+Proof.
+  introv Hin He1 He2.
+  assert (environment (E & F & G))
+    by auto with valid_env_regular.
+  destruct (valid_env_type_inv He1).
+  auto using valid_scheme_weakening.
+Qed.
+
+Lemma valid_env_kinds_weakening : forall E F G Xs M,
+    fresh (dom F) (sch_arity M) Xs ->
+    valid_env (E & G & Xs ~::* M) ->
+    valid_env (E & F & G) ->
+    valid_env (E & F & G & Xs ~::* M).
+Proof.
+  introv Hf He1 He2.
+  fresh_length Hf as Hl.
+  remember (E & G) as EG.
+  generalize dependent E.
+  generalize dependent G.
+  generalize dependent EG.
+  generalize dependent F.
+  generalize dependent M.
+  induction Xs; introv Hl Hf He1 Heq He2; subst; simpl.
+  - autorewrite with rew_env_concat; auto.
+  - destruct M; simpl in Hl; try discriminate.
+    simpl in He1.
+    autorewrite with rew_env_concat in *.
+    destruct Hf.
+    inversion Hl.
+    rewrite <- concat_assoc with (E := E & F).
+    apply IHXs with (EG := E & G & a ~:: k);
+      autorewrite with rew_sch_arity;
+      autorewrite with rew_env_dom;
+      autorewrite with rew_env_concat; auto.
+    apply valid_env_kind_weakening;
+      eauto using valid_env_retract.
+Qed.
+
+Lemma valid_scheme_from_env : forall E x M,
+    valid_env E ->
+    binds x (bind_typ M) E ->
+    valid_scheme E M.
+Proof.
+  introv He Hb.
+  apply regular_valid_env in He.
+  induction He.
+  - apply binds_empty_inv in Hb; contradiction.
+  - destruct (binds_push_inv Hb) as [[Hx Hbnd]|[Hx Hbnd]];
+      try discriminate.
+    rewrite <- concat_empty_r with (E := E & X ~:: K).
+    apply valid_scheme_weakening; rewrite concat_empty_r; auto.
+  - destruct (binds_push_inv Hb) as [[Hx Hbnd]|[Hx Hbnd]];
+      inversion Hbnd; subst;
+      rewrite <- concat_empty_r with (E := E & x0 ~: M0);
+      apply valid_scheme_weakening; rewrite concat_empty_r; auto.
+Qed.
+
+Lemma valid_kind_from_env : forall E X K,
+    valid_env E ->
+    binds X (bind_knd K) E ->
+    valid_kind E K.
+Proof.
+  introv He Hb.
+  apply regular_valid_env in He.
+  induction He.
+  - apply binds_empty_inv in Hb; contradiction.
+  - destruct (binds_push_inv Hb) as [[Hx Hbnd]|[Hx Hbnd]];
+      inversion Hbnd; subst;
+      rewrite <- concat_empty_r with (E := E & X0 ~:: K0);
+      apply valid_kind_weakening; rewrite concat_empty_r; auto.
+  - destruct (binds_push_inv Hb) as [[Hx Hbnd]|[Hx Hbnd]];
+      try discriminate.
+    rewrite <- concat_empty_r with (E := E & x ~: M).
+    apply valid_kind_weakening; rewrite concat_empty_r; auto.
+Qed.
+
+Lemma subtype_reflexive : forall E T,
+    kinding E T (knd_row CSet.universe) ->
+    subtype E T T.
+Proof.
+  introv Hk.
+  unfold subtype.
+  apply type_equal_step
+    with (T2 := (typ_meet T (typ_join T (typ_bot CSet.universe))));
+    auto.
+  apply type_equal_step with (T2 := (typ_meet T T));
+    inversion Hk; subst; auto with kinding_regular.
+Qed.
+
+Lemma valid_kind_kinding_core : forall E T K,
+    valid_env E ->
+    kinding_core E T K ->
+    valid_kind E K.
+Proof.
+  introv Hv Hk.
+  apply regular_kinding_core in Hk.
+  induction Hk; auto.
+  - eauto using valid_kind_from_env.
+  - auto using subtype_reflexive.
+Qed.
+      
+Lemma kinding_of_kinding_core : forall E T K,
+    valid_env E ->
+    kinding_core E T K ->
+    kinding E T K.
+Proof.
+  introv Hv Hkc.
+  destruct K; auto.
+  eapply kinding_range.
+  - apply Hkc.
+  - apply subtype_reflexive.
+    assert (valid_kind E (knd_range t t0)) as Hvk
+      by eauto using valid_kind_kinding_core.
+    inversion Hvk; subst.
+
+(* *************************************************************** *)
+(** Preserved by type substitution *)
+
+Lemma kinding_core_typ_subst : forall E X T S K J,
+  kinding_core (E & X ~:: J) T K -> 
+  kinding E S J -> 
+  kinding E (typ_subst X S T) K.
+Proof.
+  introv Hkc Hk.
+  apply regular_kinding_core in Hkc.
+  remember (E & X ~:: J) as F.
+  induction Hkc; subst; simpl.
+  - case_var.
+    + assert (binds X (bind_knd K) (E & X ~:: J)) as Hb
+        by assumption.
+      apply binds_push_eq_inv in Hb.
+      inversion Hb; subst.
+      assumption.
+    + assert (binds X0 (bind_knd K) (E & X ~:: J)) as Hb
+        by assumption.
+      apply binds_push_neq_inv in Hb; try assumption.
+      assert (kinding_core E (typ_fvar X0) K)
+        by eauto using environment_retract.
+      
 
 (* *************************************************************** *)
 (** Not affected by type bindings *)

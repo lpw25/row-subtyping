@@ -445,9 +445,9 @@ Proof.
     inversion Hbnd; subst; assumption.
 Qed.
 
-Lemma kind_from_env : forall E x K,
+Lemma kind_from_env : forall E X K,
     environment E ->
-    binds x (bind_knd K) E ->
+    binds X (bind_knd K) E ->
     kind K.
 Proof.
   introv He Hb.
@@ -463,247 +463,936 @@ Qed.
 (* =============================================================== *)
 (** * Regularity of judgments *)
 
-Inductive type_equal_cong_regular : typ -> typ -> Prop :=
-  | type_equal_cong_regular_core : forall T1 T1',
-      type T1 ->
-      type T1' ->
-      type_equal_core T1 T1' ->
-      type_equal_cong_regular T1 T1'
-  | type_equal_cong_regular_constructor : forall c T1 T1',
-      type T1 ->
-      type T1' ->
-      type_equal_cong_regular T1 T1' ->
-      type_equal_cong_regular
-        (typ_constructor c T1) (typ_constructor c T1')
-  | type_equal_cong_regular_or_l : forall T1 T1' T2,
-      type T1 ->
-      type T1' ->
-      type T2 ->
-      type_equal_cong_regular T1 T1' ->
-      type_equal_cong_regular (typ_or T1 T2) (typ_or T1' T2)
-  | type_equal_cong_regular_or_r : forall T1 T2 T2',
+Inductive valid_kind_regular : env -> knd -> Prop :=
+  | valid_kind_regular_type : forall E,
+      environment E ->
+      valid_env_regular E ->
+      valid_kind_regular E knd_type
+  | valid_kind_regular_row :  forall E cs,
+      environment E ->
+      valid_env_regular E ->
+      CSet.Nonempty cs ->
+      valid_kind_regular E (knd_row cs)
+  | valid_kind_regular_range : forall E T1 T2,
+      environment E ->
       type T1 ->
       type T2 ->
-      type T2' ->
-      type_equal_cong_regular T2 T2' ->
-      type_equal_cong_regular (typ_or T1 T2) (typ_or T1 T2')
-  | type_equal_cong_regular_row : forall T1 T1',
-      type T1 ->
-      type T1' ->
-      type_equal_cong_regular T1 T1' ->
-      type_equal_cong_regular (typ_row T1) (typ_row T1')
-  | type_equal_cong_regular_variant : forall T1 T1',
-      type T1 ->
-      type T1' ->
-      type_equal_cong_regular T1 T1' ->
-      type_equal_cong_regular (typ_variant T1) (typ_variant T1')
-  | type_equal_cong_regular_arrow_l : forall T1 T1' T2,
-      type T1 ->
-      type T1' ->
-      type T2 ->
-      type_equal_cong_regular T1 T1' ->
-      type_equal_cong_regular (typ_arrow T1 T2) (typ_arrow T1' T2)
-  | type_equal_cong_regular_arrow_r : forall T1 T2 T2',
-      type T1 ->
-      type T2 ->
-      type T2' ->
-      type_equal_cong_regular T2 T2' ->
-      type_equal_cong_regular (typ_arrow T1 T2) (typ_arrow T1 T2')
-  | type_equal_cong_regular_meet_l : forall T1 T1' T2,
-      type T1 ->
-      type T1' ->
-      type T2 ->
-      type_equal_cong_regular T1 T1' ->
-      type_equal_cong_regular (typ_meet T1 T2) (typ_meet T1' T2)
-  | type_equal_cong_regular_meet_r : forall T1 T2 T2',
-      type T1 ->
-      type T2 ->
-      type T2' ->
-      type_equal_cong_regular T2 T2' -> 
-      type_equal_cong_regular (typ_meet T1 T2) (typ_meet T1 T2')
-  | type_equal_cong_regular_join_l : forall T1 T1' T2,
-      type T1 ->
-      type T1' ->
-      type T2 ->
-      type_equal_cong_regular T1 T1' ->
-      type_equal_cong_regular (typ_join T1 T2) (typ_join T1' T2)
-  | type_equal_cong_regular_join_r : forall T1 T2 T2',
-      type T1 ->
-      type T2 ->
-      type T2' ->
-      type_equal_cong_regular T2 T2' ->
-      type_equal_cong_regular (typ_join T1 T2) (typ_join T1 T2').
+      subtype_regular E T2 T1 CSet.universe ->
+      valid_kind_regular E (knd_range T1 T2)
 
-Lemma type_equal_cong_regular_wellformed : forall T1 T2,
-    type_equal_cong_regular T1 T2 ->
-    type T1 /\ type T2.
-Proof.
-  introv Hte.
-  destruct Hte; auto.
-Qed.
-
-Hint Constructors type_equal_cong_regular : type_equal_cong_regular.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H : type_equal_cong_regular T _ |- _ =>
-      apply (proj1 (type_equal_cong_regular_wellformed H))
-  | H : type_equal_cong_regular _ T |- _ =>
-      apply (proj2 (type_equal_cong_regular_wellformed H))
-  end : type_equal_cong_regular.
-
-Lemma regular_type_equal_cong : forall T1 T2,
-    type T1 -> type T2 ->
-    type_equal_cong T1 T2 -> type_equal_cong_regular T1 T2.
-Proof.
-  introv Ht1 Ht2 Hte.
-  induction Hte;
-    inversion Ht1; inversion Ht2; subst;
-      auto with type_equal_cong_regular.
-Qed.
-
-Lemma regular_type_equal_cong_inv : forall T1 T2,
-    type_equal_cong_regular T1 T2 -> type_equal_cong T1 T2.
-Proof.
-  introv Hte.
-  induction Hte; auto using type_equal_cong.
-Qed.
-
-Hint Resolve regular_type_equal_cong_inv.
-
-Inductive type_equal_symm_regular : typ -> typ -> Prop :=
-  | type_equal_symm_regular_l : forall T1 T2,
-      type T1 ->
-      type T2 ->
-      type_equal_cong_regular T1 T2 ->
-      type_equal_symm_regular T2 T1
-  | type_equal_symm_regular_r : forall T1 T2,
-      type T1 ->
-      type T2 ->
-      type_equal_cong_regular T2 T1 ->
-      type_equal_symm_regular T2 T1.
-
-Lemma type_equal_symm_regular_wellformed : forall T1 T2,
-    type_equal_symm_regular T1 T2 ->
-    type T1 /\ type T2.
-Proof.
-  introv Hte.
-  destruct Hte; auto.
-Qed.
-
-Lemma regular_type_equal_symm : forall T1 T2,
-    type T1 -> type T2 ->
-    type_equal_symm T1 T2 -> type_equal_symm_regular T1 T2.
-Proof.
-  introv Ht1 Ht2 Hte.
-  induction Hte;
-      auto using regular_type_equal_cong, type_equal_symm_regular.
-Qed.
-
-Lemma regular_type_equal_symm_inv : forall T1 T2,
-    type_equal_symm_regular T1 T2 -> type_equal_symm T1 T2.
-Proof.
-  introv Hte.
-  induction Hte;
-    auto using regular_type_equal_cong_inv, type_equal_symm.
-Qed.
-
-Hint Resolve regular_type_equal_symm_inv.
-
-Inductive kinding_core_regular : env -> typ -> knd -> Prop :=
-  | kinding_core_regular_var : forall E X K,
+with kinding_regular : env -> typ -> knd -> Prop :=
+  | kinding_regular_var : forall E X K,
       environment E ->
       kind K ->
+      valid_env_regular E ->
       binds X (bind_knd K) E ->
-      kinding_core_regular E (typ_fvar X) K
-  | kinding_core_regular_constructor : forall E c T,
+      kinding_regular E (typ_fvar X) K
+  | kinding_regular_constructor : forall E c T cs,
       environment E ->
       type T ->
-      kinding_core_regular E T knd_type ->
-      kinding_core_regular E (typ_constructor c T)
-                   (knd_row (CSet.singleton c))
-  | kinding_core_regular_or : forall E T1 cs1 T2 cs2,
+      kinding_regular E T knd_type ->
+      cs = CSet.singleton c ->
+      kinding_regular E (typ_constructor c T) (knd_row cs)
+  | kinding_regular_or : forall E T1 T2 cs1 cs2 cs12,
       environment E ->
       type T1 ->
       type T2 ->
       CSet.Nonempty cs1 ->
       CSet.Nonempty cs2 ->
-      kinding_core_regular E T1 (knd_row cs1) ->
-      kinding_core_regular E T2 (knd_row cs2) ->
+      kinding_regular E T1 (knd_row cs1) ->
+      kinding_regular E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
-      kinding_core_regular E (typ_or T1 T2)
-             (knd_row (CSet.union cs1 cs2))
-  | kinding_core_regular_row : forall E T,
+      cs12 = CSet.union cs1 cs2 ->
+      kinding_regular E (typ_or T1 T2) (knd_row cs12)
+  | kinding_regular_proj : forall E T cs cs',
       environment E ->
       type T ->
-      kinding_core_regular E T (knd_row CSet.universe) ->
-      kinding_core_regular E (typ_row T) (knd_range T T)
-  | kinding_core_regular_variant : forall E T T1 T2,
+      CSet.Nonempty cs ->
+      kinding_regular E T (knd_row cs) ->
+      CSet.Subset cs' cs ->
+      CSet.Nonempty cs' ->
+      kinding_regular E (typ_proj T cs') (knd_row cs')
+  | kinding_regular_row : forall E T,
+      environment E ->
+      type T ->
+      kinding_regular E T (knd_row CSet.universe) ->
+      kinding_regular E (typ_row T) (knd_range T T)
+  | kinding_regular_variant : forall E T T1 T2,
       environment E ->
       type T ->
       type T1 ->
       type T2 ->
-      kinding_core_regular E T (knd_range T1 T2) ->
-      kinding_core_regular E (typ_variant T) knd_type
-  | kinding_core_regular_arrow : forall E T1 T2,
+      kinding_regular E T (knd_range T1 T2) ->
+      kinding_regular E (typ_variant T) knd_type
+  | kinding_regular_arrow : forall E T1 T2,
       environment E ->
       type T1 ->
       type T2 ->
-      kinding_core_regular E T1 knd_type -> 
-      kinding_core_regular E T2 knd_type -> 
-      kinding_core_regular E (typ_arrow T1 T2) knd_type
-  | kinding_core_regular_top : forall E cs,
-      CSet.Nonempty cs ->
+      kinding_regular E T1 knd_type -> 
+      kinding_regular E T2 knd_type -> 
+      kinding_regular E (typ_arrow T1 T2) knd_type
+  | kinding_regular_top : forall E cs,
       environment E ->
-      kinding_core_regular E (typ_top cs) (knd_row cs)
-  | kinding_core_regular_bot : forall E cs,
+      valid_env_regular E ->
       CSet.Nonempty cs ->
+      kinding_regular E (typ_top cs) (knd_row cs)
+  | kinding_regular_bot : forall E cs,
       environment E ->
-      kinding_core_regular E (typ_bot cs) (knd_row cs)
-  | kinding_core_regular_meet : forall E T1 T2 cs,
-      environment E ->
-      type T1 ->
-      type T2 ->
+      valid_env_regular E ->
       CSet.Nonempty cs ->
-      kinding_core_regular E T1 (knd_row cs) ->
-      kinding_core_regular E T2 (knd_row cs) ->
-      kinding_core_regular E (typ_meet T1 T2) (knd_row cs)
-  | kinding_core_regular_join : forall E T1 T2 cs,
+      kinding_regular E (typ_bot cs) (knd_row cs)
+  | kinding_regular_meet : forall E T1 T2 cs,
       environment E ->
       type T1 ->
       type T2 ->
       CSet.Nonempty cs ->
-      kinding_core_regular E T1 (knd_row cs) ->
-      kinding_core_regular E T2 (knd_row cs) ->
-      kinding_core_regular E (typ_join T1 T2) (knd_row cs).
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      kinding_regular E (typ_meet T1 T2) (knd_row cs)
+  | kinding_regular_join : forall E T1 T2 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      kinding_regular E (typ_join T1 T2) (knd_row cs)
+  | kinding_regular_range_subsumption : forall E T T1 T2 T1' T2',
+      environment E ->
+      type T ->
+      type T1 ->
+      type T2 ->
+      type T1' ->
+      type T2' ->
+      kinding_regular E T (knd_range T1 T2) ->
+      subtype_regular E T1 T1' CSet.universe ->
+      subtype_regular E T2' T2 CSet.universe ->
+      kinding_regular E T (knd_range T1' T2')
 
-Lemma kinding_core_regular_wellformed : forall E T K,
-    kinding_core_regular E T K ->
+with valid_scheme_vars_regular : env -> sch -> list var -> Prop :=
+  | valid_scheme_vars_regular_empty : forall E T,
+      environment E ->
+      type T ->
+      kinding_regular E T knd_type ->
+      valid_scheme_vars_regular E (sch_empty T) nil
+  | valid_scheme_vars_regular_bind : forall X Xs E K M,
+      environment E ->
+      environment (E & X ~:: K) ->
+      kind K ->
+      scheme_vars (M ^ X) Xs ->
+      scheme_vars (sch_bind K M) (X :: Xs) ->
+      valid_kind_regular E K ->
+      valid_scheme_vars_regular (E & X ~:: K) (M ^ X) Xs ->
+      valid_scheme_vars_regular E (sch_bind K M) (X :: Xs)
+
+with valid_scheme_regular : env -> sch -> Prop :=
+  | valid_scheme_regular_c : forall E M L,
+      environment E ->
+      scheme M ->
+      (forall Xs,
+          fresh L (sch_arity M) Xs ->
+          valid_scheme_vars_regular E M Xs) ->
+      valid_scheme_regular E M
+
+with valid_env_regular : env -> Prop :=
+  | valid_env_regular_empty :
+      valid_env_regular empty
+  | valid_env_regular_kind : forall E X K,
+      environment E ->
+      environment (E & X ~:: K) ->
+      kind K ->
+      valid_env_regular E ->
+      valid_kind_regular E K ->
+      X # E ->
+      valid_env_regular (E & X ~:: K)
+  | valid_env_regular_type : forall E x M,
+      environment E ->
+      environment (E & x ~: M) ->
+      scheme M ->
+      valid_env_regular E ->
+      valid_scheme_regular E M ->
+      x # E ->
+      valid_env_regular (E & x ~: M)
+
+with type_equal_core_regular : env -> typ -> typ -> knd -> Prop :=
+  | type_equal_core_regular_or_commutative :
+      forall E T1 T2 cs1 cs2 cs12,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_regular E T1 (knd_row cs1) ->
+      kinding_regular E T2 (knd_row cs2) ->
+      CSet.Disjoint cs1 cs2 ->
+      cs12 = CSet.union cs1 cs2 ->
+      type_equal_core_regular E
+        (typ_or T1 T2) (typ_or T2 T1) (knd_row cs12)
+  | type_equal_core_regular_or_associative :
+      forall E T1 cs1 T2 cs2 T3 cs3 cs123,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      CSet.Nonempty cs3 ->
+      kinding_regular E T1 (knd_row cs1) ->
+      kinding_regular E T2 (knd_row cs2) ->
+      kinding_regular E T3 (knd_row cs3) ->
+      CSet.Disjoint cs1 cs2 ->
+      CSet.Disjoint cs1 cs3 ->
+      CSet.Disjoint cs2 cs3 ->
+      cs123 = CSet.union cs1 (CSet.union cs2 cs3) ->
+      type_equal_core_regular E
+        (typ_or T1 (typ_or T2 T3)) (typ_or (typ_or T1 T2) T3)
+        (knd_row cs123)
+  | type_equal_core_regular_or_bot : forall E cs1 cs2 cs12,
+      environment E ->
+      valid_env_regular E ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      CSet.Disjoint cs1 cs2 ->
+      cs12 = CSet.union cs1 cs2 ->
+      type_equal_core_regular E
+        (typ_or (typ_bot cs1) (typ_bot cs2)) (typ_bot cs12)
+        (knd_row cs12)
+  | type_equal_core_regular_or_top : forall E cs1 cs2 cs12,
+      environment E ->
+      valid_env_regular E ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      CSet.Disjoint cs1 cs2 ->
+      cs12 = CSet.union cs1 cs2 ->
+      type_equal_core_regular E
+        (typ_or (typ_top cs1) (typ_top cs2)) (typ_top cs12)
+        (knd_row cs12)
+  | type_equal_core_regular_or_meet_distribution :
+      forall E T1 T2 T3 T4 cs1 cs2 cs12,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      type T4 ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_regular E T1 (knd_row cs1) ->
+      kinding_regular E T2 (knd_row cs2) ->
+      kinding_regular E T3 (knd_row cs1) ->
+      kinding_regular E T4 (knd_row cs2) ->
+      CSet.Disjoint cs1 cs2 ->
+      cs12 = CSet.union cs1 cs2 ->
+      type_equal_core_regular E
+        (typ_or (typ_meet T1 T3) (typ_meet T2 T4))
+        (typ_meet (typ_or T1 T2) (typ_or T3 T4))
+        (knd_row cs12)
+  | type_equal_core_regular_or_join_distribution :
+      forall E T1 T2 T3 T4 cs1 cs2 cs12,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      type T4 ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_regular E T1 (knd_row cs1) ->
+      kinding_regular E T2 (knd_row cs2) ->
+      kinding_regular E T3 (knd_row cs1) ->
+      kinding_regular E T4 (knd_row cs2) ->
+      CSet.Disjoint cs1 cs2 ->
+      cs12 = CSet.union cs1 cs2 ->
+      type_equal_core_regular E
+        (typ_or (typ_join T1 T3) (typ_join T2 T4))
+        (typ_join (typ_or T1 T2) (typ_or T3 T4))
+        (knd_row cs12)
+  | type_equal_core_regular_or_proj : forall E T cs1 cs2 cs3 cs23,
+      environment E ->
+      type T ->
+      CSet.Nonempty cs1 ->
+      kinding_regular E T (knd_row cs1) ->
+      CSet.Disjoint cs2 cs3 ->
+      CSet.Subset cs2 cs1 ->
+      CSet.Nonempty cs2 ->
+      CSet.Subset cs3 cs1 ->
+      CSet.Nonempty cs3 ->
+      cs23 = CSet.union cs2 cs3 ->
+      type_equal_core_regular E
+        (typ_or (typ_proj T cs2) (typ_proj T cs3))
+        (typ_proj T cs23)
+        (knd_row cs23)
+  | type_equal_core_regular_proj_id : forall E T cs,
+      environment E ->
+      type T ->
+      CSet.Nonempty cs ->
+      kinding_regular E T (knd_row cs) ->
+      type_equal_core_regular E (typ_proj T cs) T (knd_row cs)
+  | type_equal_core_regular_proj_or_l : forall E T1 T2 cs1 cs1' cs2,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_regular E T1 (knd_row cs1) ->
+      kinding_regular E T2 (knd_row cs2) ->
+      CSet.Disjoint cs1 cs2 ->
+      CSet.Subset cs1' cs1 ->
+      CSet.Nonempty cs1' ->
+      type_equal_core_regular E
+        (typ_proj (typ_or T1 T2) cs1') (typ_proj T1 cs1')
+        (knd_row cs1')
+  | type_equal_core_regular_proj_or_r : forall E T1 T2 cs1 cs2 cs2',
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_regular E T1 (knd_row cs1) ->
+      kinding_regular E T2 (knd_row cs2) ->
+      CSet.Disjoint cs1 cs2 ->
+      CSet.Subset cs2' cs2 ->
+      CSet.Nonempty cs2' ->
+      type_equal_core_regular E
+        (typ_proj (typ_or T1 T2) cs2') (typ_proj T2 cs2')
+        (knd_row cs2')
+  | type_equal_core_regular_proj_or_both :
+      forall E T1 T2 cs1 cs2 cs1' cs2' cs12',
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_regular E T1 (knd_row cs1) ->
+      kinding_regular E T2 (knd_row cs2) ->
+      CSet.Disjoint cs1 cs2 ->
+      CSet.Subset cs1' cs1 ->
+      CSet.Nonempty cs1' ->
+      CSet.Subset cs2' cs2 ->
+      CSet.Nonempty cs2' ->
+      cs12' = CSet.union cs1' cs2' ->
+      type_equal_core_regular E
+        (typ_proj (typ_or T1 T2) cs12')
+        (typ_or (typ_proj T1 cs1') (typ_proj T2 cs2'))
+        (knd_row cs12')
+  | type_equal_core_regular_proj_meet : forall E T1 T2 cs cs',
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      CSet.Subset cs' cs ->
+      CSet.Nonempty cs' ->
+      type_equal_core_regular E
+        (typ_proj (typ_meet T1 T2) cs')
+        (typ_meet (typ_proj T1 cs') (typ_proj T2 cs'))
+        (knd_row cs')
+  | type_equal_core_regular_proj_join : forall E T1 T2 cs cs',
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      CSet.Subset cs' cs ->
+      CSet.Nonempty cs' ->
+      type_equal_core_regular E
+        (typ_proj (typ_join T1 T2) cs')
+        (typ_join (typ_proj T1 cs') (typ_proj T2 cs'))
+        (knd_row cs')
+  | type_equal_core_regular_meet_commutative : forall E T1 T2 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_meet T1 T2) (typ_meet T2 T1) (knd_row cs)
+  | type_equal_core_regular_meet_associative : forall E T1 T2 T3 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      kinding_regular E T3 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_meet T1 (typ_meet T2 T3))
+        (typ_meet (typ_meet T1 T2) T3)
+        (knd_row cs)
+  | type_equal_core_regular_meet_identity : forall E T1 cs,
+      environment E ->
+      type T1 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_meet T1 (typ_top cs)) T1 (knd_row cs)
+  | type_equal_core_regular_meet_absorption : forall E T1 T2 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_meet T1 (typ_join T1 T2)) T1 (knd_row cs)
+  | type_equal_core_regular_meet_distribution : forall E T1 T2 T3 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      kinding_regular E T3 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_meet T1 (typ_join T2 T3))
+        (typ_join (typ_meet T1 T2) (typ_meet T1 T3))
+        (knd_row cs)
+  | type_equal_core_regular_join_commutative : forall E T1 T2 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_join T1 T2) (typ_join T2 T1) (knd_row cs)
+  | type_equal_core_regular_join_associative : forall E T1 T2 T3 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      kinding_regular E T3 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_join T1 (typ_join T2 T3))
+        (typ_join (typ_join T1 T2) T3)
+        (knd_row cs)
+  | type_equal_core_regular_join_identity : forall E T1 cs,
+      environment E ->
+      type T1 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_join T1 (typ_bot cs)) T1 (knd_row cs)
+  | type_equal_core_regular_join_absorption : forall E T1 T2 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_join T1 (typ_meet T1 T2)) T1 (knd_row cs)
+  | type_equal_core_regular_join_distribution : forall E T1 T2 T3 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      kinding_regular E T2 (knd_row cs) ->
+      kinding_regular E T3 (knd_row cs) ->
+      type_equal_core_regular E
+        (typ_join T1 (typ_meet T2 T3))
+        (typ_meet (typ_join T1 T2) (typ_join T1 T3))
+        (knd_row cs)
+
+with type_equal_cong_regular : env -> typ -> typ -> knd -> Prop :=
+  | type_equal_cong_regular_core : forall E T1 T1' K,
+      environment E ->
+      type T1 ->
+      type T1' ->
+      kind K ->
+      type_equal_core_regular E T1 T1' K ->
+      type_equal_cong_regular E T1 T1' K
+  | type_equal_cong_regular_constructor : forall E c T1 T1' cs,
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type_equal_cong_regular E T1 T1' knd_type ->
+      cs = CSet.singleton c ->
+      type_equal_cong_regular E
+        (typ_constructor c T1) (typ_constructor c T1')
+        (knd_row cs)
+  | type_equal_cong_regular_or_l : forall E T1 T1' T2 cs1 cs2 cs12,
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type T2 ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_regular E T2 (knd_row cs2) ->
+      CSet.Disjoint cs1 cs2 ->
+      cs12 = CSet.union cs1 cs2 ->
+      type_equal_cong_regular E T1 T1' (knd_row cs1) ->
+      type_equal_cong_regular E
+        (typ_or T1 T2) (typ_or T1' T2) (knd_row cs12)
+  | type_equal_cong_regular_or_r : forall E T1 T2 T2' cs1 cs2 cs12,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T2' ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding_regular E T1 (knd_row cs1) ->
+      CSet.Disjoint cs1 cs2 ->
+      cs12 = CSet.union cs1 cs2 ->
+      type_equal_cong_regular E T2 T2' (knd_row cs2) ->
+      type_equal_cong_regular E
+        (typ_or T1 T2) (typ_or T1 T2') (knd_row cs12)
+  | type_equal_cong_regular_row : forall E T1 T1',
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type_equal_cong_regular E T1 T1' (knd_row CSet.universe) ->
+      type_equal_cong_regular E
+        (typ_row T1) (typ_row T1') (knd_range T1 T1)
+  | type_equal_cong_regular_variant : forall E T1 T1' T2 T3,
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type T2 ->
+      type T3 ->
+      type_equal_cong_regular E T1 T1' (knd_range T2 T3) ->
+      type_equal_cong_regular E
+        (typ_variant T1) (typ_variant T1') (knd_range T2 T3)
+  | type_equal_cong_regular_arrow_l : forall E T1 T1' T2,
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type T2 ->
+      kinding_regular E T2 knd_type ->
+      type_equal_cong_regular E T1 T1' knd_type ->
+      type_equal_cong_regular E
+        (typ_arrow T1 T2) (typ_arrow T1' T2) knd_type
+  | type_equal_cong_regular_arrow_r : forall E T1 T2 T2',
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T2' ->
+      kinding_regular E T1 knd_type ->
+      type_equal_cong_regular E T2 T2' knd_type ->
+      type_equal_cong_regular E
+        (typ_arrow T1 T2) (typ_arrow T1 T2') knd_type
+  | type_equal_cong_regular_meet_l : forall E T1 T1' T2 cs,
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T2 (knd_row cs) ->
+      type_equal_cong_regular E T1 T1' (knd_row cs) ->
+      type_equal_cong_regular E
+        (typ_meet T1 T2) (typ_meet T1' T2) (knd_row cs)
+  | type_equal_cong_regular_meet_r : forall E T1 T2 T2' cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T2' ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      type_equal_cong_regular E T2 T2' (knd_row cs) -> 
+      type_equal_cong_regular E
+        (typ_meet T1 T2) (typ_meet T1 T2') (knd_row cs)
+  | type_equal_cong_regular_join_l : forall E T1 T1' T2 cs,
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      kinding_regular E T2 (knd_row cs) ->
+      type_equal_cong_regular E T1 T1' (knd_row cs) ->
+      type_equal_cong_regular E
+        (typ_join T1 T2) (typ_join T1' T2) (knd_row cs)
+  | type_equal_cong_regular_join_r : forall E T1 T2 T2' cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T2' ->
+      CSet.Nonempty cs ->
+      kinding_regular E T1 (knd_row cs) ->
+      type_equal_cong_regular E T2 T2' (knd_row cs) ->
+      type_equal_cong_regular E
+        (typ_join T1 T2) (typ_join T1 T2') (knd_row cs)
+  | type_equal_cong_regular_range_subsumption :
+      forall E T1 T2 T3 T4 T3' T4',
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      type T3' ->
+      type T4 ->
+      type T4' ->
+      type_equal_cong_regular E T1 T2 (knd_range T3 T4) ->
+      subtype_regular E T3 T3' CSet.universe ->
+      subtype_regular E T4' T4 CSet.universe ->
+      type_equal_cong_regular E T1 T2 (knd_range T3' T4')
+
+with type_equal_symm_regular : env -> typ -> typ -> knd -> Prop :=
+  | type_equal_symm_regular_l : forall E T1 T2 K,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      kind K ->
+      type_equal_cong_regular E T1 T2 K ->
+      type_equal_symm_regular E T1 T2 K
+  | type_equal_symm_regular_r : forall E T1 T2 K,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      kind K ->
+      type_equal_cong_regular E T1 T2 K ->
+      type_equal_symm_regular E T2 T1 K
+
+with type_equal_regular : env -> typ -> typ -> knd -> Prop :=
+  | type_equal_regular_refl : forall E T K,
+      environment E ->
+      type T ->
+      kind K ->
+      kinding_regular E T K ->
+      type_equal_regular E T T K
+  | type_equal_regular_step : forall E T1 T2 T3 K,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T3 ->
+      kind K ->
+      type_equal_symm_regular E T1 T2 K ->
+      type_equal_regular E T2 T3 K ->
+      type_equal_regular E T1 T3 K
+
+with subtype_regular : env -> typ -> typ -> cset -> Prop :=
+  | subtype_regular_c : forall E T1 T2 cs,
+      environment E ->
+      type T1 ->
+      type T2 ->
+      CSet.Nonempty cs ->
+      type_equal_regular E T1 (typ_meet T1 T2) (knd_row cs) ->
+      subtype_regular E T1 T2 cs.
+
+Scheme valid_kind_regular_mutind :=
+         Induction for valid_kind_regular Sort Prop
+  with kinding_regular_mutind :=
+         Induction for kinding_regular Sort Prop
+  with valid_scheme_vars_regular_mutind :=
+         Induction for valid_scheme_vars_regular Sort Prop
+  with valid_scheme_regular_mutind :=
+         Induction for valid_scheme_regular Sort Prop
+  with valid_env_regular_mutind :=
+         Induction for valid_env_regular Sort Prop
+  with type_equal_core_regular_mutind :=
+         Induction for type_equal_core_regular Sort Prop
+  with type_equal_cong_regular_mutind :=
+         Induction for type_equal_cong_regular Sort Prop
+  with type_equal_symm_regular_mutind :=
+         Induction for type_equal_symm_regular Sort Prop
+  with type_equal_regular_mutind :=
+         Induction for type_equal_regular Sort Prop
+  with subtype_regular_mutind :=
+         Induction for subtype_regular Sort Prop.
+
+Combined Scheme combined_kinding_regular_mutind
+  from valid_kind_regular_mutind, kinding_regular_mutind,
+       valid_scheme_vars_regular_mutind, valid_scheme_regular_mutind,
+       valid_env_regular_mutind, type_equal_core_regular_mutind,
+       type_equal_cong_regular_mutind, type_equal_symm_regular_mutind,
+       type_equal_regular_mutind, subtype_regular_mutind.
+
+Lemma valid_kind_regular_wellformed : forall E K,
+    valid_kind_regular E K ->
+    environment E /\ kind K.
+Proof.
+  introv Hv.
+  destruct Hv; auto.
+Qed.
+
+Hint Constructors valid_kind_regular : valid_kind_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_kind_regular E _ |- _ =>
+      apply (proj1 (valid_kind_regular_wellformed H))
+  end : valid_kind_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : valid_kind_regular _ K |- _ =>
+      apply (proj2 (valid_kind_regular_wellformed H))
+  end : valid_kind_regular.
+
+Lemma kinding_regular_wellformed : forall E T K,
+    kinding_regular E T K ->
     environment E /\ type T /\ kind K.
 Proof.
   introv Hk.
   destruct Hk; auto.
 Qed.
 
-Hint Constructors kinding_core_regular : kinding_core_regular.
+Hint Constructors kinding_regular : kinding_regular.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
-  | H : kinding_core_regular E _ _ |- _ =>
-      apply (proj31 (kinding_core_regular_wellformed H))
-  end : kinding_core_regular.
+  | H : kinding_regular E _ _ |- _ =>
+      apply (proj31 (kinding_regular_wellformed H))
+  end : kinding_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
-  | H : kinding_core_regular _ T _ |- _ =>
-      apply (proj32 (kinding_core_regular_wellformed H))
-  end : kinding_core_regular.
+  | H : kinding_regular _ T _ |- _ =>
+      apply (proj32 (kinding_regular_wellformed H))
+  end : kinding_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
-  | H : kinding_core_regular _ _ K |- _ =>
-      apply (proj33 (kinding_core_regular_wellformed H))
-  end : kinding_core_regular.
+  | H : kinding_regular _ _ K |- _ =>
+      apply (proj33 (kinding_regular_wellformed H))
+  end : kinding_regular.
+
+Lemma valid_scheme_vars_regular_wellformed : forall E M Xs,
+    valid_scheme_vars_regular E M Xs ->
+    environment E /\ scheme_vars M Xs.
+Proof.
+  introv Hs.
+  destruct Hs; auto.
+Qed.
+
+Hint Constructors valid_scheme_vars_regular
+  : valid_scheme_vars_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_scheme_vars_regular E _ _ |- _ =>
+      apply (proj1 (valid_scheme_vars_regular_wellformed H))
+  end : valid_scheme_vars_regular.
+
+Hint Extern 1 (scheme_vars ?M ?Xs) =>
+  match goal with
+  | H : valid_scheme_vars_regular _ M Xs |- _ =>
+      apply (proj2 (valid_scheme_vars_regular_wellformed H))
+  end : valid_scheme_vars_regular.
+
+Lemma valid_scheme_regular_wellformed : forall E M,
+    valid_scheme_regular E M ->
+    environment E /\ scheme M.
+Proof.
+  introv Hs.
+  destruct Hs; auto.
+Qed.
+
+Hint Constructors valid_scheme_regular : valid_scheme_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_scheme_regular E _ |- _ =>
+      apply (proj1 (valid_scheme_regular_wellformed H))
+  end : valid_scheme_regular.
+
+Hint Extern 1 (scheme ?M) =>
+  match goal with
+  | H : valid_scheme_regular _ M |- _ =>
+      apply (proj2 (valid_scheme_regular_wellformed H))
+  end : valid_scheme_regular.
+
+Lemma valid_env_regular_wellformed : forall E,
+    valid_env_regular E -> environment E.
+Proof.
+  introv He.
+  destruct He; auto.
+Qed.
+
+Hint Constructors valid_env_regular : valid_env_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_env_regular E |- _ =>
+      apply (valid_env_regular_wellformed H)
+  end : valid_env_regular.
+
+Lemma type_equal_core_regular_wellformed : forall E T1 T2 K,
+    type_equal_core_regular E T1 T2 K ->
+    environment E /\ type T1 /\ type T2 /\ kind K.
+Proof.
+  introv Hte.
+  destruct Hte; subst; split; auto.
+Qed.
+
+Hint Constructors type_equal_core_regular : type_equal_core_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_core_regular E _ _ _ |- _ =>
+      apply (proj41 (type_equal_core_regular_wellformed H))
+  end : type_equal_core_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_core_regular _ T _ _ |- _ =>
+      apply (proj42 (type_equal_core_regular_wellformed H))
+  | H : type_equal_core_regular _ _ T _ |- _ =>
+      apply (proj43 (type_equal_core_regular_wellformed H))
+  end : type_equal_core_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_core_regular _ _ _ K |- _ =>
+      apply (proj44 (type_equal_core_regular_wellformed H))
+  end : type_equal_core_regular.
+
+Lemma type_equal_cong_regular_wellformed : forall E T1 T2 K,
+    type_equal_cong_regular E T1 T2 K ->
+    environment E /\ type T1 /\ type T2 /\ kind K.
+Proof.
+  introv Hte.
+  destruct Hte; split; auto.
+Qed.
+
+Hint Constructors type_equal_cong_regular : type_equal_cong_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_cong_regular E _ _ _ |- _ =>
+      apply (proj41 (type_equal_cong_regular_wellformed H))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_cong_regular _ T _ _ |- _ =>
+      apply (proj42 (type_equal_cong_regular_wellformed H))
+  | H : type_equal_cong_regular _ _ T _ |- _ =>
+      apply (proj43 (type_equal_cong_regular_wellformed H))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_cong_regular _ _ _ K |- _ =>
+      apply (proj44 (type_equal_cong_regular_wellformed H))
+  end : type_equal_cong_regular.
+
+Lemma type_equal_symm_regular_wellformed : forall E T1 T2 K,
+    type_equal_symm_regular E T1 T2 K ->
+    environment E /\ type T1 /\ type T2 /\ kind K.
+Proof.
+  introv Hte.
+  destruct Hte; auto.
+Qed.
+
+Hint Constructors type_equal_symm_regular : type_equal_symm_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_symm_regular E _ _ _ |- _ =>
+      apply (proj41 (type_equal_symm_regular_wellformed H))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_symm_regular _ T _ _ |- _ =>
+      apply (proj42 (type_equal_symm_regular_wellformed H))
+  | H : type_equal_symm_regular _ _ T _ |- _ =>
+      apply (proj43 (type_equal_symm_regular_wellformed H))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_symm_regular _ _ _ K |- _ =>
+      apply (proj44 (type_equal_symm_regular_wellformed H))
+  end : type_equal_symm_regular.
+
+Lemma type_equal_regular_wellformed : forall E T1 T2 K,
+    type_equal_regular E T1 T2 K ->
+    environment E /\ type T1 /\ type T2 /\ kind K.
+Proof.
+  introv Hk.
+  destruct Hk; auto.
+Qed.
+
+Hint Constructors type_equal_regular : type_equal_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_regular E _ _ _ |- _ =>
+      apply (proj41 (type_equal_regular_wellformed H))
+  end : type_equal_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_regular _ T _ _ |- _ =>
+      apply (proj42 (type_equal_regular_wellformed H))
+  | H : type_equal_regular _ _ T _ |- _ =>
+      apply (proj43 (type_equal_regular_wellformed H))
+  end : type_equal_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_regular _ _ _ K |- _ =>
+      apply (proj44 (type_equal_regular_wellformed H))
+  end : type_equal_regular.
+
+Lemma subtype_regular_wellformed : forall E T1 T2 cs,
+    subtype_regular E T1 T2 cs ->
+    environment E /\ type T1 /\ type T2 /\ CSet.Nonempty cs.
+Proof.
+  introv Hk.
+  destruct Hk; auto.
+Qed.
+
+Hint Constructors subtype_regular : subtype_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : subtype_regular E _ _ _ |- _ =>
+      apply (proj41 (subtype_regular_wellformed H))
+  end : subtype_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : subtype_regular _ T _ _ |- _ =>
+      apply (proj42 (subtype_regular_wellformed H))
+  | H : subtype_regular _ _ T _ |- _ =>
+      apply (proj43 (subtype_regular_wellformed H))
+  end : subtype_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : subtype_regular _ _ _ cs |- _ =>
+      apply (proj44 (subtype_regular_wellformed H))
+  end : subtype_regular.
+
+Lemma regular_kinding_type_equal :
+  (forall E K, valid_kind E K -> valid_kind_regular E K)
+  /\ (forall E T K, kinding E T K -> kinding_regular E T K)
+  /\ (forall E M Xs,
+         valid_scheme_vars E M Xs -> valid_scheme_vars_regular E M Xs)
+  /\ (forall E M, valid_scheme E M -> valid_scheme_regular E M)
+  /\ (forall E, valid_env E -> valid_env_regular E)
+  /\ (forall E T1 T2 K,
+       type_equal_core E T1 T2 K -> type_equal_core_regular E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_cong E T1 T2 K -> type_equal_cong_regular E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_symm E T1 T2 K -> type_equal_symm_regular E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal E T1 T2 K -> type_equal_regular E T1 T2 K)
+  /\ (forall E T1 T2 cs,
+       subtype E T1 T2 cs -> subtype_regular E T1 T2 cs).
+Proof.
+  apply combined_kinding_mutind.
+
+Lemma regular_valid_kind : forall E K,
+    valid_kind E K -> valid_kind_regular E K.
+Proof.
+  introv Hv.
+  induction Hv; unfold subtype in *; auto using valid_kind_regular.
+  - assert (type (typ_meet T2 T1)) as Ht
+        by auto with type_equal_regular.
+    inversion Ht.
+    auto using valid_kind_regular with type_equal_regular.
+Qed.
 
 Lemma regular_kinding_core : forall E T K,
     kinding_core E T K -> kinding_core_regular E T K.
@@ -737,149 +1426,6 @@ Proof.
       auto with kinding_core_regular.
 Qed.
 
-Lemma regular_kinding_core_inv : forall E T K,
-    kinding_core_regular E T K -> kinding_core E T K.
-Proof.
-  introv Hk.
-  induction Hk; eauto using kinding_core.
-Qed.
-
-Hint Resolve regular_kinding_core_inv.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : kinding_core E _ _ |- _ =>
-      apply (proj31 (kinding_core_regular_wellformed
-                       (regular_kinding_core H)))
-  end : kinding_core_regular.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H : kinding_core _ T _ |- _ =>
-      apply (proj32 (kinding_core_regular_wellformed
-                       (regular_kinding_core H)))
-  end : kinding_core_regular.
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : kinding_core _ _ K |- _ =>
-      apply (proj33 (kinding_core_regular_wellformed
-                       (regular_kinding_core H)))
-  end : kinding_core_regular.
-
-Inductive kinding_regular : env -> typ -> knd -> Prop :=
-  | kinding_regular_typ : forall E T,
-      environment E ->
-      type T ->
-      kinding_core_regular E T knd_type ->
-      kinding_regular E T knd_type
-  | kinding_regular_row : forall E T cs,
-      environment E ->
-      type T ->
-      CSet.Nonempty cs ->
-      kinding_core_regular E T (knd_row cs) ->
-      kinding_regular E T (knd_row cs)
-  | kinding_regular_range : forall E T T1 T2 T1' T2',
-      environment E ->
-      type T1 ->
-      type T2 ->
-      type T1' ->
-      type T2' ->
-      type T ->
-      kinding_core_regular E T (knd_range T1 T2) ->
-      (* subtype E T1 T1' *)
-      type_equal_regular E T1
-        (typ_meet T1 T1') (knd_row CSet.universe) ->
-      (* subtype E T2' T2 *)
-      type_equal_regular E T2'
-        (typ_meet T2' T2) (knd_row CSet.universe) ->
-      kinding_regular E T (knd_range T1' T2')
-
-with type_equal_regular : env -> typ -> typ -> knd -> Prop :=
-  | type_equal_regular_refl : forall E T K,
-      environment E ->
-      type T ->
-      kind K ->
-      kinding_regular E T K ->
-      type_equal_regular E T T K
-  | type_equal_regular_step : forall E T1 T2 T3 K,
-      environment E ->
-      type T1 ->
-      type T2 ->
-      type T3 ->
-      kind K ->
-      kinding_regular E T1 K ->
-      type_equal_symm_regular T1 T2 ->
-      type_equal_regular E T2 T3 K ->
-      type_equal_regular E T1 T3 K.
-
-Scheme kinding_type_equal_regular_ind :=
-    Induction for kinding_regular Sort Prop
-  with type_equal_kinding_regular_ind :=
-    Induction for type_equal_regular Sort Prop.
-
-Combined Scheme kinding_type_equal_regular_mutind
-  from kinding_type_equal_regular_ind,
-       type_equal_kinding_regular_ind.
-
-Lemma kinding_regular_wellformed : forall E T K,
-    kinding_regular E T K ->
-    environment E /\ type T /\ kind K.
-Proof.
-  introv Hk.
-  destruct Hk; auto.
-Qed.
-
-Hint Constructors kinding_regular : kinding_regular.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : kinding_regular E _ _ |- _ =>
-      apply (proj31 (kinding_regular_wellformed H))
-  end : kinding_regular.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H : kinding_regular _ T _ |- _ =>
-      apply (proj32 (kinding_regular_wellformed H))
-  end : kinding_regular.
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : kinding_regular _ _ K |- _ =>
-      apply (proj33 (kinding_regular_wellformed H))
-  end : kinding_regular.
-
-Lemma type_equal_regular_wellformed : forall E T1 T2 K,
-    type_equal_regular E T1 T2 K ->
-    environment E /\ type T1 /\ type T2 /\ kind K.
-Proof.
-  introv Hk.
-  destruct Hk; auto.
-Qed.
-
-Hint Constructors type_equal_regular : type_equal_regular.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : type_equal_regular E _ _ _ |- _ =>
-      apply (proj41 (type_equal_regular_wellformed H))
-  end : type_equal_regular.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H : type_equal_regular _ T _ _ |- _ =>
-      apply (proj42 (type_equal_regular_wellformed H))
-  | H : type_equal_regular _ _ T _ |- _ =>
-      apply (proj43 (type_equal_regular_wellformed H))
-  end : type_equal_regular.
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : type_equal_regular _ _ _ K |- _ =>
-      apply (proj44 (type_equal_regular_wellformed H))
-  end : type_equal_regular.
-
 Lemma regular_kinding_type_equal :
   (forall E T K, kinding E T K -> kinding_regular E T K)
   /\ (forall E T1 T2 K,
@@ -909,6 +1455,69 @@ Proof.
         with kinding_regular type_equal_regular.
 Qed.
 
+Lemma regular_valid_scheme_vars : forall E M Xs,
+    valid_scheme_vars E M Xs -> valid_scheme_vars_regular E M Xs.
+Proof.
+  introv Hs.
+  induction Hs.
+  - auto with kinding_regular valid_scheme_vars_regular.
+  - apply valid_scheme_vars_regular_bind;
+      auto with valid_scheme_vars_regular valid_kind_regular.
+Qed.
+
+Lemma regular_valid_scheme : forall E M,
+    valid_scheme E M -> valid_scheme_regular E M.
+Proof.
+  introv [L Hs].
+  splits.
+  - exists L; intros Xs Fr.
+    specialize (Hs Xs Fr).
+    apply regular_valid_scheme_vars.
+    assumption.
+  - pick_freshes_gen L (sch_arity M) Xs.
+    specialize (Hs Xs Fr).
+    apply regular_valid_scheme_vars in Hs.
+    auto with valid_scheme_vars_regular.
+  - exists L; intros Xs Fr.
+    specialize (Hs Xs Fr).
+    apply regular_valid_scheme_vars in Hs.
+    auto with valid_scheme_vars_regular.
+Qed.
+
+Lemma regular_valid_env : forall E,
+    valid_env E -> valid_env_regular E.
+Proof.
+  introv He.
+  induction He; auto with valid_env_regular.
+  - auto with valid_env_regular valid_kind_regular.
+  - auto with valid_env_regular valid_scheme_regular.
+Qed.
+
+Lemma regular_type_equal_cong : forall T1 T2,
+    type_equal_cong T1 T2 -> type_equal_cong_regular T1 T2.
+Proof.
+  introv Ht1 Ht2 Hte.
+  induction Hte;
+    inversion Ht1; inversion Ht2; subst;
+      auto with type_equal_cong_regular.
+Qed.
+
+Lemma regular_type_equal_symm : forall T1 T2,
+    type T1 -> type T2 ->
+    type_equal_symm T1 T2 -> type_equal_symm_regular T1 T2.
+Proof.
+  introv Ht1 Ht2 Hte.
+  induction Hte;
+      auto using regular_type_equal_cong, type_equal_symm_regular.
+Qed.
+
+
+
+
+
+
+
+
 Lemma regular_kinding_type_equal_inv :
   (forall E T K, kinding_regular E T K -> kinding E T K)
   /\ (forall E T1 T2 K,
@@ -919,6 +1528,45 @@ Proof.
       regular_kinding_core_inv, regular_type_equal_symm_inv,
       kinding, type_equal.
 Qed.
+
+
+
+
+
+
+
+
+
+
+
+Lemma regular_valid_kind : forall E K,
+    valid_kind E K -> valid_kind_regular E K.
+Proof.
+Qed.
+
+Lemma regular_valid_kind_inv : forall T1 T2,
+    valid_kind_regular T1 T2 -> valid_kind T1 T2.
+Proof.
+  introv Hv.
+  induction Hv;
+    auto using valid_kind.
+Qed.
+
+Hint Resolve regular_valid_kind_inv.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_kind E _ |- _ =>
+      apply (proj1 (valid_kind_regular_wellformed
+                      (regular_valid_kind H)))
+  end : valid_kind_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : valid_kind _ K |- _ =>
+      apply (proj2 (valid_kind_regular_wellformed
+                      (regular_valid_kind H)))
+  end : valid_kind_regular.
 
 Lemma regular_kinding : forall E T K,
     kinding E T K -> kinding_regular E T K.
@@ -953,6 +1601,203 @@ Hint Extern 1 (kind ?K) =>
   | H : kinding _ _ K |- _ =>
       apply (proj33 (kinding_regular_wellformed (regular_kinding H)))
   end : kinding_regular.
+
+Lemma regular_valid_scheme_vars : forall E M Xs,
+    valid_scheme_vars E M Xs -> valid_scheme_vars_regular E M Xs.
+Proof.
+Qed.
+
+Lemma regular_valid_scheme_vars_inv : forall E M Xs,
+    valid_scheme_vars_regular E M Xs -> valid_scheme_vars E M Xs.
+Proof.
+  introv Hs.
+  induction Hs;
+    auto using valid_scheme_vars.
+Qed.
+
+Hint Resolve regular_valid_scheme_vars_inv.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_scheme_vars E _ _ |- _ =>
+      apply (proj1 (valid_scheme_vars_regular_wellformed
+                      (regular_valid_scheme_vars H)))
+  end : valid_scheme_vars_regular.
+
+Hint Extern 1 (scheme_vars ?M ?Xs) =>
+  match goal with
+  | H : valid_scheme_vars _ M Xs |- _ =>
+      apply (proj2 (valid_scheme_vars_regular_wellformed
+                      (regular_valid_scheme_vars H)))
+  end : valid_scheme_vars_regular.
+
+Lemma regular_valid_scheme : forall E M,
+    valid_scheme E M -> valid_scheme_regular E M.
+Proof.
+Qed.
+
+Lemma regular_valid_scheme_inv : forall E M,
+    valid_scheme_regular E M -> valid_scheme E M.
+Proof.
+  introv [[L Hs] _].
+  exists L; intros Xs Fr.
+  specialize (Hs Xs Fr).
+  apply regular_valid_scheme_vars_inv.
+  assumption.
+Qed.
+
+Hint Resolve regular_valid_scheme_inv.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_scheme E _ |- _ =>
+      apply (proj1 (valid_scheme_regular_wellformed
+                      (regular_valid_scheme H)))
+  end : valid_scheme_regular.
+
+Hint Extern 1 (scheme ?M) =>
+  match goal with
+  | H : valid_scheme _ M |- _ =>
+      apply (proj2 (valid_scheme_regular_wellformed
+                      (regular_valid_scheme H)))
+  end : valid_scheme_regular.
+
+Lemma regular_valid_env : forall E,
+    valid_env E -> valid_env_regular E.
+Proof.
+Qed.
+
+Lemma regular_valid_env_inv : forall E,
+    valid_env_regular E -> valid_env E.
+Proof.
+  introv He.
+  induction He; auto using valid_env.
+Qed.
+
+Hint Resolve regular_valid_env_inv.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_env E |- _ =>
+      apply (valid_env_regular_wellformed
+               (regular_valid_env H))
+  end : valid_env_regular.
+
+Lemma regular_type_equal_core : forall T1 T2,
+    type_equal_core T1 T2 -> type_equal_core_regular T1 T2.
+Proof.
+Qed.
+
+Lemma regular_type_equal_core_inv : forall T1 T2,
+    type_equal_core_regular T1 T2 -> type_equal_core T1 T2.
+Proof.
+  introv Hte.
+  induction Hte; auto using type_equal_core.
+Qed.
+
+Hint Resolve regular_type_equal_core_inv.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_core E _ _ _ |- _ =>
+      apply (proj41 (type_equal_core_regular_wellformed
+                       (regular_type_equal_core H)))
+  end : type_equal_core_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_core _ T _ _ |- _ =>
+      apply (proj42 (type_equal_core_regular_wellformed
+                       (regular_type_equal_core H)))
+  | H : type_equal_core _ _ T _ |- _ =>
+      apply (proj43 (type_equal_core_regular_wellformed
+                       (regular_type_equal_core H)))
+  end : type_equal_core_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_core _ _ _ K |- _ =>
+      apply (proj44 (type_equal_core_regular_wellformed
+                       (regular_type_equal_core H)))
+  end : type_equal_core_regular.
+
+Lemma regular_type_equal_cong : forall T1 T2,
+    type_equal_cong T1 T2 -> type_equal_cong_regular T1 T2.
+Proof.
+Qed.
+
+Lemma regular_type_equal_cong_inv : forall T1 T2,
+    type_equal_cong_regular T1 T2 -> type_equal_cong T1 T2.
+Proof.
+  introv Hte.
+  induction Hte; auto using type_equal_cong.
+Qed.
+
+Hint Resolve regular_type_equal_cong_inv.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_cong E _ _ _ |- _ =>
+      apply (proj41 (type_equal_cong_regular_wellformed
+                       (regular_type_equal_cong H)))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_cong _ T _ _ |- _ =>
+      apply (proj42 (type_equal_cong_regular_wellformed
+                       (regular_type_equal_cong H)))
+  | H : type_equal_cong _ _ T _ |- _ =>
+      apply (proj43 (type_equal_cong_regular_wellformed
+                       (regular_type_equal_cong H)))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_cong _ _ _ K |- _ =>
+      apply (proj44 (type_equal_cong_regular_wellformed
+                       (regular_type_equal_cong H)))
+  end : type_equal_cong_regular.
+
+Lemma regular_type_equal_symm : forall T1 T2,
+    type T1 -> type T2 ->
+    type_equal_symm T1 T2 -> type_equal_symm_regular T1 T2.
+Proof.
+Qed.
+
+Lemma regular_type_equal_symm_inv : forall T1 T2,
+    type_equal_symm_regular T1 T2 -> type_equal_symm T1 T2.
+Proof.
+  introv Hte.
+  induction Hte;
+    auto using regular_type_equal_cong_inv, type_equal_symm.
+Qed.
+
+Hint Resolve regular_type_equal_symm_inv.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_symm E _ _ _ |- _ =>
+      apply (proj41 (type_equal_symm_regular_wellformed
+                       (regular_type_equal_symm H)))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_symm _ T _ _ |- _ =>
+      apply (proj42 (type_equal_symm_regular_wellformed
+                       (regular_type_equal_symm H)))
+  | H : type_equal_symm _ _ T _ |- _ =>
+      apply (proj43 (type_equal_symm_regular_wellformed
+                       (regular_type_equal_symm H)))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_symm _ _ _ K |- _ =>
+      apply (proj44 (type_equal_symm_regular_wellformed
+                       (regular_type_equal_symm H)))
+  end : type_equal_symm_regular.
 
 Lemma regular_type_equal : forall E T1 T2 K,
     type_equal E T1 T2 K -> type_equal_regular E T1 T2 K.
@@ -994,342 +1839,110 @@ Hint Extern 1 (kind ?K) =>
                        (regular_type_equal H)))
   end : type_equal_regular.
 
-Inductive valid_kind_regular : env -> knd -> Prop :=
-  | valid_kind_regular_type : forall E,
-      environment E ->
-      valid_kind_regular E knd_type
-  | valid_kind_regular_row :  forall E cs,
-      environment E ->
-      kind (knd_row cs) ->
-      CSet.Nonempty cs ->
-      valid_kind_regular E (knd_row cs)
-  | valid_kind_regular_range : forall E T1 T2,
-      environment E ->
-      type T1 ->
-      type T2 ->
-      subtype E T2 T1 ->
-      valid_kind_regular E (knd_range T1 T2).
-
-Lemma valid_kind_regular_wellformed : forall E K,
-    valid_kind_regular E K ->
-    environment E /\ kind K.
+Lemma regular_subtype : forall E T1 T2 K,
+    subtype E T1 T2 K -> subtype_regular E T1 T2 K.
 Proof.
-  introv Hv.
-  destruct Hv; auto.
-Qed.
-
-Hint Constructors valid_kind_regular : valid_kind_regular.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : valid_kind_regular E _ |- _ =>
-      apply (proj1 (valid_kind_regular_wellformed H))
-  end : valid_kind_regular.
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : valid_kind_regular _ K |- _ =>
-      apply (proj2 (valid_kind_regular_wellformed H))
-  end : valid_kind_regular.
-
-Lemma regular_valid_kind : forall E K,
-    valid_kind E K -> valid_kind_regular E K.
-Proof.
-  introv Hv.
-  induction Hv; unfold subtype in *; auto using valid_kind_regular.
-  - assert (type (typ_meet T2 T1)) as Ht
-        by auto with type_equal_regular.
-    inversion Ht.
-    auto using valid_kind_regular with type_equal_regular.
-Qed.
-
-Lemma regular_valid_kind_inv : forall T1 T2,
-    valid_kind_regular T1 T2 -> valid_kind T1 T2.
-Proof.
-  introv Hv.
-  induction Hv;
-    auto using valid_kind.
-Qed.
-
-Hint Resolve regular_valid_kind_inv.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : valid_kind E _ |- _ =>
-      apply (proj1 (valid_kind_regular_wellformed
-                      (regular_valid_kind H)))
-  end : valid_kind_regular.
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : valid_kind _ K |- _ =>
-      apply (proj2 (valid_kind_regular_wellformed
-                      (regular_valid_kind H)))
-  end : valid_kind_regular.
-
-Inductive kinding_scheme_vars_regular
-  : env -> sch -> list var -> Prop :=
-  | kinding_scheme_vars_regular_empty : forall E T,
-      environment E ->
-      type T ->
-      scheme_vars (sch_empty T) nil ->
-      kinding E T knd_type ->
-      kinding_scheme_vars_regular E (sch_empty T) nil
-  | kinding_scheme_vars_regular_bind : forall X Xs E K M,
-      environment E ->
-      environment (E & X ~:: K) ->
-      kind K ->
-      scheme_vars (M ^ X) Xs ->
-      scheme_vars (sch_bind K M) (X :: Xs) ->
-      valid_kind E K ->
-      kinding_scheme_vars_regular (E & X ~:: K) (M ^ X) Xs ->
-      kinding_scheme_vars_regular E (sch_bind K M) (X :: Xs).
-
-Lemma kinding_scheme_vars_regular_wellformed : forall E M Xs,
-    kinding_scheme_vars_regular E M Xs ->
-    environment E /\ scheme_vars M Xs.
-Proof.
-  introv Hs.
-  destruct Hs; auto.
-Qed.
-
-Hint Constructors kinding_scheme_vars_regular
-  : kinding_scheme_vars_regular.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : kinding_scheme_vars_regular E _ _ |- _ =>
-      apply (proj1 (kinding_scheme_vars_regular_wellformed H))
-  end : kinding_scheme_vars_regular.
-
-Hint Extern 1 (scheme_vars ?M ?Xs) =>
-  match goal with
-  | H : kinding_scheme_vars_regular _ M Xs |- _ =>
-      apply (proj2 (kinding_scheme_vars_regular_wellformed H))
-  end : kinding_scheme_vars_regular.
-
-Lemma regular_kinding_scheme_vars : forall E M Xs,
-    kinding_scheme_vars E M Xs -> kinding_scheme_vars_regular E M Xs.
-Proof.
-  introv Hs.
-  induction Hs.
-  - auto with kinding_regular kinding_scheme_vars_regular.
-  - apply kinding_scheme_vars_regular_bind;
-      auto with kinding_scheme_vars_regular valid_kind_regular.
-Qed.
-
-Lemma regular_kinding_scheme_vars_inv : forall E M Xs,
-    kinding_scheme_vars_regular E M Xs -> kinding_scheme_vars E M Xs.
-Proof.
-  introv Hs.
-  induction Hs;
-    auto using kinding_scheme_vars.
-Qed.
-
-Hint Resolve regular_kinding_scheme_vars_inv.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : kinding_scheme_vars E _ _ |- _ =>
-      apply (proj1 (kinding_scheme_vars_regular_wellformed
-                      (regular_kinding_scheme_vars H)))
-  end : kinding_scheme_vars_regular.
-
-Hint Extern 1 (scheme_vars ?M ?Xs) =>
-  match goal with
-  | H : kinding_scheme_vars _ M Xs |- _ =>
-      apply (proj2 (kinding_scheme_vars_regular_wellformed
-                      (regular_kinding_scheme_vars H)))
-  end : kinding_scheme_vars_regular.
-
-Definition kinding_scheme_regular E M :=
-  (exists L, forall Xs,
-      fresh L (sch_arity M) Xs ->
-      kinding_scheme_vars_regular E M Xs)
-  /\ environment E /\ scheme M.
-
-Lemma kinding_scheme_regular_wellformed : forall E M,
-    kinding_scheme_regular E M ->
-    environment E /\ scheme M.
-Proof.
-  introv [_ [He Hs]].
-  split; assumption.
-Qed.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : kinding_scheme_regular E _ |- _ =>
-      apply (proj1 (kinding_scheme_regular_wellformed H))
-  end : kinding_scheme_regular.
-
-Hint Extern 1 (scheme ?M) =>
-  match goal with
-  | H : kinding_scheme_regular _ M |- _ =>
-      apply (proj2 (kinding_scheme_regular_wellformed H))
-  end : kinding_scheme_regular.
-
-Lemma regular_kinding_scheme : forall E M,
-    kinding_scheme E M -> kinding_scheme_regular E M.
-Proof.
-  introv [L Hs].
-  splits.
-  - exists L; intros Xs Fr.
-    specialize (Hs Xs Fr).
-    apply regular_kinding_scheme_vars.
-    assumption.
-  - pick_freshes_gen L (sch_arity M) Xs.
-    specialize (Hs Xs Fr).
-    apply regular_kinding_scheme_vars in Hs.
-    auto with kinding_scheme_vars_regular.
-  - exists L; intros Xs Fr.
-    specialize (Hs Xs Fr).
-    apply regular_kinding_scheme_vars in Hs.
-    auto with kinding_scheme_vars_regular.
-Qed.
-
-Lemma regular_kinding_scheme_inv : forall E M,
-    kinding_scheme_regular E M -> kinding_scheme E M.
-Proof.
-  introv [[L Hs] _].
-  exists L; intros Xs Fr.
-  specialize (Hs Xs Fr).
-  apply regular_kinding_scheme_vars_inv.
+  destruct regular_kinding_subtype.
   assumption.
 Qed.
 
-Hint Resolve regular_kinding_scheme_inv.
+Lemma regular_subtype_inv : forall E T1 T2 K,
+    subtype_regular E T1 T2 K -> subtype E T1 T2 K.
+Proof.
+  destruct regular_kinding_subtype_inv.
+  assumption.
+Qed.
+
+Hint Resolve regular_subtype_inv.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
-  | H : kinding_scheme E _ |- _ =>
-      apply (proj1 (kinding_scheme_regular_wellformed
-                      (regular_kinding_scheme H)))
-  end : kinding_scheme_regular.
+  | H : subtype E _ _ _ |- _ =>
+      apply (proj41 (subtype_regular_wellformed
+                       (regular_subtype H)))
+  end : subtype_regular.
 
-Hint Extern 1 (scheme ?M) =>
+Hint Extern 1 (type ?T) =>
   match goal with
-  | H : kinding_scheme _ M |- _ =>
-      apply (proj2 (kinding_scheme_regular_wellformed
-                      (regular_kinding_scheme H)))
-  end : kinding_scheme_regular.
+  | H : subtype _ T _ _ |- _ =>
+      apply (proj42 (subtype_regular_wellformed
+                       (regular_subtype H)))
+  | H : subtype _ _ T _ |- _ =>
+      apply (proj43 (subtype_regular_wellformed
+                       (regular_subtype H)))
+  end : subtype_regular.
 
-Inductive kinding_instance_regular : env -> list typ -> sch -> Prop :=
-  | kinding_instance_regular_empty : forall E T,
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : subtype _ _ _ cs |- _ =>
+      apply (proj44 (subtype_regular_wellformed
+                       (regular_subtype H)))
+  end : subtype_regular.
+
+
+
+
+
+
+
+
+Inductive valid_instance_regular : env -> list typ -> sch -> Prop :=
+  | valid_instance_regular_empty : forall E T,
       types (sch_arity (sch_empty T)) nil ->
-      kinding_instance_regular E nil (sch_empty T)
-  | kinding_instance_regular_bind : forall E K M T Ts,
+      valid_instance_regular E nil (sch_empty T)
+  | valid_instance_regular_bind : forall E K M T Ts,
       types (sch_arity M) Ts ->
       types (sch_arity (sch_bind K M)) (T :: Ts) ->
       kinding E T K ->
-      kinding_instance_regular E Ts (M ^^ T) ->
-      kinding_instance_regular E (T :: Ts) (sch_bind K M).
+      valid_instance_regular E Ts (M ^^ T) ->
+      valid_instance_regular E (T :: Ts) (sch_bind K M).
 
-Lemma kinding_instance_regular_wellformed : forall E Ts M,
-    kinding_instance_regular E Ts M -> types (sch_arity M) Ts.
+Lemma valid_instance_regular_wellformed : forall E Ts M,
+    valid_instance_regular E Ts M -> types (sch_arity M) Ts.
 Proof.
   introv Hi.
   destruct Hi; auto.
 Qed.
 
-Hint Constructors kinding_instance_regular : kinding_instance_regular.
+Hint Constructors valid_instance_regular : valid_instance_regular.
 
 Hint Extern 1 (types (sch_arity ?M) ?Ts) =>
   match goal with
-  | H : kinding_instance_regular _ Ts M |- _ =>
-      apply (kinding_instance_regular_wellformed H)
-  end : kinding_instance_regular.
+  | H : valid_instance_regular _ Ts M |- _ =>
+      apply (valid_instance_regular_wellformed H)
+  end : valid_instance_regular.
 
-Lemma regular_kinding_instance : forall E Ts M,
-    kinding_instance E Ts M -> kinding_instance_regular E Ts M.
+Lemma regular_valid_instance : forall E Ts M,
+    valid_instance E Ts M -> valid_instance_regular E Ts M.
 Proof.
   introv Hi.
-  induction Hi; auto with kinding_instance_regular.
+  induction Hi; auto with valid_instance_regular.
   - assert (type T) by auto with kinding_regular.
     assert (types (sch_arity (sch_open M T)) Ts) as Hts
-      by auto with kinding_instance_regular.
+      by auto with valid_instance_regular.
     destruct Hts as [Hl Hts].
-    apply kinding_instance_regular_bind; auto.
+    apply valid_instance_regular_bind; auto.
     + rewrite <- sch_open_arity with (U := T).
-      auto with kinding_instance_regular.
+      auto with valid_instance_regular.
     + autorewrite with rew_sch_arity in Hl.
       split; simpl; auto.
 Qed.
 
-Lemma regular_kinding_instance_inv : forall E Ts M,
-    kinding_instance_regular E Ts M -> kinding_instance E Ts M.
+Lemma regular_valid_instance_inv : forall E Ts M,
+    valid_instance_regular E Ts M -> valid_instance E Ts M.
 Proof.
   introv Hi.
-  induction Hi; auto using kinding_instance.
+  induction Hi; auto using valid_instance.
 Qed.
 
-Hint Resolve regular_kinding_instance_inv.
+Hint Resolve regular_valid_instance_inv.
 
 Hint Extern 1 (types (sch_arity ?M) ?Ts) =>
   match goal with
-  | H : kinding_instance _ Ts M |- _ =>
-      apply (kinding_instance_regular_wellformed
-               (regular_kinding_instance H))
-  end : kinding_instance_regular.
-
-Inductive kinding_env_regular : env -> Prop :=
-  | kinding_env_regular_empty :
-      kinding_env_regular empty
-  | kinding_env_regular_kind : forall E X K,
-      environment E ->
-      environment (E & X ~:: K) ->
-      kind K ->
-      kinding_env_regular E ->
-      valid_kind E K ->
-      X # E ->
-      kinding_env_regular (E & X ~:: K)
-  | kinding_env_regular_type : forall E x M,
-      environment E ->
-      environment (E & x ~: M) ->
-      scheme M ->
-      kinding_env_regular E ->
-      kinding_scheme E M ->
-      x # E ->
-      kinding_env_regular (E & x ~: M).
-
-Lemma kinding_env_regular_wellformed : forall E,
-    kinding_env_regular E -> environment E.
-Proof.
-  introv He.
-  destruct He; auto.
-Qed.
-
-Hint Constructors kinding_env_regular : kinding_env_regular.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : kinding_env_regular E |- _ =>
-      apply (kinding_env_regular_wellformed H)
-  end : kinding_env_regular.
-
-Lemma regular_kinding_env : forall E,
-    kinding_env E -> kinding_env_regular E.
-Proof.
-  introv He.
-  induction He; auto with kinding_env_regular.
-  - auto with kinding_env_regular valid_kind_regular.
-  - auto with kinding_env_regular kinding_scheme_regular.
-Qed.
-
-Lemma regular_kinding_env_inv : forall E,
-    kinding_env_regular E -> kinding_env E.
-Proof.
-  introv He.
-  induction He; auto using kinding_env.
-Qed.
-
-Hint Resolve regular_kinding_env_inv.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : kinding_env E |- _ =>
-      apply (kinding_env_regular_wellformed
-               (regular_kinding_env H))
-  end : kinding_env_regular.
+  | H : valid_instance _ Ts M |- _ =>
+      apply (valid_instance_regular_wellformed
+               (regular_valid_instance H))
+  end : valid_instance_regular.
 
 Inductive typing_regular : env -> trm -> typ -> Prop :=
   | typing_regular_var : forall E x M Us,
@@ -1337,9 +1950,9 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       scheme M ->
       types (sch_arity M) Us ->
       type (instance M Us) ->
-      kinding_env E -> 
+      valid_env E -> 
       binds x (bind_typ M) E -> 
-      kinding_instance E Us M ->
+      valid_instance E Us M ->
       typing_regular E (trm_fvar x) (instance M Us)
   | typing_regular_abs : forall L E T1 T2 t1,
       environment E ->
@@ -1493,11 +2106,11 @@ Proof.
   introv Ht.
   induction Ht.
   - assert (environment E)
-      by auto with kinding_env_regular.
+      by auto with valid_env_regular.
     assert (scheme M)
       by (eapply scheme_from_env; eassumption).
     assert (types (sch_arity M) Us)
-      by auto with kinding_instance_regular.   
+      by auto with valid_instance_regular.   
     assert (type (instance M Us))
       by auto using scheme_instance_type.
     auto with typing_regular.
