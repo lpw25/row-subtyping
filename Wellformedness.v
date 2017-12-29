@@ -1125,6 +1125,15 @@ Hint Extern 1 (kind ?K) =>
       apply (proj2 (valid_kind_regular_wellformed H))
   end : valid_kind_regular.
 
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : valid_kind_regular _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj2 (valid_kind_regular_wellformed H));
+      inversion Hknd; assumption
+  end : valid_kind_regular.
+
 Lemma kinding_regular_wellformed : forall E T K,
     kinding_regular E T K ->
     environment E /\ type T /\ kind K.
@@ -1151,6 +1160,15 @@ Hint Extern 1 (kind ?K) =>
   match goal with
   | H : kinding_regular _ _ K |- _ =>
       apply (proj33 (kinding_regular_wellformed H))
+  end : kinding_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : kinding_regular _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj33 (kinding_regular_wellformed H));
+      inversion Hknd; assumption
   end : kinding_regular.
 
 Lemma valid_scheme_vars_regular_wellformed : forall E M Xs,
@@ -1243,6 +1261,15 @@ Hint Extern 1 (kind ?K) =>
       apply (proj44 (type_equal_core_regular_wellformed H))
   end : type_equal_core_regular.
 
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_core_regular _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_core_regular_wellformed H));
+      inversion Hknd; assumption
+  end : type_equal_core_regular.
+
 Lemma type_equal_cong_regular_wellformed : forall E T1 T2 K,
     type_equal_cong_regular E T1 T2 K ->
     environment E /\ type T1 /\ type T2 /\ kind K.
@@ -1271,6 +1298,15 @@ Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_cong_regular _ _ _ K |- _ =>
       apply (proj44 (type_equal_cong_regular_wellformed H))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_cong_regular _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_cong_regular_wellformed H));
+      inversion Hknd; assumption
   end : type_equal_cong_regular.
 
 Lemma type_equal_symm_regular_wellformed : forall E T1 T2 K,
@@ -1303,6 +1339,15 @@ Hint Extern 1 (kind ?K) =>
       apply (proj44 (type_equal_symm_regular_wellformed H))
   end : type_equal_symm_regular.
 
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_symm_regular _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_symm_regular_wellformed H));
+      inversion Hknd; assumption
+  end : type_equal_symm_regular.
+
 Lemma type_equal_regular_wellformed : forall E T1 T2 K,
     type_equal_regular E T1 T2 K ->
     environment E /\ type T1 /\ type T2 /\ kind K.
@@ -1331,6 +1376,15 @@ Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_regular _ _ _ K |- _ =>
       apply (proj44 (type_equal_regular_wellformed H))
+  end : type_equal_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_regular _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_regular_wellformed H));
+      inversion Hknd; assumption
   end : type_equal_regular.
 
 Lemma subtype_regular_wellformed : forall E T1 T2 cs,
@@ -1363,7 +1417,7 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
       apply (proj44 (subtype_regular_wellformed H))
   end : subtype_regular.
 
-Lemma regular_kinding_type_equal :
+Lemma regular_combined_kinding :
   (forall E K, valid_kind E K -> valid_kind_regular E K)
   /\ (forall E T K, kinding E T K -> kinding_regular E T K)
   /\ (forall E M Xs,
@@ -1381,175 +1435,119 @@ Lemma regular_kinding_type_equal :
   /\ (forall E T1 T2 cs,
        subtype E T1 T2 cs -> subtype_regular E T1 T2 cs).
 Proof.
-  apply combined_kinding_mutind.
-
-Lemma regular_valid_kind : forall E K,
-    valid_kind E K -> valid_kind_regular E K.
-Proof.
-  introv Hv.
-  induction Hv; unfold subtype in *; auto using valid_kind_regular.
-  - assert (type (typ_meet T2 T1)) as Ht
-        by auto with type_equal_regular.
-    inversion Ht.
-    auto using valid_kind_regular with type_equal_regular.
-Qed.
-
-Lemma regular_kinding_core : forall E T K,
-    kinding_core E T K -> kinding_core_regular E T K.
-Proof.
-  introv Hk.
-  induction Hk; auto with kinding_core_regular.
-  - assert (kind K) by (eapply kind_from_env; eassumption).
-    auto with kinding_core_regular.
-  - assert (kind (knd_row cs1)) as Hknd1
-        by auto with kinding_core_regular.
-    inversion Hknd1; subst.
-    assert (kind (knd_row cs2)) as Hknd2
-        by auto with kinding_core_regular.
-    inversion Hknd2; subst.
-    apply kinding_core_regular_or with (cs1 := cs1) (cs2 := cs2);
-      auto with kinding_core_regular.
+  apply combined_kinding_mutind; intros; subst;
+    auto with
+      valid_kind_regular kinding_regular
+      valid_scheme_vars_regular valid_scheme_regular
+      valid_env_regular type_equal_core_regular
+      type_equal_cong_regular type_equal_symm_regular
+      type_equal_regular subtype_regular.
+  - assert (environment E) by auto with valid_env_regular.
+    assert (kind K) by (eapply kind_from_env; eassumption).
+    auto with kinding_regular.
+  - apply kinding_regular_or with (cs1 := cs1) (cs2 := cs2);
+      auto with kinding_regular.
+  - apply kinding_regular_proj with (cs := cs);
+      auto with kinding_regular.
   - assert (kind (knd_range T1 T2)) as Hknd
-      by auto with kinding_core_regular.
+      by auto with kinding_regular.
     inversion Hknd; subst.
-    apply kinding_core_regular_variant with (T1 := T1) (T2 := T2);
-      auto with kinding_core_regular.
-  - assert (kind (knd_row cs)) as Hknd
-        by auto with kinding_core_regular.
+    apply kinding_regular_variant with (T1 := T1) (T2 := T2);
+      auto with kinding_regular.
+  - apply kinding_regular_range_subsumption
+      with (T1 := T1) (T2 := T2);
+      auto with kinding_regular subtype_regular.
+  - apply valid_scheme_regular_c with (L := L); try assumption.
+    + pick_freshes_gen L (sch_arity M) Xs.
+      assert (valid_scheme_vars_regular E M Xs) by auto.
+      auto with valid_scheme_vars_regular.
+    + exists L. intros.
+      assert (valid_scheme_vars_regular E M Xs) by auto.
+      auto with valid_scheme_vars_regular.
+  - apply type_equal_core_regular_or_commutative
+      with (cs1 := cs1) (cs2 := cs2);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_or_associative
+      with (cs1 := cs1) (cs2 := cs2) (cs3 := cs3);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_or_meet_distribution
+      with (cs1 := cs1) (cs2 := cs2);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_or_join_distribution
+      with (cs1 := cs1) (cs2 := cs2);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_or_proj with (cs1 := cs1);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_proj_or_l
+      with (cs1 := cs1) (cs2 := cs2);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_proj_or_r
+      with (cs1 := cs1) (cs2 := cs2);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_proj_or_both
+      with (cs1 := cs1) (cs2 := cs2);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_proj_meet
+      with (cs := cs);
+      auto with kinding_regular.
+  - apply type_equal_core_regular_proj_join
+      with (cs := cs);
+      auto with kinding_regular.
+  - apply type_equal_cong_regular_or_l
+      with (cs1 := cs1) (cs2 := cs2);
+      auto with type_equal_cong_regular kinding_regular.
+  - apply type_equal_cong_regular_or_r
+      with (cs1 := cs1) (cs2 := cs2);
+      auto with type_equal_cong_regular kinding_regular.
+  - assert (kind (knd_range T2 T3)) as Hknd
+      by auto with type_equal_cong_regular.
     inversion Hknd; subst.
-    apply kinding_core_regular_meet;
-      auto with kinding_core_regular.
-  - assert (kind (knd_row cs)) as Hknd
-        by auto with kinding_core_regular.
-    inversion Hknd; subst.
-    apply kinding_core_regular_join;
-      auto with kinding_core_regular.
-Qed.
-
-Lemma regular_kinding_type_equal :
-  (forall E T K, kinding E T K -> kinding_regular E T K)
-  /\ (forall E T1 T2 K,
-       type_equal E T1 T2 K ->type_equal_regular E T1 T2 K).
-Proof.
-  apply kinding_type_equal_mutind;
-    intros; subst;
-      auto using regular_kinding_core
-        with kinding_regular type_equal_regular kinding_core_regular.
-  - assert (kind (knd_row cs)) as Hk
-        by auto with kinding_core_regular.
-    inversion Hk; subst.
-    auto using regular_kinding_core
-      with kinding_regular kinding_core_regular.
-  - assert (type (typ_meet T1 T1')) as Ht1
-        by auto with type_equal_regular.
-    inversion Ht1; subst.
-    assert (type (typ_meet T2' T2)) as Ht2
-        by auto with type_equal_regular.
-    inversion Ht2; subst.
-    apply kinding_regular_range
-      with (T1 := T1) (T2 := T2) (T1' := T1') (T2' := T2');
-      auto using regular_kinding_core
-        with type_equal_regular kinding_regular kinding_core_regular.
+    auto with type_equal_cong_regular.
+  - apply type_equal_cong_regular_range_subsumption
+      with (T3 := T3) (T4 := T4);
+      auto with type_equal_cong_regular subtype_regular.
   - apply type_equal_regular_step with (T2 := T2);
-      auto using regular_type_equal_symm
-        with kinding_regular type_equal_regular.
+      auto with type_equal_regular type_equal_symm_regular.
+  - assert (type (typ_meet T1 T2)) as Ht
+      by auto with type_equal_regular.
+    inversion Ht; subst.
+    auto with subtype_regular type_equal_regular.
 Qed.
 
-Lemma regular_valid_scheme_vars : forall E M Xs,
-    valid_scheme_vars E M Xs -> valid_scheme_vars_regular E M Xs.
-Proof.
-  introv Hs.
-  induction Hs.
-  - auto with kinding_regular valid_scheme_vars_regular.
-  - apply valid_scheme_vars_regular_bind;
-      auto with valid_scheme_vars_regular valid_kind_regular.
-Qed.
-
-Lemma regular_valid_scheme : forall E M,
-    valid_scheme E M -> valid_scheme_regular E M.
-Proof.
-  introv [L Hs].
-  splits.
-  - exists L; intros Xs Fr.
-    specialize (Hs Xs Fr).
-    apply regular_valid_scheme_vars.
-    assumption.
-  - pick_freshes_gen L (sch_arity M) Xs.
-    specialize (Hs Xs Fr).
-    apply regular_valid_scheme_vars in Hs.
-    auto with valid_scheme_vars_regular.
-  - exists L; intros Xs Fr.
-    specialize (Hs Xs Fr).
-    apply regular_valid_scheme_vars in Hs.
-    auto with valid_scheme_vars_regular.
-Qed.
-
-Lemma regular_valid_env : forall E,
-    valid_env E -> valid_env_regular E.
-Proof.
-  introv He.
-  induction He; auto with valid_env_regular.
-  - auto with valid_env_regular valid_kind_regular.
-  - auto with valid_env_regular valid_scheme_regular.
-Qed.
-
-Lemma regular_type_equal_cong : forall T1 T2,
-    type_equal_cong T1 T2 -> type_equal_cong_regular T1 T2.
-Proof.
-  introv Ht1 Ht2 Hte.
-  induction Hte;
-    inversion Ht1; inversion Ht2; subst;
-      auto with type_equal_cong_regular.
-Qed.
-
-Lemma regular_type_equal_symm : forall T1 T2,
-    type T1 -> type T2 ->
-    type_equal_symm T1 T2 -> type_equal_symm_regular T1 T2.
-Proof.
-  introv Ht1 Ht2 Hte.
-  induction Hte;
-      auto using regular_type_equal_cong, type_equal_symm_regular.
-Qed.
-
-
-
-
-
-
-
-
-Lemma regular_kinding_type_equal_inv :
-  (forall E T K, kinding_regular E T K -> kinding E T K)
+Lemma regular_combined_kinding_inv :
+  (forall E K, valid_kind_regular E K -> valid_kind E K)
+  /\ (forall E T K, kinding_regular E T K -> kinding E T K)
+  /\ (forall E M Xs,
+         valid_scheme_vars_regular E M Xs -> valid_scheme_vars E M Xs)
+  /\ (forall E M, valid_scheme_regular E M -> valid_scheme E M)
+  /\ (forall E, valid_env_regular E -> valid_env E)
   /\ (forall E T1 T2 K,
-       type_equal_regular E T1 T2 K -> type_equal E T1 T2 K).
+       type_equal_core_regular E T1 T2 K -> type_equal_core E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_cong_regular E T1 T2 K -> type_equal_cong E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_symm_regular E T1 T2 K -> type_equal_symm E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_regular E T1 T2 K -> type_equal E T1 T2 K)
+  /\ (forall E T1 T2 cs,
+       subtype_regular E T1 T2 cs -> subtype E T1 T2 cs).
 Proof.
-  apply kinding_type_equal_regular_mutind; intros;
-    eauto using
-      regular_kinding_core_inv, regular_type_equal_symm_inv,
-      kinding, type_equal.
+  apply combined_kinding_regular_mutind; intros; subst;
+   try (econstructor; solve [eassumption| reflexivity]).
 Qed.
-
-
-
-
-
-
-
-
-
-
 
 Lemma regular_valid_kind : forall E K,
     valid_kind E K -> valid_kind_regular E K.
 Proof.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
 Lemma regular_valid_kind_inv : forall T1 T2,
     valid_kind_regular T1 T2 -> valid_kind T1 T2.
 Proof.
-  introv Hv.
-  induction Hv;
-    auto using valid_kind.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_valid_kind_inv.
@@ -1571,15 +1569,15 @@ Hint Extern 1 (kind ?K) =>
 Lemma regular_kinding : forall E T K,
     kinding E T K -> kinding_regular E T K.
 Proof.
-  destruct regular_kinding_type_equal.
-  assumption.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
 Lemma regular_kinding_inv : forall E T K,
     kinding_regular E T K -> kinding E T K.
 Proof.
-  destruct regular_kinding_type_equal_inv.
-  assumption.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_kinding_inv.
@@ -1605,14 +1603,15 @@ Hint Extern 1 (kind ?K) =>
 Lemma regular_valid_scheme_vars : forall E M Xs,
     valid_scheme_vars E M Xs -> valid_scheme_vars_regular E M Xs.
 Proof.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
 Lemma regular_valid_scheme_vars_inv : forall E M Xs,
     valid_scheme_vars_regular E M Xs -> valid_scheme_vars E M Xs.
 Proof.
-  introv Hs.
-  induction Hs;
-    auto using valid_scheme_vars.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_valid_scheme_vars_inv.
@@ -1634,16 +1633,15 @@ Hint Extern 1 (scheme_vars ?M ?Xs) =>
 Lemma regular_valid_scheme : forall E M,
     valid_scheme E M -> valid_scheme_regular E M.
 Proof.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
 Lemma regular_valid_scheme_inv : forall E M,
     valid_scheme_regular E M -> valid_scheme E M.
 Proof.
-  introv [[L Hs] _].
-  exists L; intros Xs Fr.
-  specialize (Hs Xs Fr).
-  apply regular_valid_scheme_vars_inv.
-  assumption.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_valid_scheme_inv.
@@ -1665,13 +1663,15 @@ Hint Extern 1 (scheme ?M) =>
 Lemma regular_valid_env : forall E,
     valid_env E -> valid_env_regular E.
 Proof.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
 Lemma regular_valid_env_inv : forall E,
     valid_env_regular E -> valid_env E.
 Proof.
-  introv He.
-  induction He; auto using valid_env.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_valid_env_inv.
@@ -1683,16 +1683,18 @@ Hint Extern 1 (environment ?E) =>
                (regular_valid_env H))
   end : valid_env_regular.
 
-Lemma regular_type_equal_core : forall T1 T2,
-    type_equal_core T1 T2 -> type_equal_core_regular T1 T2.
+Lemma regular_type_equal_core : forall E T1 T2 K,
+    type_equal_core E T1 T2 K -> type_equal_core_regular E T1 T2 K.
 Proof.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
-Lemma regular_type_equal_core_inv : forall T1 T2,
-    type_equal_core_regular T1 T2 -> type_equal_core T1 T2.
+Lemma regular_type_equal_core_inv : forall E T1 T2 K,
+    type_equal_core_regular E T1 T2 K -> type_equal_core E T1 T2 K.
 Proof.
-  introv Hte.
-  induction Hte; auto using type_equal_core.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_type_equal_core_inv.
@@ -1721,16 +1723,18 @@ Hint Extern 1 (kind ?K) =>
                        (regular_type_equal_core H)))
   end : type_equal_core_regular.
 
-Lemma regular_type_equal_cong : forall T1 T2,
-    type_equal_cong T1 T2 -> type_equal_cong_regular T1 T2.
+Lemma regular_type_equal_cong : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K -> type_equal_cong_regular E T1 T2 K.
 Proof.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
-Lemma regular_type_equal_cong_inv : forall T1 T2,
-    type_equal_cong_regular T1 T2 -> type_equal_cong T1 T2.
+Lemma regular_type_equal_cong_inv : forall E T1 T2 K,
+    type_equal_cong_regular E T1 T2 K -> type_equal_cong E T1 T2 K.
 Proof.
-  introv Hte.
-  induction Hte; auto using type_equal_cong.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_type_equal_cong_inv.
@@ -1759,18 +1763,18 @@ Hint Extern 1 (kind ?K) =>
                        (regular_type_equal_cong H)))
   end : type_equal_cong_regular.
 
-Lemma regular_type_equal_symm : forall T1 T2,
-    type T1 -> type T2 ->
-    type_equal_symm T1 T2 -> type_equal_symm_regular T1 T2.
+Lemma regular_type_equal_symm : forall E T1 T2 K,
+    type_equal_symm E T1 T2 K -> type_equal_symm_regular E T1 T2 K.
 Proof.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
-Lemma regular_type_equal_symm_inv : forall T1 T2,
-    type_equal_symm_regular T1 T2 -> type_equal_symm T1 T2.
+Lemma regular_type_equal_symm_inv : forall E T1 T2 K,
+    type_equal_symm_regular E T1 T2 K -> type_equal_symm E T1 T2 K.
 Proof.
-  introv Hte.
-  induction Hte;
-    auto using regular_type_equal_cong_inv, type_equal_symm.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_type_equal_symm_inv.
@@ -1802,15 +1806,15 @@ Hint Extern 1 (kind ?K) =>
 Lemma regular_type_equal : forall E T1 T2 K,
     type_equal E T1 T2 K -> type_equal_regular E T1 T2 K.
 Proof.
-  destruct regular_kinding_type_equal.
-  assumption.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
 Lemma regular_type_equal_inv : forall E T1 T2 K,
     type_equal_regular E T1 T2 K -> type_equal E T1 T2 K.
 Proof.
-  destruct regular_kinding_type_equal_inv.
-  assumption.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_type_equal_inv.
@@ -1842,15 +1846,15 @@ Hint Extern 1 (kind ?K) =>
 Lemma regular_subtype : forall E T1 T2 K,
     subtype E T1 T2 K -> subtype_regular E T1 T2 K.
 Proof.
-  destruct regular_kinding_subtype.
-  assumption.
+  pose regular_combined_kinding.
+  tauto.
 Qed.
 
 Lemma regular_subtype_inv : forall E T1 T2 K,
     subtype_regular E T1 T2 K -> subtype E T1 T2 K.
 Proof.
-  destruct regular_kinding_subtype_inv.
-  assumption.
+  pose regular_combined_kinding_inv.
+  tauto.
 Qed.
 
 Hint Resolve regular_subtype_inv.
@@ -1878,13 +1882,6 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
       apply (proj44 (subtype_regular_wellformed
                        (regular_subtype H)))
   end : subtype_regular.
-
-
-
-
-
-
-
 
 Inductive valid_instance_regular : env -> list typ -> sch -> Prop :=
   | valid_instance_regular_empty : forall E T,
