@@ -1990,24 +1990,26 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       (forall x, x \notin L ->
          typing_regular (E & x ~ (bind_typ M)) (t2 ^ x) T2) -> 
       typing_regular E (trm_let t1 t2) T2
-  | typing_regular_constructor : forall c E T1 T2 t,
+  | typing_regular_constructor : forall c E T1 T2 T3 t,
       environment E ->
       type T1 ->
       type T2 ->
+      type T3 ->
       term t ->
-      kinding E T1
-        (knd_range (typ_top CSet.universe)
-                   (typ_or (typ_constructor c T2)
-                           (typ_bot (CSet.cosingleton c)))) ->
-      typing_regular E t T2 ->
+      kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
+      subtype E
+        (typ_proj T2 (CSet.singleton c))
+        (typ_constructor c T3)
+        (CSet.singleton c) ->
+      typing_regular E t T3 ->
       typing_regular E (trm_constructor c t) (typ_variant T1)
   | typing_regular_match : forall c L E T1 T2 T3 T4 T5
-                          T6 T7 t1 t2 t3,
+                          T6 T7 T8 t1 t2 t3,
       environment E ->
       (forall x, x \notin L ->
-         environment (E & x ~: (sch_empty (typ_variant T5)))) ->
+         environment (E & x ~: (sch_empty (typ_variant T3)))) ->
       (forall y, y \notin L -> 
-         environment (E & y ~: (sch_empty (typ_variant T6)))) ->
+         environment (E & y ~: (sch_empty (typ_variant T5)))) ->
       type T1 ->
       type T2 ->
       type T3 ->
@@ -2015,49 +2017,53 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       type T5 ->
       type T6 ->
       type T7 ->
+      type T8 ->
       term t1 ->
       term_body t2 ->
       term_body t3 ->
-      kinding E T1
-        (knd_range (typ_or (typ_constructor c T2)
-                           (typ_top (CSet.cosingleton c)))
-                   (typ_bot CSet.universe)) ->
-      kinding E T1 (knd_range (typ_or T3 T4)
-                              (typ_bot CSet.universe)) ->
-      kinding E T5
-              (knd_range (typ_top CSet.universe)
-                         (typ_or T3
-                                 (typ_bot (CSet.cosingleton c)))) ->
-      kinding E T6
-              (knd_range (typ_top CSet.universe)
-                         (typ_or (typ_bot (CSet.singleton c))
-                                 T4)) ->
+      kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
+      kinding E T3 (knd_range (typ_top CSet.universe) T4) ->
+      kinding E T5 (knd_range (typ_top CSet.universe) T6) ->
+      subtype E
+        (typ_proj T2 (CSet.singleton c))
+        (typ_constructor c T7)
+        (CSet.singleton c) ->
+      subtype E
+        (typ_proj T2 (CSet.singleton c))
+        (typ_proj T4 (CSet.singleton c))
+        (CSet.singleton c) ->
+      subtype E
+        (typ_proj T2 (CSet.cosingleton c))
+        (typ_proj T6 (CSet.cosingleton c))
+        (CSet.cosingleton c) ->
       typing_regular E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing_regular (E & x ~: (sch_empty (typ_variant T5)))
-                (t2 ^ x) T7) ->
+         typing_regular (E & x ~: (sch_empty (typ_variant T3)))
+                (t2 ^ x) T8) ->
       (forall y, y \notin L -> 
-         typing_regular (E & y ~: (sch_empty (typ_variant T6)))
-                (t3 ^ y) T7) ->
-      typing_regular E (trm_match t1 c t2 t3) T7
-  | typing_regular_destruct : forall c L E T1 T2 T3 t1 t2,
+         typing_regular (E & y ~: (sch_empty (typ_variant T5)))
+                (t3 ^ y) T8) ->
+      typing_regular E (trm_match t1 c t2 t3) T8
+  | typing_regular_destruct : forall c L E T1 T2 T3 T4 t1 t2,
       environment E ->
       (forall x, x \notin L ->
-         environment (E & x ~: (sch_empty T2))) ->
+         environment (E & x ~: (sch_empty T3))) ->
       type T1 ->
       type T2 ->
       type T3 ->
+      type T4 ->
       term t1 ->
       term_body t2 ->
-      kinding E T1
-        (knd_range (typ_or (typ_constructor c T2)
-                           (typ_bot (CSet.cosingleton c)))
-                   (typ_bot CSet.universe)) ->
+      kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
+      subtype E
+        (typ_constructor c T3)
+        (typ_proj T2 (CSet.singleton c))
+        (CSet.singleton c) ->
       typing_regular E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing_regular (E & x ~: (sch_empty T2))
-                (t2 ^ x) T3) ->
-      typing_regular E (trm_destruct t1 c t2) T3
+         typing_regular (E & x ~: (sch_empty T3))
+                (t2 ^ x) T4) ->
+      typing_regular E (trm_destruct t1 c t2) T4
   | typing_regular_absurd : forall E T1 T2 t1,
       environment E ->
       type T1 ->
@@ -2157,84 +2163,82 @@ Proof.
       assert (typing_regular (E & y ~: M) (t2 ^ y) T2)
         by auto.
       auto with typing_regular.
-  - apply typing_regular_constructor with (T2 := T2);
+  - assert (kind (knd_range (typ_top CSet.universe) T2)) as Hknd
+        by auto with kinding_regular.
+    inversion Hknd; subst.
+    apply typing_regular_constructor with (T2 := T2) (T3 := T3);
       auto with typing_regular kinding_regular.
   - assert
-      (kind (knd_range
-               (typ_or (typ_constructor c T2)
-                       (typ_top (CSet.cosingleton c)))
-               (typ_bot CSet.universe))) as Hk1
+      (kind (knd_range T2 (typ_bot CSet.universe))) as Hknd1
         by auto with kinding_regular.
+    inversion Hknd1; subst.
     assert
-      (kind (knd_range (typ_or T3 T4) (typ_bot CSet.universe))) as Hk2
+      (kind (knd_range (typ_top CSet.universe) T4)) as Hknd2
       by auto with kinding_regular.
+    inversion Hknd2; subst.
+    assert
+      (kind (knd_range (typ_top CSet.universe) T6)) as Hknd3
+      by auto with kinding_regular.
+    inversion Hknd3; subst.
     pick_fresh_gen L x.
     assert
-      (typing_regular (E & x ~: sch_empty (typ_variant T5)) 
-         (t2 ^ x) T7) by auto.
+      (typing_regular (E & x ~: sch_empty (typ_variant T3)) 
+         (t2 ^ x) T8) by auto.
     apply typing_regular_match
       with (L := L) (T1 := T1) (T2 := T2) (T3 := T3)
-           (T4 := T4) (T5 := T5) (T6 := T6);
+           (T4 := T4) (T5 := T5) (T6 := T6) (T7 := T7);
       auto with typing_regular kinding_regular.
     + intros y Hny.
       assert
-        (typing_regular (E & y ~: sch_empty (typ_variant T5)) 
-                        (t2 ^ y) T7)
+        (typing_regular (E & y ~: sch_empty (typ_variant T3)) 
+                        (t2 ^ y) T8)
         by auto.
       auto with typing_regular.
     + intros y Hny.
       assert
-        (typing_regular (E & y ~: sch_empty (typ_variant T6)) 
-                        (t3 ^ y) T7)
+        (typing_regular (E & y ~: sch_empty (typ_variant T5)) 
+                        (t3 ^ y) T8)
         by auto.
       auto with typing_regular.
-    + inversion Hk1; subst.
-      assert (type
-                (typ_or (typ_constructor c T2)
-                        (typ_top (CSet.cosingleton c)))) as Hto
-          by assumption.
+    + assert (type (typ_constructor c T7)) as Hto
+          by auto with subtype_regular.
       inversion Hto; subst.
-      assert (type (typ_constructor c T2)) as Htc by assumption.
-      inversion Htc; auto.
-    + inversion Hk2; subst.
-      assert (type (typ_or T3 T4)) as Hto by assumption.
-      inversion Hto; auto.
-    + inversion Hk2; subst.
-      assert (type (typ_or T3 T4)) as Hto by assumption.
-      inversion Hto; auto.
+      assumption.
+    + exists L.
+      intros y Hny.
+      assert
+        (typing_regular (E & y ~: sch_empty (typ_variant T3)) 
+                        (t2 ^ y) T8)
+        by auto.
+      auto with typing_regular.
     + exists L.
       intros y Hny.
       assert
         (typing_regular (E & y ~: sch_empty (typ_variant T5)) 
-                        (t2 ^ y) T7)
+                        (t3 ^ y) T8)
         by auto.
       auto with typing_regular.
-    + exists L.
-      intros y Hny.
-      assert
-        (typing_regular (E & y ~: sch_empty (typ_variant T6)) 
-                        (t3 ^ y) T7)
-        by auto.
-      auto with typing_regular.
-  - assert (type (typ_variant T1)) as Htv
-      by auto with typing_regular.
-    inversion Htv; subst.
-    pick_fresh_gen L x.
-    assert (typing_regular (E & x ~: sch_empty T2) (t2 ^ x) T3)
-      by auto.
-    apply typing_regular_destruct
-      with (L := L) (T1 := T1) (T2 := T2);
-      auto with typing_regular.
+  - apply typing_regular_destruct
+      with (L := L) (T1 := T1) (T2 := T2) (T3 := T3);
+      auto with typing_regular kinding_regular.
     + intros y Hfy.
-      assert (typing_regular (E & y ~: sch_empty T2) (t2 ^ y) T3)
+      assert (typing_regular (E & y ~: sch_empty T3) (t2 ^ y) T4)
         by auto.
       auto with typing_regular.
-    + rewrite scheme_empty_type.
-      eauto using scheme_from_env with typing_regular.
+    + assert (type (typ_proj T2 (CSet.singleton c))) as Htp
+        by auto with subtype_regular.
+      inversion Htp; assumption.
+    + assert (type (typ_constructor c T3)) as Htc
+        by auto with subtype_regular.
+      inversion Htc; assumption.
+    + pick_fresh_gen L x.
+      assert (typing_regular (E & x ~: sch_empty T3) (t2 ^ x) T4)
+        by auto.
+      auto with typing_regular.
     + exists L.
       intros y Hny.
       assert
-        (typing_regular (E & y ~: sch_empty T2) (t2 ^ y) T3)
+        (typing_regular (E & y ~: sch_empty T3) (t2 ^ y) T4)
         by auto.
       auto with typing_regular.
   - apply typing_regular_absurd with (T1 := T1);
