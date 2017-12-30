@@ -624,9 +624,6 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
 (* Congruence closure of type_equal_core *)
 
 with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
-  | type_equal_cong_core : forall E T1 T1' K,
-      type_equal_core E T1 T1' K ->
-      type_equal_cong E T1 T1' K
   | type_equal_cong_constructor : forall E c T1 T1' cs,
       type_equal_cong E T1 T1' knd_type ->
       cs = CSet.singleton c ->
@@ -685,6 +682,9 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
       subtype E T3 T3' CSet.universe ->
       subtype E T4' T4 CSet.universe ->
       type_equal_cong E T1 T2 (knd_range T3' T4')
+  | type_equal_cong_core : forall E T1 T1' K,
+      type_equal_core E T1 T1' K ->
+      type_equal_cong E T1 T1' K
 
 (* Symetric closure of type_equal_cong *)
 

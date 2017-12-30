@@ -1775,6 +1775,14 @@ Ltac csetdec :=
     csetdec_body
   end.
 
+Hint Extern 1 (CSet.Equal _ _) => csetdec : csetdec.
+Hint Extern 1 (CSet.Subset _ _) => csetdec : csetdec.
+Hint Extern 1 (CSet.Empty _) => csetdec : csetdec.
+Hint Extern 1 (CSet.Nonempty _) => csetdec : csetdec.
+Hint Extern 1 (CSet.Universe _) => csetdec : csetdec.
+Hint Extern 1 (CSet.Nonuniverse _) => csetdec : csetdec.
+Hint Extern 1 (CSet.Disjoint _ _) => csetdec : csetdec.
+
 (*
 Module CSetDecideTestCases.
 
