@@ -187,10 +187,10 @@ Inductive kind : knd -> Prop :=
 (** Definition of a well-formed scheme *)
 
 Inductive scheme_vars : sch -> list var -> Prop :=
-  | scheme_empty : forall T,
+  | scheme_vars_empty : forall T,
       type T ->
       scheme_vars (sch_empty T) nil
-  | scheme_bind : forall X Xs K M,
+  | scheme_vars_bind : forall X Xs K M,
       kind K ->
       scheme_vars (M ^ X) Xs ->
       scheme_vars (sch_bind K M) (X :: Xs).
@@ -735,6 +735,7 @@ Combined Scheme combined_kinding_mutind
 
 Inductive valid_instance : env -> list typ -> sch -> Prop :=
   | valid_instance_empty : forall E T,
+      kinding E T knd_type ->
       valid_instance E nil (sch_empty T)
   | valid_instance_bind : forall E K M T Ts,
       kinding E T K ->
@@ -752,7 +753,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
       typing E (trm_fvar x) (instance M Us)
   | typing_abs : forall L E T1 T2 t1, 
       (forall x, x \notin L -> 
-        typing (E & x ~ bind_typ (sch_empty T1)) (t1 ^ x) T2) -> 
+        typing (E & x ~: sch_empty T1) (t1 ^ x) T2) -> 
       typing E (trm_abs t1) (typ_arrow T1 T2)
   | typing_app : forall E S T t1 t2, 
       typing E t1 (typ_arrow S T) ->
@@ -763,7 +764,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
          typing
            (E & Xs ~::* M)
            t1 (instance_vars M Xs)) ->
-      (forall x, x \notin L -> typing (E & x ~ (bind_typ M)) (t2 ^ x) T2) -> 
+      (forall x, x \notin L -> typing (E & x ~: M) (t2 ^ x) T2) -> 
       typing E (trm_let t1 t2) T2
   | typing_constructor : forall c E T1 T2 T3 t,
       kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
@@ -886,7 +887,10 @@ Inductive red : trm -> trm -> Prop :=
       value (trm_constructor c1 t1) ->
       term_body t2 ->
       red (trm_destruct (trm_constructor c1 t1) c2 t2)
-          (t2 ^^ t1).
+          (t2 ^^ t1)
+  | red_absurd : forall t t',
+      red t t' ->
+      red (trm_absurd t) (trm_absurd t').
 
 (* ************************************************************** *)
 (** ** Description of the results *)

@@ -366,6 +366,29 @@ Qed.
 (* =============================================================== *)
 (** * Properties of types *)
 
+Lemma typ_open_k_fv : forall X U T k,
+    X \notin (typ_fv (typ_open_k k U T)) -> X \notin (typ_fv T).
+Proof.
+  introv Hn.
+  induction T; simpl in *; auto.
+Qed.
+
+Lemma typ_open_fv : forall X U T,
+    X \notin (typ_fv (typ_open T U)) -> X \notin (typ_fv T).
+Proof.
+  intros.
+  eapply typ_open_k_fv;
+  eassumption.
+Qed.
+
+Lemma typ_open_var_fv : forall X Y T,
+     X \notin (typ_fv (typ_open_var T Y)) -> X \notin (typ_fv T).
+Proof.
+  intros.
+  eapply typ_open_fv.
+  eassumption.
+Qed.
+
 (** Open on a type is the identity. *)
 
 Lemma typ_open_rec_core : forall T j V i U, i <> j ->
@@ -520,6 +543,29 @@ Qed.
 (* *************************************************************** *)
 (** ** Kinds *)
 
+Lemma knd_open_k_fv : forall X U K k,
+    X \notin (knd_fv (knd_open_k k U K)) -> X \notin (knd_fv K).
+Proof.
+  introv Hn.
+  induction K; simpl in *; eauto using typ_open_k_fv.
+Qed.
+
+Lemma knd_open_fv : forall X U K,
+    X \notin (knd_fv (knd_open K U)) -> X \notin (knd_fv K).
+Proof.
+  intros.
+  eapply knd_open_k_fv;
+  eassumption.
+Qed.
+
+Lemma knd_open_var_fv : forall X Y K,
+     X \notin (knd_fv (knd_open_var K Y)) -> X \notin (knd_fv K).
+Proof.
+  intros.
+  eapply knd_open_fv.
+  eassumption.
+Qed.
+
 (** Open on a kind is the identity. *)
 
 Lemma knd_open_rec_core : forall K j V i U, i <> j ->
@@ -666,6 +712,31 @@ Qed.
 
 Hint Rewrite sch_open_k_arity sch_open_arity
      sch_open_var_arity sch_subst_arity : rew_sch_arity.
+
+Lemma sch_open_k_fv : forall X U M k,
+    X \notin (sch_fv (sch_open_k k U M)) -> X \notin (sch_fv M).
+Proof.
+  introv Hn.
+  generalize dependent k.
+  induction M; intros; simpl in *;
+    eauto using typ_open_k_fv, knd_open_k_fv.   
+Qed.
+
+Lemma sch_open_fv : forall X U M,
+    X \notin (sch_fv (M ^^ U)) -> X \notin (sch_fv M).
+Proof.
+  intros.
+  eapply sch_open_k_fv;
+  eassumption.
+Qed.
+
+Lemma sch_open_var_fv : forall X Y M,
+     X \notin (sch_fv (M ^ Y)) -> X \notin (sch_fv M).
+Proof.
+  intros.
+  eapply sch_open_fv.
+  eassumption.
+Qed. 
 
 (** Open on a scheme is the identity. *)
 
@@ -936,6 +1007,28 @@ Proof.
   reflexivity. 
 Qed.
 
+Lemma env_subst_knd : forall Z U E X K,
+  env_subst Z U (E & X ~:: K)
+  = env_subst Z U E & X ~:: knd_subst Z U K.
+Proof.
+  intros.
+  unfold env_subst.
+  autorewrite with rew_env_map.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma env_subst_typ : forall Z U E x M,
+  env_subst Z U (E & x ~: M)
+  = env_subst Z U E & x ~: sch_subst Z U M.
+Proof.
+  intros.
+  unfold env_subst.
+  autorewrite with rew_env_map.
+  simpl.
+  reflexivity.
+Qed.
+
 Lemma env_subst_bind_knds : forall X U Xs M,
   X # (Xs ~::* M) -> type U ->
   env_subst X U (Xs ~::* M) = Xs ~::* (sch_subst X U M).
@@ -1047,7 +1140,33 @@ Proof.
     rewrite IHXs; autorewrite with rew_sch_arity; auto.
 Qed.
 
-Hint Rewrite env_dom_bind_kinds : rew_env_dom.
+Lemma env_dom_subst : forall Z U E,
+    dom (env_subst Z U E) = dom E.
+Proof.
+  intros.
+  induction E using env_ind;
+    autorewrite with rew_env_subst rew_env_dom.
+  - reflexivity.
+  - rewrite IHE. reflexivity.
+Qed.
+
+Lemma env_dom_substs : forall Zs Us E,
+    dom (env_substs Zs Us E) = dom E.
+Proof.
+  intros.
+  generalize dependent E.
+  generalize dependent Us.
+  induction Zs; intros.
+  - simpl. reflexivity.
+  - destruct Us.
+    + simpl. reflexivity.
+    + simpl.
+      rewrite IHZs with (Us := Us).
+      apply env_dom_subst.
+Qed.
+
+Hint Rewrite env_dom_bind_kinds env_dom_subst env_dom_substs
+  : rew_env_dom.
 
 Lemma env_subst_fresh : forall X U E, 
   X \notin env_fv E -> 
@@ -1070,26 +1189,6 @@ Proof.
   destruct Us; auto.
   destruct H.
   rewrite env_subst_fresh; auto.
-Qed.
-
-Lemma env_subst_notin : forall X Z U E,
-    X # E -> X # env_subst Z U E.
-Proof.
-  introv Hn.
-  induction E using env_ind; autorewrite with rew_env_subst; auto.
-Qed.
-
-Lemma env_substs_notin : forall X Zs Us E,
-    X # E -> X # env_substs Zs Us E.
-Proof.
-  introv Hn.
-  generalize dependent E.
-  generalize dependent Us.
-  induction Zs; intros; try assumption.
-  destruct Us; try assumption.
-  apply IHZs.
-  apply env_subst_notin.
-  assumption.
 Qed.
 
 Lemma env_subst_binds : forall X B E Z U,

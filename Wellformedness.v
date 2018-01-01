@@ -114,9 +114,14 @@ Hint Resolve types_fvars.
 (** Types are stable by type substitution *)
 
 Lemma typ_subst_type : forall T Z U,
-  type U -> type T -> type (typ_subst Z U T).
+  type U -> type (typ_subst Z U T) <-> type T.
 Proof.
-  induction 2; simpls*. case_var*.
+  introv Htu.
+  split.
+  - introv Ht.
+    induction T; simpl in Ht; inversion Ht; auto.
+  - introv Ht.
+    induction Ht; simpls*. case_var*.
 Qed.
 
 (** Types are stable by iterated type substitution *)
@@ -128,7 +133,8 @@ Lemma typ_substs_types : forall Xs Us T,
 Proof.
   induction Xs; destruct Us; simpl; introv TU TT; auto.
   destruct TU. simpls. inversions H. inversions* H0.
-  auto using typ_subst_type.
+  apply IHXs; auto.
+  rewrite typ_subst_type; auto.
 Qed.
 
 (** List of types are stable by type substitution *)
@@ -141,7 +147,8 @@ Proof.
   induction Ts; simpl in *; auto.
   rewrite types_cons in *.
   destruct Hts.
-  split; auto using typ_subst_type.
+  split; auto.
+  rewrite typ_subst_type; auto.
 Qed.
 
 (* =============================================================== *)
@@ -150,10 +157,17 @@ Qed.
 (** Kinds are stable by type substitution *)
 
 Lemma knd_subst_kind : forall K Z U,
-  type U -> kind K -> kind (knd_subst Z U K).
+  type U -> kind (knd_subst Z U K) <-> kind K.
 Proof.
-  introv Ht Hk.
-  induction Hk; simpl; auto using typ_subst_type.
+  introv Ht.
+  split.
+  - introv Hk.
+    induction K; simpl in Hk; auto.
+    inversion Hk.
+    rewrite typ_subst_type in *; auto.
+  - introv Hk.
+    induction Hk; simpl; auto.
+    apply kind_range; rewrite typ_subst_type; auto.
 Qed.  
 
 (* =============================================================== *)
@@ -184,23 +198,46 @@ Hint Resolve -> scheme_empty_type.
 Lemma sch_subst_vars_type : forall M Xs Z U,
   fresh \{Z} (sch_arity M) Xs -> 
   type U ->
-  scheme_vars M Xs -> scheme_vars (sch_subst Z U M) Xs.
+  scheme_vars (sch_subst Z U M) Xs <-> scheme_vars M Xs.
 Proof.
-  introv Hf Ht Hs.
-  induction Hs; simpl; auto using typ_subst_type.
-  destruct Hf.
-  autorewrite with rew_sch_arity in *.
-  apply scheme_bind; auto using knd_subst_kind.
-  rewrite sch_subst_open_var; auto.
+  introv Hf Ht.
+  split.
+  - introv Hs.
+    generalize dependent M.
+    induction Xs; introv Hl Hs.
+    + destruct M; simpl in Hs; inversion Hs; subst.
+      apply scheme_vars_empty.
+      rewrite <- typ_subst_type with (Z := Z) (U := U); auto.
+    + { destruct M; simpl in Hs; inversion Hs; subst.
+        apply scheme_vars_bind.
+        - rewrite <- knd_subst_kind with (Z := Z) (U := U); auto.
+        - destruct Hl.
+          apply IHXs; autorewrite with rew_sch_arity; auto.
+          rewrite <- sch_subst_open_var; auto. }
+  - introv Hs.
+    induction Hs; simpl.
+    + apply scheme_vars_empty.
+      rewrite typ_subst_type with (Z := Z) (U := U); auto.
+    + { destruct Hf.
+        autorewrite with rew_sch_arity in *.
+        apply scheme_vars_bind. 
+        - rewrite knd_subst_kind with (Z := Z) (U := U); auto.
+        - rewrite sch_subst_open_var; auto. }
 Qed.
 
 Lemma sch_subst_type : forall M Z U,
-    type U -> scheme M -> scheme (sch_subst Z U M).
+    type U -> scheme (sch_subst Z U M) <-> scheme M.
 Proof.
-  introv Ht [L Hs].
-  exists (\{Z} \u L \u (typ_fv U)). introv Hf.
-  autorewrite with rew_sch_arity in *.
-  apply sch_subst_vars_type; auto.
+  introv Ht.
+  split.
+  - introv [L Hs].
+    exists (L \u \{Z}). introv Hf.
+    autorewrite with rew_sch_arity in *.
+    rewrite <- sch_subst_vars_type with (Z := Z) (U := U); auto.
+  - introv [L Hs].
+    exists (\{Z} \u L \u (typ_fv U)). introv Hf.
+    autorewrite with rew_sch_arity in *.
+    apply sch_subst_vars_type; auto.
 Qed.
 
 (** ** Instantiating a scheme with types gives a type *)
@@ -286,10 +323,14 @@ Lemma env_subst_environment : forall X U E,
 Proof.
   introv Ht He.
   induction He; autorewrite with rew_env_subst; auto.
-  - apply environment_knd;
-      auto using knd_subst_kind, env_subst_notin.
-  - apply environment_typ;
-      auto using sch_subst_type, env_subst_notin.
+  - apply environment_knd; auto.
+    + rewrite knd_subst_kind; auto.
+    + autorewrite with rew_env_dom.
+      assumption.
+  - apply environment_typ; auto.
+    + rewrite sch_subst_type; auto.
+    + autorewrite with rew_env_dom.
+      assumption.
 Qed.
 
 Lemma environment_retract : forall E F,
@@ -1098,7 +1139,7 @@ Combined Scheme combined_kinding_regular_mutind
        type_equal_cong_regular_mutind, type_equal_symm_regular_mutind,
        type_equal_regular_mutind, subtype_regular_mutind.
 
-Lemma valid_kind_regular_wellformed : forall E K,
+Lemma valid_kind_regular_inv : forall E K,
     valid_kind_regular E K ->
     environment E /\ kind K.
 Proof.
@@ -1111,13 +1152,13 @@ Hint Constructors valid_kind_regular : valid_kind_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_kind_regular E _ |- _ =>
-      apply (proj1 (valid_kind_regular_wellformed H))
+      apply (proj1 (valid_kind_regular_inv H))
   end : valid_kind_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : valid_kind_regular _ K |- _ =>
-      apply (proj2 (valid_kind_regular_wellformed H))
+      apply (proj2 (valid_kind_regular_inv H))
   end : valid_kind_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
@@ -1125,11 +1166,11 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
   | H : valid_kind_regular _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj2 (valid_kind_regular_wellformed H));
+        by apply (proj2 (valid_kind_regular_inv H));
       inversion Hknd; assumption
   end : valid_kind_regular.
 
-Lemma kinding_regular_wellformed : forall E T K,
+Lemma kinding_regular_inv : forall E T K,
     kinding_regular E T K ->
     environment E /\ type T /\ kind K.
 Proof.
@@ -1142,19 +1183,19 @@ Hint Constructors kinding_regular : kinding_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : kinding_regular E _ _ |- _ =>
-      apply (proj31 (kinding_regular_wellformed H))
+      apply (proj31 (kinding_regular_inv H))
   end : kinding_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : kinding_regular _ T _ |- _ =>
-      apply (proj32 (kinding_regular_wellformed H))
+      apply (proj32 (kinding_regular_inv H))
   end : kinding_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : kinding_regular _ _ K |- _ =>
-      apply (proj33 (kinding_regular_wellformed H))
+      apply (proj33 (kinding_regular_inv H))
   end : kinding_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
@@ -1162,11 +1203,11 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
   | H : kinding_regular _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj33 (kinding_regular_wellformed H));
+        by apply (proj33 (kinding_regular_inv H));
       inversion Hknd; assumption
   end : kinding_regular.
 
-Lemma valid_scheme_vars_regular_wellformed : forall E M Xs,
+Lemma valid_scheme_vars_regular_inv : forall E M Xs,
     valid_scheme_vars_regular E M Xs ->
     environment E /\ scheme_vars M Xs.
 Proof.
@@ -1180,16 +1221,16 @@ Hint Constructors valid_scheme_vars_regular
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_scheme_vars_regular E _ _ |- _ =>
-      apply (proj1 (valid_scheme_vars_regular_wellformed H))
+      apply (proj1 (valid_scheme_vars_regular_inv H))
   end : valid_scheme_vars_regular.
 
 Hint Extern 1 (scheme_vars ?M ?Xs) =>
   match goal with
   | H : valid_scheme_vars_regular _ M Xs |- _ =>
-      apply (proj2 (valid_scheme_vars_regular_wellformed H))
+      apply (proj2 (valid_scheme_vars_regular_inv H))
   end : valid_scheme_vars_regular.
 
-Lemma valid_scheme_regular_wellformed : forall E M,
+Lemma valid_scheme_regular_inv : forall E M,
     valid_scheme_regular E M ->
     environment E /\ scheme M.
 Proof.
@@ -1202,16 +1243,16 @@ Hint Constructors valid_scheme_regular : valid_scheme_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_scheme_regular E _ |- _ =>
-      apply (proj1 (valid_scheme_regular_wellformed H))
+      apply (proj1 (valid_scheme_regular_inv H))
   end : valid_scheme_regular.
 
 Hint Extern 1 (scheme ?M) =>
   match goal with
   | H : valid_scheme_regular _ M |- _ =>
-      apply (proj2 (valid_scheme_regular_wellformed H))
+      apply (proj2 (valid_scheme_regular_inv H))
   end : valid_scheme_regular.
 
-Lemma valid_env_regular_wellformed : forall E,
+Lemma valid_env_regular_inv : forall E,
     valid_env_regular E -> environment E.
 Proof.
   introv He.
@@ -1223,10 +1264,10 @@ Hint Constructors valid_env_regular : valid_env_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_env_regular E |- _ =>
-      apply (valid_env_regular_wellformed H)
+      apply (valid_env_regular_inv H)
   end : valid_env_regular.
 
-Lemma type_equal_core_regular_wellformed : forall E T1 T2 K,
+Lemma type_equal_core_regular_inv : forall E T1 T2 K,
     type_equal_core_regular E T1 T2 K ->
     environment E /\ type T1 /\ type T2 /\ kind K.
 Proof.
@@ -1239,21 +1280,21 @@ Hint Constructors type_equal_core_regular : type_equal_core_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_core_regular E _ _ _ |- _ =>
-      apply (proj41 (type_equal_core_regular_wellformed H))
+      apply (proj41 (type_equal_core_regular_inv H))
   end : type_equal_core_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_core_regular _ T _ _ |- _ =>
-      apply (proj42 (type_equal_core_regular_wellformed H))
+      apply (proj42 (type_equal_core_regular_inv H))
   | H : type_equal_core_regular _ _ T _ |- _ =>
-      apply (proj43 (type_equal_core_regular_wellformed H))
+      apply (proj43 (type_equal_core_regular_inv H))
   end : type_equal_core_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_core_regular _ _ _ K |- _ =>
-      apply (proj44 (type_equal_core_regular_wellformed H))
+      apply (proj44 (type_equal_core_regular_inv H))
   end : type_equal_core_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
@@ -1261,11 +1302,11 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
   | H : type_equal_core_regular _ _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_core_regular_wellformed H));
+        by apply (proj44 (type_equal_core_regular_inv H));
       inversion Hknd; assumption
   end : type_equal_core_regular.
 
-Lemma type_equal_cong_regular_wellformed : forall E T1 T2 K,
+Lemma type_equal_cong_regular_inv : forall E T1 T2 K,
     type_equal_cong_regular E T1 T2 K ->
     environment E /\ type T1 /\ type T2 /\ kind K.
 Proof.
@@ -1278,21 +1319,21 @@ Hint Constructors type_equal_cong_regular : type_equal_cong_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_cong_regular E _ _ _ |- _ =>
-      apply (proj41 (type_equal_cong_regular_wellformed H))
+      apply (proj41 (type_equal_cong_regular_inv H))
   end : type_equal_cong_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_cong_regular _ T _ _ |- _ =>
-      apply (proj42 (type_equal_cong_regular_wellformed H))
+      apply (proj42 (type_equal_cong_regular_inv H))
   | H : type_equal_cong_regular _ _ T _ |- _ =>
-      apply (proj43 (type_equal_cong_regular_wellformed H))
+      apply (proj43 (type_equal_cong_regular_inv H))
   end : type_equal_cong_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_cong_regular _ _ _ K |- _ =>
-      apply (proj44 (type_equal_cong_regular_wellformed H))
+      apply (proj44 (type_equal_cong_regular_inv H))
   end : type_equal_cong_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
@@ -1300,11 +1341,11 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
   | H : type_equal_cong_regular _ _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_cong_regular_wellformed H));
+        by apply (proj44 (type_equal_cong_regular_inv H));
       inversion Hknd; assumption
   end : type_equal_cong_regular.
 
-Lemma type_equal_symm_regular_wellformed : forall E T1 T2 K,
+Lemma type_equal_symm_regular_inv : forall E T1 T2 K,
     type_equal_symm_regular E T1 T2 K ->
     environment E /\ type T1 /\ type T2 /\ kind K.
 Proof.
@@ -1317,21 +1358,21 @@ Hint Constructors type_equal_symm_regular : type_equal_symm_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_symm_regular E _ _ _ |- _ =>
-      apply (proj41 (type_equal_symm_regular_wellformed H))
+      apply (proj41 (type_equal_symm_regular_inv H))
   end : type_equal_symm_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_symm_regular _ T _ _ |- _ =>
-      apply (proj42 (type_equal_symm_regular_wellformed H))
+      apply (proj42 (type_equal_symm_regular_inv H))
   | H : type_equal_symm_regular _ _ T _ |- _ =>
-      apply (proj43 (type_equal_symm_regular_wellformed H))
+      apply (proj43 (type_equal_symm_regular_inv H))
   end : type_equal_symm_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_symm_regular _ _ _ K |- _ =>
-      apply (proj44 (type_equal_symm_regular_wellformed H))
+      apply (proj44 (type_equal_symm_regular_inv H))
   end : type_equal_symm_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
@@ -1339,11 +1380,11 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
   | H : type_equal_symm_regular _ _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_symm_regular_wellformed H));
+        by apply (proj44 (type_equal_symm_regular_inv H));
       inversion Hknd; assumption
   end : type_equal_symm_regular.
 
-Lemma type_equal_regular_wellformed : forall E T1 T2 K,
+Lemma type_equal_regular_inv : forall E T1 T2 K,
     type_equal_regular E T1 T2 K ->
     environment E /\ type T1 /\ type T2 /\ kind K.
 Proof.
@@ -1356,21 +1397,21 @@ Hint Constructors type_equal_regular : type_equal_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_regular E _ _ _ |- _ =>
-      apply (proj41 (type_equal_regular_wellformed H))
+      apply (proj41 (type_equal_regular_inv H))
   end : type_equal_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_regular _ T _ _ |- _ =>
-      apply (proj42 (type_equal_regular_wellformed H))
+      apply (proj42 (type_equal_regular_inv H))
   | H : type_equal_regular _ _ T _ |- _ =>
-      apply (proj43 (type_equal_regular_wellformed H))
+      apply (proj43 (type_equal_regular_inv H))
   end : type_equal_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_regular _ _ _ K |- _ =>
-      apply (proj44 (type_equal_regular_wellformed H))
+      apply (proj44 (type_equal_regular_inv H))
   end : type_equal_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
@@ -1378,11 +1419,11 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
   | H : type_equal_regular _ _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_regular_wellformed H));
+        by apply (proj44 (type_equal_regular_inv H));
       inversion Hknd; assumption
   end : type_equal_regular.
 
-Lemma subtype_regular_wellformed : forall E T1 T2 cs,
+Lemma subtype_regular_inv : forall E T1 T2 cs,
     subtype_regular E T1 T2 cs ->
     environment E /\ type T1 /\ type T2 /\ CSet.Nonempty cs.
 Proof.
@@ -1395,21 +1436,21 @@ Hint Constructors subtype_regular : subtype_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : subtype_regular E _ _ _ |- _ =>
-      apply (proj41 (subtype_regular_wellformed H))
+      apply (proj41 (subtype_regular_inv H))
   end : subtype_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : subtype_regular _ T _ _ |- _ =>
-      apply (proj42 (subtype_regular_wellformed H))
+      apply (proj42 (subtype_regular_inv H))
   | H : subtype_regular _ _ T _ |- _ =>
-      apply (proj43 (subtype_regular_wellformed H))
+      apply (proj43 (subtype_regular_inv H))
   end : subtype_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : subtype_regular _ _ _ cs |- _ =>
-      apply (proj44 (subtype_regular_wellformed H))
+      apply (proj44 (subtype_regular_inv H))
   end : subtype_regular.
 
 Lemma regular_combined_kinding :
@@ -1461,7 +1502,7 @@ Proof.
     auto with subtype_regular type_equal_regular.
 Qed.
 
-Lemma regular_combined_kinding_inv :
+Lemma unregular_combined_kinding :
   (forall E K, valid_kind_regular E K -> valid_kind E K)
   /\ (forall E T K, kinding_regular E T K -> kinding E T K)
   /\ (forall E M Xs,
@@ -1489,26 +1530,26 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_valid_kind_inv : forall T1 T2,
+Lemma unregular_valid_kind : forall T1 T2,
     valid_kind_regular T1 T2 -> valid_kind T1 T2.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_valid_kind_inv.
+Hint Resolve unregular_valid_kind.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_kind E _ |- _ =>
-      apply (proj1 (valid_kind_regular_wellformed
+      apply (proj1 (valid_kind_regular_inv
                       (regular_valid_kind H)))
   end : valid_kind_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : valid_kind _ K |- _ =>
-      apply (proj2 (valid_kind_regular_wellformed
+      apply (proj2 (valid_kind_regular_inv
                       (regular_valid_kind H)))
   end : valid_kind_regular.
 
@@ -1519,31 +1560,31 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_kinding_inv : forall E T K,
+Lemma unregular_kinding : forall E T K,
     kinding_regular E T K -> kinding E T K.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_kinding_inv.
+Hint Resolve unregular_kinding.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : kinding E _ _ |- _ =>
-      apply (proj31 (kinding_regular_wellformed (regular_kinding H)))
+      apply (proj31 (kinding_regular_inv (regular_kinding H)))
   end : kinding_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : kinding _ T _ |- _ =>
-      apply (proj32 (kinding_regular_wellformed (regular_kinding H)))
+      apply (proj32 (kinding_regular_inv (regular_kinding H)))
   end : kinding_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : kinding _ _ K |- _ =>
-      apply (proj33 (kinding_regular_wellformed (regular_kinding H)))
+      apply (proj33 (kinding_regular_inv (regular_kinding H)))
   end : kinding_regular.
 
 Lemma regular_valid_scheme_vars : forall E M Xs,
@@ -1553,26 +1594,26 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_valid_scheme_vars_inv : forall E M Xs,
+Lemma unregular_valid_scheme_vars : forall E M Xs,
     valid_scheme_vars_regular E M Xs -> valid_scheme_vars E M Xs.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_valid_scheme_vars_inv.
+Hint Resolve unregular_valid_scheme_vars.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_scheme_vars E _ _ |- _ =>
-      apply (proj1 (valid_scheme_vars_regular_wellformed
+      apply (proj1 (valid_scheme_vars_regular_inv
                       (regular_valid_scheme_vars H)))
   end : valid_scheme_vars_regular.
 
 Hint Extern 1 (scheme_vars ?M ?Xs) =>
   match goal with
   | H : valid_scheme_vars _ M Xs |- _ =>
-      apply (proj2 (valid_scheme_vars_regular_wellformed
+      apply (proj2 (valid_scheme_vars_regular_inv
                       (regular_valid_scheme_vars H)))
   end : valid_scheme_vars_regular.
 
@@ -1583,26 +1624,26 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_valid_scheme_inv : forall E M,
+Lemma unregular_valid_scheme : forall E M,
     valid_scheme_regular E M -> valid_scheme E M.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_valid_scheme_inv.
+Hint Resolve unregular_valid_scheme.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_scheme E _ |- _ =>
-      apply (proj1 (valid_scheme_regular_wellformed
+      apply (proj1 (valid_scheme_regular_inv
                       (regular_valid_scheme H)))
   end : valid_scheme_regular.
 
 Hint Extern 1 (scheme ?M) =>
   match goal with
   | H : valid_scheme _ M |- _ =>
-      apply (proj2 (valid_scheme_regular_wellformed
+      apply (proj2 (valid_scheme_regular_inv
                       (regular_valid_scheme H)))
   end : valid_scheme_regular.
 
@@ -1613,19 +1654,19 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_valid_env_inv : forall E,
+Lemma unregular_valid_env : forall E,
     valid_env_regular E -> valid_env E.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_valid_env_inv.
+Hint Resolve unregular_valid_env.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_env E |- _ =>
-      apply (valid_env_regular_wellformed
+      apply (valid_env_regular_inv
                (regular_valid_env H))
   end : valid_env_regular.
 
@@ -1636,36 +1677,36 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_type_equal_core_inv : forall E T1 T2 K,
+Lemma unregular_type_equal_core : forall E T1 T2 K,
     type_equal_core_regular E T1 T2 K -> type_equal_core E T1 T2 K.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_type_equal_core_inv.
+Hint Resolve unregular_type_equal_core.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_core E _ _ _ |- _ =>
-      apply (proj41 (type_equal_core_regular_wellformed
+      apply (proj41 (type_equal_core_regular_inv
                        (regular_type_equal_core H)))
   end : type_equal_core_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_core _ T _ _ |- _ =>
-      apply (proj42 (type_equal_core_regular_wellformed
+      apply (proj42 (type_equal_core_regular_inv
                        (regular_type_equal_core H)))
   | H : type_equal_core _ _ T _ |- _ =>
-      apply (proj43 (type_equal_core_regular_wellformed
+      apply (proj43 (type_equal_core_regular_inv
                        (regular_type_equal_core H)))
   end : type_equal_core_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_core _ _ _ K |- _ =>
-      apply (proj44 (type_equal_core_regular_wellformed
+      apply (proj44 (type_equal_core_regular_inv
                        (regular_type_equal_core H)))
   end : type_equal_core_regular.
 
@@ -1676,36 +1717,36 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_type_equal_cong_inv : forall E T1 T2 K,
+Lemma unregular_type_equal_cong : forall E T1 T2 K,
     type_equal_cong_regular E T1 T2 K -> type_equal_cong E T1 T2 K.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_type_equal_cong_inv.
+Hint Resolve unregular_type_equal_cong.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_cong E _ _ _ |- _ =>
-      apply (proj41 (type_equal_cong_regular_wellformed
+      apply (proj41 (type_equal_cong_regular_inv
                        (regular_type_equal_cong H)))
   end : type_equal_cong_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_cong _ T _ _ |- _ =>
-      apply (proj42 (type_equal_cong_regular_wellformed
+      apply (proj42 (type_equal_cong_regular_inv
                        (regular_type_equal_cong H)))
   | H : type_equal_cong _ _ T _ |- _ =>
-      apply (proj43 (type_equal_cong_regular_wellformed
+      apply (proj43 (type_equal_cong_regular_inv
                        (regular_type_equal_cong H)))
   end : type_equal_cong_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_cong _ _ _ K |- _ =>
-      apply (proj44 (type_equal_cong_regular_wellformed
+      apply (proj44 (type_equal_cong_regular_inv
                        (regular_type_equal_cong H)))
   end : type_equal_cong_regular.
 
@@ -1716,36 +1757,36 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_type_equal_symm_inv : forall E T1 T2 K,
+Lemma unregular_type_equal_symm : forall E T1 T2 K,
     type_equal_symm_regular E T1 T2 K -> type_equal_symm E T1 T2 K.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_type_equal_symm_inv.
+Hint Resolve unregular_type_equal_symm.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_symm E _ _ _ |- _ =>
-      apply (proj41 (type_equal_symm_regular_wellformed
+      apply (proj41 (type_equal_symm_regular_inv
                        (regular_type_equal_symm H)))
   end : type_equal_symm_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_symm _ T _ _ |- _ =>
-      apply (proj42 (type_equal_symm_regular_wellformed
+      apply (proj42 (type_equal_symm_regular_inv
                        (regular_type_equal_symm H)))
   | H : type_equal_symm _ _ T _ |- _ =>
-      apply (proj43 (type_equal_symm_regular_wellformed
+      apply (proj43 (type_equal_symm_regular_inv
                        (regular_type_equal_symm H)))
   end : type_equal_symm_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_symm _ _ _ K |- _ =>
-      apply (proj44 (type_equal_symm_regular_wellformed
+      apply (proj44 (type_equal_symm_regular_inv
                        (regular_type_equal_symm H)))
   end : type_equal_symm_regular.
 
@@ -1756,36 +1797,36 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_type_equal_inv : forall E T1 T2 K,
+Lemma unregular_type_equal : forall E T1 T2 K,
     type_equal_regular E T1 T2 K -> type_equal E T1 T2 K.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_type_equal_inv.
+Hint Resolve unregular_type_equal.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal E _ _ _ |- _ =>
-      apply (proj41 (type_equal_regular_wellformed
+      apply (proj41 (type_equal_regular_inv
                        (regular_type_equal H)))
   end : type_equal_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal _ T _ _ |- _ =>
-      apply (proj42 (type_equal_regular_wellformed
+      apply (proj42 (type_equal_regular_inv
                        (regular_type_equal H)))
   | H : type_equal _ _ T _ |- _ =>
-      apply (proj43 (type_equal_regular_wellformed
+      apply (proj43 (type_equal_regular_inv
                        (regular_type_equal H)))
   end : type_equal_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal _ _ _ K |- _ =>
-      apply (proj44 (type_equal_regular_wellformed
+      apply (proj44 (type_equal_regular_inv
                        (regular_type_equal H)))
   end : type_equal_regular.
 
@@ -1796,63 +1837,100 @@ Proof.
   tauto.
 Qed.
 
-Lemma regular_subtype_inv : forall E T1 T2 K,
+Lemma unregular_subtype : forall E T1 T2 K,
     subtype_regular E T1 T2 K -> subtype E T1 T2 K.
 Proof.
-  pose regular_combined_kinding_inv.
+  pose unregular_combined_kinding.
   tauto.
 Qed.
 
-Hint Resolve regular_subtype_inv.
+Hint Resolve unregular_subtype.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : subtype E _ _ _ |- _ =>
-      apply (proj41 (subtype_regular_wellformed
+      apply (proj41 (subtype_regular_inv
                        (regular_subtype H)))
   end : subtype_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : subtype _ T _ _ |- _ =>
-      apply (proj42 (subtype_regular_wellformed
+      apply (proj42 (subtype_regular_inv
                        (regular_subtype H)))
   | H : subtype _ _ T _ |- _ =>
-      apply (proj43 (subtype_regular_wellformed
+      apply (proj43 (subtype_regular_inv
                        (regular_subtype H)))
   end : subtype_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : subtype _ _ _ cs |- _ =>
-      apply (proj44 (subtype_regular_wellformed
+      apply (proj44 (subtype_regular_inv
                        (regular_subtype H)))
   end : subtype_regular.
 
 Inductive valid_instance_regular : env -> list typ -> sch -> Prop :=
   | valid_instance_regular_empty : forall E T,
+      kinding E T knd_type ->
+      environment E ->
+      type T ->
       types (sch_arity (sch_empty T)) nil ->
       valid_instance_regular E nil (sch_empty T)
   | valid_instance_regular_bind : forall E K M T Ts,
-      types (sch_arity M) Ts ->
-      types (sch_arity (sch_bind K M)) (T :: Ts) ->
       kinding E T K ->
       valid_instance_regular E Ts (M ^^ T) ->
+      environment E ->
+      type T ->
+      types (sch_arity M) Ts ->
+      scheme (M ^^ T) ->
+      kind K ->
+      types (sch_arity (sch_bind K M)) (T :: Ts) ->
       valid_instance_regular E (T :: Ts) (sch_bind K M).
 
-Lemma valid_instance_regular_wellformed : forall E Ts M,
-    valid_instance_regular E Ts M -> types (sch_arity M) Ts.
+Lemma valid_instance_regular_inv : forall E Ts M,
+    valid_instance_regular E Ts M ->
+    environment E /\ types (sch_arity M) Ts /\ scheme M.
 Proof.
   introv Hi.
-  destruct Hi; auto.
+  induction Hi; splits; auto.
+  assert (scheme (M ^^ T)) as Hs by assumption.
+  destruct Hs as [L Hs].
+  pick_fresh_gen (L \u sch_fv M) Y.
+  exists (L \u \{Y}).
+  introv Hl.
+  destruct Xs.
+  + contradict Hl.
+  + destruct Hl.
+    apply scheme_vars_bind; auto.
+    unfold sch_open_var.
+    rewrite sch_subst_intro with (X := Y); auto.
+    rewrite sch_subst_vars_type; autorewrite with rew_sch_arity; auto.
+    autorewrite with rew_sch_arity in *.
+    assert (scheme_vars (sch_open M T) Xs) as Hsv by auto.
+    rewrite sch_subst_intro with (X := Y) in Hsv; auto.
+    rewrite sch_subst_vars_type in Hsv;
+      autorewrite with rew_sch_arity; auto.
 Qed.
 
 Hint Constructors valid_instance_regular : valid_instance_regular.
 
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_instance_regular E _ _ |- _ =>
+      apply (proj31 (valid_instance_regular_inv H))
+  end : valid_instance_regular.
+
 Hint Extern 1 (types (sch_arity ?M) ?Ts) =>
   match goal with
   | H : valid_instance_regular _ Ts M |- _ =>
-      apply (valid_instance_regular_wellformed H)
+      apply (proj32 (valid_instance_regular_inv H))
+  end : valid_instance_regular.
+
+Hint Extern 1 (scheme ?M) =>
+  match goal with
+  | H : valid_instance_regular _ _ M |- _ =>
+      apply (proj33 (valid_instance_regular_inv H))
   end : valid_instance_regular.
 
 Lemma regular_valid_instance : forall E Ts M,
@@ -1860,31 +1938,47 @@ Lemma regular_valid_instance : forall E Ts M,
 Proof.
   introv Hi.
   induction Hi; auto with valid_instance_regular.
+  - auto with valid_instance_regular kinding_regular.
   - assert (type T) by auto with kinding_regular.
     assert (types (sch_arity (sch_open M T)) Ts) as Hts
       by auto with valid_instance_regular.
     destruct Hts as [Hl Hts].
-    apply valid_instance_regular_bind; auto.
+    apply valid_instance_regular_bind;
+      auto with valid_instance_regular kinding_regular.
     + rewrite <- sch_open_arity with (U := T).
       auto with valid_instance_regular.
     + autorewrite with rew_sch_arity in Hl.
       split; simpl; auto.
 Qed.
 
-Lemma regular_valid_instance_inv : forall E Ts M,
+Lemma unregular_valid_instance : forall E Ts M,
     valid_instance_regular E Ts M -> valid_instance E Ts M.
 Proof.
   introv Hi.
   induction Hi; auto using valid_instance.
 Qed.
 
-Hint Resolve regular_valid_instance_inv.
+Hint Resolve unregular_valid_instance.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_instance E _ _ |- _ =>
+      apply (proj31 (valid_instance_regular_inv
+                       (regular_valid_instance H)))
+  end : valid_instance_regular.
 
 Hint Extern 1 (types (sch_arity ?M) ?Ts) =>
   match goal with
   | H : valid_instance _ Ts M |- _ =>
-      apply (valid_instance_regular_wellformed
-               (regular_valid_instance H))
+      apply (proj32 (valid_instance_regular_inv
+                       (regular_valid_instance H)))
+  end : valid_instance_regular.
+
+Hint Extern 1 (scheme ?M) =>
+  match goal with
+  | H : valid_instance_regular _ _ M |- _ =>
+      apply (proj33 (valid_instance_regular_inv
+                       (regular_valid_instance H)))
   end : valid_instance_regular.
 
 Inductive typing_regular : env -> trm -> typ -> Prop :=
@@ -2021,7 +2115,7 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       typing_regular E t1 (typ_variant T1) ->
       typing_regular E (trm_absurd t1) T2.
 
-Lemma typing_regular_wellformed : forall E t T,
+Lemma typing_regular_inv : forall E t T,
     typing_regular E t T ->
       environment E /\ term t /\ type T.
 Proof.
@@ -2034,19 +2128,19 @@ Hint Constructors typing_regular : typing_regular.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : typing_regular E _ _ |- _ =>
-      apply (proj31 (typing_regular_wellformed H))
+      apply (proj31 (typing_regular_inv H))
   end : typing_regular.
 
 Hint Extern 1 (term ?t) =>
   match goal with
   | H : typing_regular _ t _ |- _ =>
-      apply (proj32 (typing_regular_wellformed H))
+      apply (proj32 (typing_regular_inv H))
   end : typing_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : typing_regular _ _ T |- _ =>
-      apply (proj33 (typing_regular_wellformed H))
+      apply (proj33 (typing_regular_inv H))
   end : typing_regular.
 
 Lemma regular_typing : forall E t T,
@@ -2191,31 +2285,31 @@ Proof.
       auto with typing_regular kinding_regular.
 Qed.
 
-Lemma regular_typing_inv : forall E t T,
+Lemma unregular_typing : forall E t T,
     typing_regular E t T -> typing E t T.
 Proof.
   introv Ht.
   induction Ht; eauto using typing.
 Qed.
 
-Hint Resolve regular_typing_inv.
+Hint Resolve unregular_typing.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : typing E _ _ |- _ =>
-      apply (proj31 (typing_regular_wellformed (regular_typing H)))
+      apply (proj31 (typing_regular_inv (regular_typing H)))
   end : typing_regular.
 
 Hint Extern 1 (term ?t) =>
   match goal with
   | H : typing _ t _ |- _ =>
-      apply (proj32 (typing_regular_wellformed (regular_typing H)))
+      apply (proj32 (typing_regular_inv (regular_typing H)))
   end : typing_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : typing _ _ T |- _ =>
-      apply (proj33 (typing_regular_wellformed (regular_typing H)))
+      apply (proj33 (typing_regular_inv (regular_typing H)))
   end : typing_regular.
 
 Inductive value_regular : trm -> Prop :=
@@ -2227,7 +2321,7 @@ Inductive value_regular : trm -> Prop :=
       term_body t ->
       value_regular (trm_abs t).
 
-Lemma value_regular_wellformed : forall t,
+Lemma value_regular_inv : forall t,
     value_regular t -> term t.
 Proof.
   introv Hv.
@@ -2239,7 +2333,7 @@ Hint Constructors value_regular : value_regular.
 Hint Extern 1 (term ?t) =>
   match goal with
   | H : value_regular t |- _ =>
-      apply (value_regular_wellformed H)
+      apply (value_regular_inv H)
   end : value_regular.
 
 Lemma regular_value : forall t,
@@ -2254,19 +2348,19 @@ Proof.
   auto.
 Qed.
 
-Lemma regular_value_inv : forall t,
+Lemma unregular_value : forall t,
     value_regular t -> value t.
 Proof.
   introv Hv.
   induction Hv; auto using value.
 Qed.
 
-Hint Resolve regular_value_inv.
+Hint Resolve unregular_value.
 
 Hint Extern 1 (term ?t) =>
   match goal with
   | H : value t |- _ =>
-      apply (value_regular_wellformed (regular_value H))
+      apply (value_regular_inv (regular_value H))
   end : value_regular.
 
 Inductive red_regular : trm -> trm -> Prop :=
@@ -2340,9 +2434,14 @@ Inductive red_regular : trm -> trm -> Prop :=
       value (trm_constructor c1 t1) ->
       term_body t2 ->
       red_regular (trm_destruct (trm_constructor c1 t1) c2 t2)
-          (t2 ^^ t1).
+          (t2 ^^ t1)
+  | red_regular_absurd : forall t t',
+      term t ->
+      term t' ->
+      red_regular t t' ->
+      red_regular (trm_absurd t) (trm_absurd t').
 
-Lemma red_regular_wellformed : forall t1 t2,
+Lemma red_regular_inv : forall t1 t2,
     red_regular t1 t2 -> term t1 /\ term t2.
 Proof.
   introv Hv.
@@ -2354,9 +2453,9 @@ Hint Constructors red_regular : red_regular.
 Hint Extern 1 (term ?t) =>
   match goal with
   | H : red_regular t _ |- _ =>
-      apply (proj1 (red_regular_wellformed H))
+      apply (proj1 (red_regular_inv H))
   | H : red_regular _ t |- _ =>
-      apply (proj2 (red_regular_wellformed H))
+      apply (proj2 (red_regular_inv H))
   end : red_regular.
 
 Lemma regular_red : forall t1 t2,
@@ -2383,19 +2482,19 @@ Proof.
     auto with red_regular.
 Qed.
 
-Lemma regular_red_inv : forall t1 t2,
+Lemma unregular_red : forall t1 t2,
     red_regular t1 t2 -> red t1 t2.
 Proof.
   introv Hr.
   induction Hr; auto using red.
 Qed.
 
-Hint Resolve regular_red_inv.
+Hint Resolve unregular_red.
 
 Hint Extern 1 (term ?t) =>
   match goal with
   | H : red t _ |- _ =>
-      apply (proj1 (red_regular_wellformed (regular_red H)))
+      apply (proj1 (red_regular_inv (regular_red H)))
   | H : red _ t |- _ =>
-      apply (proj2 (red_regular_wellformed (regular_red H)))
+      apply (proj2 (red_regular_inv (regular_red H)))
   end : red_regular.
