@@ -1407,6 +1407,16 @@ Module CSetDecideAuxiliary.
 
   Hint Rewrite eq_refl_iff : set_eq_simpl.
 
+  Lemma Logical_eq_iff_Equal : forall t1 t2,
+      t1 = t2 <-> Equal t1 t2.
+  Proof.
+    split.
+    - intro; subst; apply reflexivity.
+    - apply eq_leibniz.
+  Qed.
+
+  Hint Rewrite Logical_eq_iff_Equal : Logical_eq_iff_Equal.
+
   (** ** Decidability of CSet Propositions *)
 
   (** [In] is decidable. *)
@@ -1581,37 +1591,64 @@ Module CSetDecideAuxiliary.
       expressions that is involved in some membership or
       equality fact.  Then it throws away those hypotheses,
       which should no longer be needed. *)
+  Inductive Relevant : E.t -> Prop :=
+    | Relevant_c : forall x, Relevant x.
+
   Ltac inst_CSet_hypotheses :=
     repeat (
       match goal with
+      | |- context [ In ?x _ ] =>
+        assert new (Relevant x) by (apply Relevant_c)
+      | |- context [ E.eq ?x _ ] =>
+        assert new (Relevant x) by (apply Relevant_c)
+      | |- context [ E.eq _ ?x ] =>
+        assert new (Relevant x) by (apply Relevant_c)
+      | _ : Relevant ?x,
+        H : context [ In ?x _ ] |- _ =>
+        repeat
+          (match type of H with
+           | context [ In ?y _ ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           | context [ E.eq ?y _ ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           | context [ E.eq _ ?y ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           end)
+      | _ : Relevant ?x,
+        H : context [ E.eq ?x _ ] |- _ =>
+        repeat
+          (match type of H with
+           | context [ In ?y _ ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           | context [ E.eq ?y _ ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           | context [ E.eq _ ?y ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           end)
+      | _ : Relevant ?x,
+        H : context [ E.eq _ ?x ] |- _ =>
+        repeat
+          (match type of H with
+           | context [ In ?y _ ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           | context [ E.eq ?y _ ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           | context [ E.eq _ ?y ] =>
+             assert new (Relevant y) by (apply Relevant_c)
+           end)
+      end);
+    repeat (
+      match goal with
       | H : forall a : E.t, _,
-        _ : context [ In ?x _ ] |- _ =>
-        let P := type of (H x) in
-        assert new P by (exact (H x))
-      | H : forall a : E.t, _
-        |- context [ In ?x _ ] =>
-        let P := type of (H x) in
-        assert new P by (exact (H x))
-      | H : forall a : E.t, _,
-        _ : context [ E.eq ?x _ ] |- _ =>
-        let P := type of (H x) in
-        assert new P by (exact (H x))
-      | H : forall a : E.t, _
-        |- context [ E.eq ?x _ ] =>
-        let P := type of (H x) in
-        assert new P by (exact (H x))
-      | H : forall a : E.t, _,
-        _ : context [ E.eq _ ?x ] |- _ =>
-        let P := type of (H x) in
-        assert new P by (exact (H x))
-      | H : forall a : E.t, _
-        |- context [ E.eq _ ?x ] =>
+        _ : Relevant ?x |- _ =>
         let P := type of (H x) in
         assert new P by (exact (H x))
       end);
     repeat (
       match goal with
       | H : forall a : E.t, _ |- _ =>
+        clear H
+      | H : Relevant _ |- _ =>
         clear H
       end).
 
@@ -1713,6 +1750,8 @@ Ltac csetdec :=
       [intros] to leave us with a goal of [~ P] than a goal of
       [False]. *)
   fold any not; intros;
+  (** Rewrite logical equality to [Equal] *)
+  autorewrite with Logical_eq_iff_Equal in *;
   (** We don't care about the value of elements : complex ones are
       abstracted as new variables (avoiding potential dependencies,
       see bug #2464) *)
@@ -1769,7 +1808,7 @@ Ltac csetdec :=
   | H: ?P -> False |- ?Q -> False =>
     tryif prop (CSet_elt_Prop P) holds by
       (auto 100 with CSet_Prop)
-    then (contradict H; csetdec_body)
+    then try (contradict H; csetdec_body)
     else csetdec_body
   | |- _ =>
     csetdec_body
@@ -1782,8 +1821,9 @@ Hint Extern 1 (CSet.Nonempty _) => csetdec : csetdec.
 Hint Extern 1 (CSet.Universe _) => csetdec : csetdec.
 Hint Extern 1 (CSet.Nonuniverse _) => csetdec : csetdec.
 Hint Extern 1 (CSet.Disjoint _ _) => csetdec : csetdec.
+Hint Extern 1 (@Logic.eq CSet.t _ _) => csetdec : csetdec.
 
-(*
+
 Module CSetDecideTestCases.
 
   Lemma test_eq_trans_1 : forall x y z s,
@@ -1858,7 +1898,9 @@ Module CSetDecideTestCases.
     Empty (union q r) ->
     Empty (inter (diff s q) (diff s r)) ->
     ~ In x s.
-  Proof. csetdec. Qed.
+  Proof.
+    csetdec.
+  Qed.
 
   Lemma eq_chain_test : forall x1 x2 x3 x4 s1 s2 s3 s4,
     Empty s1 ->
@@ -1918,5 +1960,11 @@ Module CSetDecideTestCases.
     csetdec.
   Qed.
 
+  Lemma test_equal_union :
+    forall (s1 s2 : t),
+    union s1 s2 = union s2 s1.
+  Proof.
+    csetdec.
+  Qed.
+
 End CSetDecideTestCases.
-*)

@@ -2365,17 +2365,130 @@ Scheme valid_kind_validated_mutind :=
 
 Combined Scheme combined_kinding_validated_mutind
   from valid_kind_validated_mutind, kinding_validated_mutind,
-       valid_scheme_vars_validated_mutind, valid_scheme_validated_mutind,
+       valid_scheme_vars_validated_mutind,
+       valid_scheme_validated_mutind,
        valid_env_validated_mutind, type_equal_core_validated_mutind,
-       type_equal_cong_validated_mutind, type_equal_symm_validated_mutind,
+       type_equal_cong_validated_mutind,
+       type_equal_symm_validated_mutind,
        type_equal_validated_mutind, subtype_validated_mutind.
+
+Lemma unvalidated_combined_kinding :
+  (forall E K, valid_kind_validated E K -> valid_kind E K)
+  /\ (forall E T K, kinding_validated E T K -> kinding E T K)
+  /\ (forall E M Xs,
+         valid_scheme_vars_validated E M Xs -> valid_scheme_vars E M Xs)
+  /\ (forall E M, valid_scheme_validated E M -> valid_scheme E M)
+  /\ (forall E, valid_env_validated E -> valid_env E)
+  /\ (forall E T1 T2 K,
+       type_equal_core_validated E T1 T2 K -> type_equal_core E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_cong_validated E T1 T2 K -> type_equal_cong E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_symm_validated E T1 T2 K -> type_equal_symm E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_validated E T1 T2 K -> type_equal E T1 T2 K)
+  /\ (forall E T1 T2 cs,
+       subtype_validated E T1 T2 cs -> subtype E T1 T2 cs).
+Proof.
+  apply combined_kinding_validated_mutind; intros; subst; econstr auto.
+Qed.
+
+Lemma unvalidated_valid_kind : forall T1 T2,
+    valid_kind_validated T1 T2 -> valid_kind T1 T2.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_valid_kind.
+
+Lemma unvalidated_kinding : forall E T K,
+    kinding_validated E T K -> kinding E T K.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_kinding.
+
+Lemma unvalidated_valid_scheme_vars : forall E M Xs,
+    valid_scheme_vars_validated E M Xs -> valid_scheme_vars E M Xs.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_valid_scheme_vars.
+
+Lemma unvalidated_valid_scheme : forall E M,
+    valid_scheme_validated E M -> valid_scheme E M.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_valid_scheme.
+
+Lemma unvalidated_valid_env : forall E,
+    valid_env_validated E -> valid_env E.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_valid_env.
+
+Lemma unvalidated_type_equal_core : forall E T1 T2 K,
+    type_equal_core_validated E T1 T2 K -> type_equal_core E T1 T2 K.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_type_equal_core.
+
+Lemma unvalidated_type_equal_cong : forall E T1 T2 K,
+    type_equal_cong_validated E T1 T2 K -> type_equal_cong E T1 T2 K.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_type_equal_cong.
+
+Lemma unvalidated_type_equal_symm : forall E T1 T2 K,
+    type_equal_symm_validated E T1 T2 K -> type_equal_symm E T1 T2 K.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_type_equal_symm.
+
+Lemma unvalidated_type_equal : forall E T1 T2 K,
+    type_equal_validated E T1 T2 K -> type_equal E T1 T2 K.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_type_equal.
+
+Lemma unvalidated_subtype : forall E T1 T2 K,
+    subtype_validated E T1 T2 K -> subtype E T1 T2 K.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_subtype.
 
 Lemma valid_kind_validated_inv : forall E K,
     valid_kind_validated E K ->
-    environment E /\ kind K.
+    valid_env E.
 Proof.
   introv Hv.
-  destruct Hv; auto.
+  induction Hv; auto.
 Qed.
 
 Hint Constructors valid_kind_validated : valid_kind_validated.
@@ -2383,30 +2496,39 @@ Hint Constructors valid_kind_validated : valid_kind_validated.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_kind_validated E _ |- _ =>
-      apply (proj1 (valid_kind_validated_inv H))
-  end : valid_kind_validated.
+      apply (proj1 (valid_kind_regular_inv
+               (regular_valid_kind (unvalidated_valid_kind H))))
+  end : valid_kind_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : valid_kind_validated _ K |- _ =>
-      apply (proj2 (valid_kind_validated_inv H))
-  end : valid_kind_validated.
+      apply (proj2 (valid_kind_regular_inv
+               (regular_valid_kind (unvalidated_valid_kind H))))
+  end : valid_kind_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : valid_kind_validated _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj2 (valid_kind_validated_inv H));
+        by apply (proj2 (valid_kind_regular_inv
+                   (regular_valid_kind (unvalidated_valid_kind H))));
       inversion Hknd; assumption
+  end : valid_kind_regular.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : valid_kind_validated E _ |- _ =>
+      apply (valid_kind_validated_inv H)
   end : valid_kind_validated.
 
 Lemma kinding_validated_inv : forall E T K,
     kinding_validated E T K ->
-    environment E /\ type T /\ kind K.
+    valid_env E /\ valid_kind E K.
 Proof.
   introv Hk.
-  destruct Hk; auto with csetdec.
+  split; destruct Hk; auto using raw_subtype_reflexive with csetdec.
 Qed.
 
 Hint Constructors kinding_validated : kinding_validated.
@@ -2414,33 +2536,49 @@ Hint Constructors kinding_validated : kinding_validated.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : kinding_validated E _ _ |- _ =>
-      apply (proj31 (kinding_validated_inv H))
-  end : kinding_validated.
+      apply (proj31 (kinding_regular_inv
+               (regular_kinding (unvalidated_kinding H))))
+  end : kinding_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : kinding_validated _ T _ |- _ =>
-      apply (proj32 (kinding_validated_inv H))
-  end : kinding_validated.
+      apply (proj32 (kinding_regular_inv
+               (regular_kinding (unvalidated_kinding H))))
+  end : kinding_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : kinding_validated _ _ K |- _ =>
-      apply (proj33 (kinding_validated_inv H))
-  end : kinding_validated.
+      apply (proj33 (kinding_regular_inv 
+               (regular_kinding (unvalidated_kinding H))))
+  end : kinding_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : kinding_validated _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj33 (kinding_validated_inv H));
+        by apply (proj33 (kinding_regular_inv 
+                    (regular_kinding (unvalidated_kinding H))));
       inversion Hknd; assumption
+  end : kinding_regular.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : kinding_validated E _ _ |- _ =>
+      apply (proj1 (kinding_validated_inv H))
+  end : kinding_validated.
+
+Hint Extern 1 (valid_kind ?K) =>
+  match goal with
+  | H : kinding_validated _ _ K |- _ =>
+      apply (proj2 (kinding_validated_inv H))
   end : kinding_validated.
 
 Lemma valid_scheme_vars_validated_inv : forall E M Xs,
     valid_scheme_vars_validated E M Xs ->
-    environment E /\ scheme_vars M Xs.
+    valid_env E.
 Proof.
   introv Hs.
   destruct Hs; auto.
@@ -2452,18 +2590,28 @@ Hint Constructors valid_scheme_vars_validated
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_scheme_vars_validated E _ _ |- _ =>
-      apply (proj1 (valid_scheme_vars_validated_inv H))
-  end : valid_scheme_vars_validated.
+      apply (proj1 (valid_scheme_vars_regular_inv
+               (regular_valid_scheme_vars
+                  (unvalidated_valid_scheme_vars H))))
+  end : valid_scheme_vars_regular.
 
 Hint Extern 1 (scheme_vars ?M ?Xs) =>
   match goal with
   | H : valid_scheme_vars_validated _ M Xs |- _ =>
-      apply (proj2 (valid_scheme_vars_validated_inv H))
+      apply (proj2 (valid_scheme_vars_regular_inv
+               (regular_valid_scheme_vars
+                  (unvalidated_valid_scheme_vars H))))
+  end : valid_scheme_vars_regular.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : valid_scheme_vars_validated E _ _ |- _ =>
+      apply (valid_scheme_vars_validated_inv H)
   end : valid_scheme_vars_validated.
 
 Lemma valid_scheme_validated_inv : forall E M,
     valid_scheme_validated E M ->
-    environment E /\ scheme M.
+    valid_env E.
 Proof.
   introv Hs.
   destruct Hs; auto.
@@ -2473,40 +2621,82 @@ Hint Constructors valid_scheme_validated : valid_scheme_validated.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
-  | H : valid_scheme_validated E _ |- _ =>
-      apply (proj1 (valid_scheme_validated_inv H))
+  | H : valid_scheme_regular E _ |- _ =>
+      apply (proj1 (valid_scheme_regular_inv
+               (regular_valid_scheme (unvalidated_valid_scheme H))))
   end : valid_scheme_validated.
 
 Hint Extern 1 (scheme ?M) =>
   match goal with
-  | H : valid_scheme_validated _ M |- _ =>
-      apply (proj2 (valid_scheme_validated_inv H))
+  | H : valid_scheme_regular _ M |- _ =>
+      apply (proj2 (valid_scheme_regular_inv
+               (regular_valid_scheme (unvalidated_valid_scheme H))))
   end : valid_scheme_validated.
 
-Lemma valid_env_validated_inv : forall E,
-    valid_env_validated E -> environment E.
-Proof.
-  introv He.
-  destruct He; auto.
-Qed.
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : valid_scheme_validated E _ |- _ =>
+      apply (valid_scheme_validated_inv H)
+  end : valid_scheme_validated.
 
 Hint Constructors valid_env_validated : valid_env_validated.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_env_validated E |- _ =>
-      apply (valid_env_validated_inv H)
-  end : valid_env_validated.
+      apply (valid_env_regular_inv
+               (regular_valid_env (unvalidated_valid_env H)))
+  end : valid_env_regular.
 
 Lemma type_equal_core_validated_inv : forall E T1 T2 K,
     type_equal_core_validated E T1 T2 K ->
-    environment E /\ type T1 /\ type T2 /\ kind K.
+    valid_env E /\ kinding E T1 K /\ kinding E T2 K /\ valid_kind E K.
 Proof.
   introv Hte.
-  destruct Hte; subst; split; auto with csetdec.
+  destruct Hte; subst; splits;
+    auto;
+    econstr eapply unvalidated_kinding
+      then solve [eauto|auto with csetdec].
+  - apply kinding_or
+      with (cs1 := cs1) (cs2 := CSet.union cs2 cs3);
+      auto with csetdec.
+    apply kinding_or
+      with (cs1 := cs2) (cs2 := cs3); auto.
+  - apply kinding_or
+      with (cs1 := CSet.union cs1 cs2) (cs2 := cs3);
+      auto with csetdec.
+    apply kinding_or
+      with (cs1 := cs1) (cs2 := cs2); auto.
+  - apply kinding_proj with (cs := CSet.union cs1 cs2);
+      auto with csetdec.
+    apply kinding_or with (cs1 := cs1) (cs2 := cs2)
+    .
+
+
+
+
+
+
+
+
+
+
+
+    auto.
+    + eapply unvalidated_kinding.
+      eassumption.
+    + { eapply kinding_or.
+        - eapply unvalidated_kinding.
+          eassumption.
+        - eapply unvalidated_kinding.
+          eassumption.
+        - eassumption.
+        - .
+      
 Qed.
 
-Hint Constructors type_equal_core_validated : type_equal_core_validated.
+Hint Constructors type_equal_core_validated
+  : type_equal_core_validated.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -2733,42 +2923,12 @@ Proof.
     auto with subtype_validated type_equal_validated.
 Qed.
 
-Lemma unvalidated_combined_kinding :
-  (forall E K, valid_kind_validated E K -> valid_kind E K)
-  /\ (forall E T K, kinding_validated E T K -> kinding E T K)
-  /\ (forall E M Xs,
-         valid_scheme_vars_validated E M Xs -> valid_scheme_vars E M Xs)
-  /\ (forall E M, valid_scheme_validated E M -> valid_scheme E M)
-  /\ (forall E, valid_env_validated E -> valid_env E)
-  /\ (forall E T1 T2 K,
-       type_equal_core_validated E T1 T2 K -> type_equal_core E T1 T2 K)
-  /\ (forall E T1 T2 K,
-       type_equal_cong_validated E T1 T2 K -> type_equal_cong E T1 T2 K)
-  /\ (forall E T1 T2 K,
-       type_equal_symm_validated E T1 T2 K -> type_equal_symm E T1 T2 K)
-  /\ (forall E T1 T2 K,
-       type_equal_validated E T1 T2 K -> type_equal E T1 T2 K)
-  /\ (forall E T1 T2 cs,
-       subtype_validated E T1 T2 cs -> subtype E T1 T2 cs).
-Proof.
-  apply combined_kinding_validated_mutind; intros; subst; econstr auto.
-Qed.
-
 Lemma validated_valid_kind : forall E K,
     valid_kind E K -> valid_kind_validated E K.
 Proof.
   pose validated_combined_kinding.
   tauto.
 Qed.
-
-Lemma unvalidated_valid_kind : forall T1 T2,
-    valid_kind_validated T1 T2 -> valid_kind T1 T2.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_valid_kind.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -2790,15 +2950,6 @@ Proof.
   pose validated_combined_kinding.
   tauto.
 Qed.
-
-Lemma unvalidated_kinding : forall E T K,
-    kinding_validated E T K -> kinding E T K.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_kinding.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -2825,15 +2976,6 @@ Proof.
   tauto.
 Qed.
 
-Lemma unvalidated_valid_scheme_vars : forall E M Xs,
-    valid_scheme_vars_validated E M Xs -> valid_scheme_vars E M Xs.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_valid_scheme_vars.
-
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_scheme_vars E _ _ |- _ =>
@@ -2854,15 +2996,6 @@ Proof.
   pose validated_combined_kinding.
   tauto.
 Qed.
-
-Lemma unvalidated_valid_scheme : forall E M,
-    valid_scheme_validated E M -> valid_scheme E M.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_valid_scheme.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -2885,15 +3018,6 @@ Proof.
   tauto.
 Qed.
 
-Lemma unvalidated_valid_env : forall E,
-    valid_env_validated E -> valid_env E.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_valid_env.
-
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : valid_env E |- _ =>
@@ -2907,15 +3031,6 @@ Proof.
   pose validated_combined_kinding.
   tauto.
 Qed.
-
-Lemma unvalidated_type_equal_core : forall E T1 T2 K,
-    type_equal_core_validated E T1 T2 K -> type_equal_core E T1 T2 K.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_type_equal_core.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -2948,15 +3063,6 @@ Proof.
   tauto.
 Qed.
 
-Lemma unvalidated_type_equal_cong : forall E T1 T2 K,
-    type_equal_cong_validated E T1 T2 K -> type_equal_cong E T1 T2 K.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_type_equal_cong.
-
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_cong E _ _ _ |- _ =>
@@ -2987,15 +3093,6 @@ Proof.
   pose validated_combined_kinding.
   tauto.
 Qed.
-
-Lemma unvalidated_type_equal_symm : forall E T1 T2 K,
-    type_equal_symm_validated E T1 T2 K -> type_equal_symm E T1 T2 K.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_type_equal_symm.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
@@ -3028,15 +3125,6 @@ Proof.
   tauto.
 Qed.
 
-Lemma unvalidated_type_equal : forall E T1 T2 K,
-    type_equal_validated E T1 T2 K -> type_equal E T1 T2 K.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_type_equal.
-
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal E _ _ _ |- _ =>
@@ -3067,15 +3155,6 @@ Proof.
   pose validated_combined_kinding.
   tauto.
 Qed.
-
-Lemma unvalidated_subtype : forall E T1 T2 K,
-    subtype_validated E T1 T2 K -> subtype E T1 T2 K.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_subtype.
 
 Hint Extern 1 (environment ?E) =>
   match goal with

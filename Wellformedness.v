@@ -13,8 +13,11 @@ Hint Constructors kind type scheme_vars term environment.
 
 Hint Extern 1 (types _ _) => split; auto.
 
+Tactic Notation "econstr" tactic(tac1) "then" tactic(tac2) :=
+  try (econstructor; try (try tac1; eassumption); solve [tac2]).
+
 Tactic Notation "econstr" tactic(tac) :=
-  try (econstructor; try eassumption; solve [tac]).
+  econstr idtac then tac.
 
 (* =============================================================== *)
 (** * Properties of terms *)
