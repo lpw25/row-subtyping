@@ -992,7 +992,7 @@ with type_equal_cong_regular : env -> typ -> typ -> knd -> Prop :=
       type T2 ->
       type T3 ->
       type_equal_cong_regular E
-        (typ_variant T1) (typ_variant T1') (knd_range T2 T3)
+        (typ_variant T1) (typ_variant T1') knd_type
   | type_equal_cong_regular_arrow_l : forall E T1 T1' T2,
       kinding_regular E T2 knd_type ->
       type_equal_cong_regular E T1 T1' knd_type ->
@@ -1498,7 +1498,7 @@ Proof.
   - assert (kind (knd_range T2 T3)) as Hknd
       by auto with type_equal_cong_regular.
     inversion Hknd; subst.
-    auto with type_equal_cong_regular.
+    eauto with type_equal_cong_regular.
   - assert (type (typ_meet T1 T2)) as Ht
       by auto with type_equal_regular.
     inversion Ht; subst.
@@ -1556,6 +1556,16 @@ Hint Extern 1 (kind ?K) =>
                       (regular_valid_kind H)))
   end : valid_kind_regular.
 
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : valid_kind _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj2 (valid_kind_regular_inv
+                           (regular_valid_kind H)));
+      inversion Hknd; assumption
+  end : valid_kind_regular.
+
 Lemma regular_kinding : forall E T K,
     kinding E T K -> kinding_regular E T K.
 Proof.
@@ -1588,6 +1598,15 @@ Hint Extern 1 (kind ?K) =>
   match goal with
   | H : kinding _ _ K |- _ =>
       apply (proj33 (kinding_regular_inv (regular_kinding H)))
+  end : kinding_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : kinding _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj33 (kinding_regular_inv (regular_kinding H)));
+      inversion Hknd; assumption
   end : kinding_regular.
 
 Lemma regular_valid_scheme_vars : forall E M Xs,
@@ -1713,6 +1732,16 @@ Hint Extern 1 (kind ?K) =>
                        (regular_type_equal_core H)))
   end : type_equal_core_regular.
 
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_core _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_core_regular_inv
+                            (regular_type_equal_core H)));
+      inversion Hknd; assumption
+  end : type_equal_core_regular.
+
 Lemma regular_type_equal_cong : forall E T1 T2 K,
     type_equal_cong E T1 T2 K -> type_equal_cong_regular E T1 T2 K.
 Proof.
@@ -1751,6 +1780,16 @@ Hint Extern 1 (kind ?K) =>
   | H : type_equal_cong _ _ _ K |- _ =>
       apply (proj44 (type_equal_cong_regular_inv
                        (regular_type_equal_cong H)))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_cong _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_cong_regular_inv
+                            (regular_type_equal_cong H)));
+      inversion Hknd; assumption
   end : type_equal_cong_regular.
 
 Lemma regular_type_equal_symm : forall E T1 T2 K,
@@ -1793,6 +1832,16 @@ Hint Extern 1 (kind ?K) =>
                        (regular_type_equal_symm H)))
   end : type_equal_symm_regular.
 
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_symm _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_symm_regular_inv
+                            (regular_type_equal_symm H)));
+      inversion Hknd; assumption
+  end : type_equal_symm_regular.
+
 Lemma regular_type_equal : forall E T1 T2 K,
     type_equal E T1 T2 K -> type_equal_regular E T1 T2 K.
 Proof.
@@ -1831,6 +1880,16 @@ Hint Extern 1 (kind ?K) =>
   | H : type_equal _ _ _ K |- _ =>
       apply (proj44 (type_equal_regular_inv
                        (regular_type_equal H)))
+  end : type_equal_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_regular_inv
+                            (regular_type_equal H)));
+      inversion Hknd; assumption
   end : type_equal_regular.
 
 Lemma regular_subtype : forall E T1 T2 K,

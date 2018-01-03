@@ -648,7 +648,7 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
   | type_equal_cong_variant : forall E T1 T1' T2 T3,
       type_equal_cong E T1 T1' (knd_range T2 T3) ->
       type_equal_cong E
-        (typ_variant T1) (typ_variant T1') (knd_range T2 T3)
+        (typ_variant T1) (typ_variant T1') knd_type
   | type_equal_cong_arrow_l : forall E T1 T1' T2,
       kinding E T2 knd_type ->
       type_equal_cong E T1 T1' knd_type ->

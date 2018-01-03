@@ -988,6 +988,8 @@ Proof.
       apply valid_env_type; autorewrite with rew_env_dom; eauto.
   - apply type_equal_core_or_associative
       with (cs1 := cs1) (cs2 := cs2) (cs3 := cs3); eauto.
+  - apply type_equal_cong_variant
+      with (T2 := typ_subst X S T2) (T3 := typ_subst X S T3); eauto.
   - apply type_equal_cong_range_subsumption
       with (T3 := typ_subst X S T3) (T4 := typ_subst X S T4); eauto.
 Qed.
@@ -1570,6 +1572,32 @@ Proof.
     inversion Hk.
     remember (knd_row cs).
     destruct Htes; subst; auto.
+Qed.
+
+Lemma raw_type_equal_meet_idempotent : forall E T cs,
+    valid_env E ->
+    kinding E T (knd_row cs) ->
+    type_equal E T (typ_meet T T) (knd_row cs).
+Proof.
+  introv Hv Hk.
+  apply type_equal_step
+    with (T2 := typ_meet T (typ_join T (typ_bot cs)));
+    auto with kinding_regular.
+  apply type_equal_step with (T2 := typ_meet T T); auto.
+Qed.
+
+Lemma raw_subtype_reflexive_equal : forall E T1 T2 cs,
+    valid_env E ->
+    kinding E T1 (knd_row cs) ->
+    kinding E T2 (knd_row cs) ->
+    type_equal E T1 T2 (knd_row cs) ->
+    subtype E T1 T2 cs.
+Proof.
+  introv Hv Hk1 Hk2 Hte.
+  apply subtype_c.
+  apply type_equal_transitive with (T2 := typ_meet T1 T1);
+    auto using raw_type_equal_meet_idempotent.
+  auto using raw_type_equal_meet_r.
 Qed.
       
 Lemma raw_subtype_transitive : forall E T1 T2 T3 cs,
@@ -2171,7 +2199,7 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding E T3 (knd_row CSet.universe) ->
       subtype E T3 T2 CSet.universe ->
       type_equal_cong_validated E
-        (typ_variant T1) (typ_variant T1') (knd_range T2 T3)
+        (typ_variant T1) (typ_variant T1') knd_type
   | type_equal_cong_validated_arrow_l : forall E T1 T1' T2,
       kinding_validated E T2 knd_type ->
       type_equal_cong_validated E T1 T1' knd_type ->
@@ -2218,8 +2246,8 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       type T2' ->
       CSet.Nonempty cs ->
       valid_env E ->
-      kinding E T2 knd_type ->
-      kinding E T2' knd_type ->
+      kinding E T2 (knd_row cs) ->
+      kinding E T2' (knd_row cs) ->
       type_equal_cong_validated E
         (typ_meet T1 T2) (typ_meet T1 T2') (knd_row cs)
   | type_equal_cong_validated_join_l : forall E T1 T1' T2 cs,
@@ -2231,8 +2259,8 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       type T2 ->
       CSet.Nonempty cs ->
       valid_env E ->
-      kinding E T1 knd_type ->
-      kinding E T1' knd_type ->
+      kinding E T1 (knd_row cs) ->
+      kinding E T1' (knd_row cs) ->
       type_equal_cong_validated E
         (typ_join T1 T2) (typ_join T1' T2) (knd_row cs)
   | type_equal_cong_validated_join_r : forall E T1 T2 T2' cs,
@@ -2244,8 +2272,8 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       type T2' ->
       CSet.Nonempty cs ->
       valid_env E ->
-      kinding E T2 knd_type ->
-      kinding E T2' knd_type ->
+      kinding E T2 (knd_row cs) ->
+      kinding E T2' (knd_row cs) ->
       type_equal_cong_validated E
         (typ_join T1 T2) (typ_join T1 T2') (knd_row cs)
   | type_equal_cong_validated_range_subsumption :
@@ -2570,9 +2598,9 @@ Hint Extern 1 (valid_env ?E) =>
       apply (proj1 (kinding_validated_inv H))
   end : kinding_validated.
 
-Hint Extern 1 (valid_kind ?K) =>
+Hint Extern 1 (valid_kind ?E ?K) =>
   match goal with
-  | H : kinding_validated _ _ K |- _ =>
+  | H : kinding_validated E _ K |- _ =>
       apply (proj2 (kinding_validated_inv H))
   end : kinding_validated.
 
@@ -2621,17 +2649,17 @@ Hint Constructors valid_scheme_validated : valid_scheme_validated.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
-  | H : valid_scheme_regular E _ |- _ =>
+  | H : valid_scheme_validated E _ |- _ =>
       apply (proj1 (valid_scheme_regular_inv
                (regular_valid_scheme (unvalidated_valid_scheme H))))
-  end : valid_scheme_validated.
+  end : valid_scheme_regular.
 
 Hint Extern 1 (scheme ?M) =>
   match goal with
-  | H : valid_scheme_regular _ M |- _ =>
+  | H : valid_scheme_validated _ M |- _ =>
       apply (proj2 (valid_scheme_regular_inv
                (regular_valid_scheme (unvalidated_valid_scheme H))))
-  end : valid_scheme_validated.
+  end : valid_scheme_regular.
 
 Hint Extern 1 (valid_env ?E) =>
   match goal with
@@ -2669,30 +2697,16 @@ Proof.
       with (cs1 := cs1) (cs2 := cs2); auto.
   - apply kinding_proj with (cs := CSet.union cs1 cs2);
       auto with csetdec.
-    apply kinding_or with (cs1 := cs1) (cs2 := cs2)
-    .
-
-
-
-
-
-
-
-
-
-
-
-    auto.
-    + eapply unvalidated_kinding.
-      eassumption.
-    + { eapply kinding_or.
-        - eapply unvalidated_kinding.
-          eassumption.
-        - eapply unvalidated_kinding.
-          eassumption.
-        - eassumption.
-        - .
-      
+    apply kinding_or with (cs1 := cs1) (cs2 := cs2);
+      auto.
+  - apply kinding_proj with (cs := CSet.union cs1 cs2);
+      auto with csetdec.
+    apply kinding_or with (cs1 := cs1) (cs2 := cs2);
+      auto.
+  - apply kinding_or with (cs1 := cs1') (cs2 := cs2');
+      auto with csetdec.
+    + apply kinding_proj with (cs := cs1); auto.
+    + apply kinding_proj with (cs := cs2); auto.
 Qed.
 
 Hint Constructors type_equal_core_validated
@@ -2701,113 +2715,195 @@ Hint Constructors type_equal_core_validated
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_core_validated E _ _ _ |- _ =>
-      apply (proj41 (type_equal_core_validated_inv H))
-  end : type_equal_core_validated.
+      apply (proj41 (type_equal_core_regular_inv
+        (regular_type_equal_core (unvalidated_type_equal_core H))))
+  end : type_equal_core_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_core_validated _ T _ _ |- _ =>
-      apply (proj42 (type_equal_core_validated_inv H))
+      apply (proj42 (type_equal_core_regular_inv
+        (regular_type_equal_core (unvalidated_type_equal_core H))))
   | H : type_equal_core_validated _ _ T _ |- _ =>
-      apply (proj43 (type_equal_core_validated_inv H))
-  end : type_equal_core_validated.
+      apply (proj43 (type_equal_core_regular_inv
+        (regular_type_equal_core (unvalidated_type_equal_core H))))
+  end : type_equal_core_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_core_validated _ _ _ K |- _ =>
-      apply (proj44 (type_equal_core_validated_inv H))
-  end : type_equal_core_validated.
+      apply (proj44 (type_equal_core_regular_inv
+        (regular_type_equal_core (unvalidated_type_equal_core H))))
+  end : type_equal_core_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : type_equal_core_validated _ _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_core_validated_inv H));
+        by apply (proj44 (type_equal_core_regular_inv
+         (regular_type_equal_core (unvalidated_type_equal_core H))));
       inversion Hknd; assumption
+  end : type_equal_core_regular.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : type_equal_core_validated E _ _ _ |- _ =>
+      apply (proj41 (type_equal_core_validated_inv H))
+  end : type_equal_core_regular.
+
+Hint Extern 1 (kinding ?E ?T ?K) =>
+  match goal with
+  | H : type_equal_core_validated E T _ K |- _ =>
+      apply (proj42 (type_equal_core_validated_inv H))
+  | H : type_equal_core_validated E _ T K |- _ =>
+      apply (proj43 (type_equal_core_validated_inv H))
+  end : type_equal_core_validated.
+
+Hint Extern 1 (valid_kind ?E ?K) =>
+  match goal with
+  | H : type_equal_core_validated E _ _ K |- _ =>
+      apply (proj44 (type_equal_core_validated_inv H))
   end : type_equal_core_validated.
 
 Lemma type_equal_cong_validated_inv : forall E T1 T2 K,
     type_equal_cong_validated E T1 T2 K ->
-    environment E /\ type T1 /\ type T2 /\ kind K.
+    valid_env E /\ kinding E T1 K /\ kinding E T2 K /\ valid_kind E K.
 Proof.
   introv Hte.
-  destruct Hte; split; auto with csetdec.
+  destruct Hte; splits; auto with csetdec; eauto.
+  - apply kinding_range_subsumption with (T1 := T1') (T2 := T1');
+      auto.
+    + apply raw_subtype_reflexive_equal; eauto.
+    + apply raw_subtype_reflexive_equal; eauto.
+  - auto using raw_subtype_reflexive.
 Qed.
 
-Hint Constructors type_equal_cong_validated : type_equal_cong_validated.
+Hint Constructors type_equal_cong_validated
+  : type_equal_cong_validated.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_cong_validated E _ _ _ |- _ =>
-      apply (proj41 (type_equal_cong_validated_inv H))
-  end : type_equal_cong_validated.
+      apply (proj41 (type_equal_cong_regular_inv
+        (regular_type_equal_cong (unvalidated_type_equal_cong H))))
+  end : type_equal_cong_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_cong_validated _ T _ _ |- _ =>
-      apply (proj42 (type_equal_cong_validated_inv H))
+      apply (proj42 (type_equal_cong_regular_inv
+        (regular_type_equal_cong (unvalidated_type_equal_cong H))))
   | H : type_equal_cong_validated _ _ T _ |- _ =>
-      apply (proj43 (type_equal_cong_validated_inv H))
-  end : type_equal_cong_validated.
+      apply (proj43 (type_equal_cong_regular_inv
+        (regular_type_equal_cong (unvalidated_type_equal_cong H))))
+  end : type_equal_cong_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_cong_validated _ _ _ K |- _ =>
-      apply (proj44 (type_equal_cong_validated_inv H))
-  end : type_equal_cong_validated.
+      apply (proj44 (type_equal_cong_regular_inv
+        (regular_type_equal_cong (unvalidated_type_equal_cong H))))
+  end : type_equal_cong_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : type_equal_cong_validated _ _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_cong_validated_inv H));
+        by apply (proj44 (type_equal_cong_regular_inv
+         (regular_type_equal_cong (unvalidated_type_equal_cong H))));
       inversion Hknd; assumption
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : type_equal_cong_validated E _ _ _ |- _ =>
+      apply (proj41 (type_equal_cong_validated_inv H))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (kinding ?E ?T ?K) =>
+  match goal with
+  | H : type_equal_cong_validated E T _ K |- _ =>
+      apply (proj42 (type_equal_cong_validated_inv H))
+  | H : type_equal_cong_validated E _ T K |- _ =>
+      apply (proj43 (type_equal_cong_validated_inv H))
+  end : type_equal_cong_validated.
+
+Hint Extern 1 (valid_kind ?E ?K) =>
+  match goal with
+  | H : type_equal_cong_validated E _ _ K |- _ =>
+      apply (proj44 (type_equal_cong_validated_inv H))
   end : type_equal_cong_validated.
 
 Lemma type_equal_symm_validated_inv : forall E T1 T2 K,
     type_equal_symm_validated E T1 T2 K ->
-    environment E /\ type T1 /\ type T2 /\ kind K.
+    valid_env E /\ kinding E T1 K /\ kinding E T2 K /\ valid_kind E K.
 Proof.
   introv Hte.
   destruct Hte; auto.
 Qed.
 
-Hint Constructors type_equal_symm_validated : type_equal_symm_validated.
+Hint Constructors type_equal_symm_validated
+  : type_equal_symm_validated.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_symm_validated E _ _ _ |- _ =>
-      apply (proj41 (type_equal_symm_validated_inv H))
-  end : type_equal_symm_validated.
+      apply (proj41 (type_equal_symm_regular_inv
+        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
+  end : type_equal_symm_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_symm_validated _ T _ _ |- _ =>
-      apply (proj42 (type_equal_symm_validated_inv H))
+      apply (proj42 (type_equal_symm_regular_inv
+        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
   | H : type_equal_symm_validated _ _ T _ |- _ =>
-      apply (proj43 (type_equal_symm_validated_inv H))
-  end : type_equal_symm_validated.
+      apply (proj43 (type_equal_symm_regular_inv
+        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
+  end : type_equal_symm_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_symm_validated _ _ _ K |- _ =>
-      apply (proj44 (type_equal_symm_validated_inv H))
-  end : type_equal_symm_validated.
+      apply (proj44 (type_equal_symm_regular_inv
+        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
+  end : type_equal_symm_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : type_equal_symm_validated _ _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_symm_validated_inv H));
+        by apply (proj44 (type_equal_symm_regular_inv
+         (regular_type_equal_symm (unvalidated_type_equal_symm H))));
       inversion Hknd; assumption
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : type_equal_symm_validated E _ _ _ |- _ =>
+      apply (proj41 (type_equal_symm_validated_inv H))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (kinding ?E ?T ?K) =>
+  match goal with
+  | H : type_equal_symm_validated E T _ K |- _ =>
+      apply (proj42 (type_equal_symm_validated_inv H))
+  | H : type_equal_symm_validated E _ T K |- _ =>
+      apply (proj43 (type_equal_symm_validated_inv H))
+  end : type_equal_symm_validated.
+
+Hint Extern 1 (valid_kind ?E ?K) =>
+  match goal with
+  | H : type_equal_symm_validated E _ _ K |- _ =>
+      apply (proj44 (type_equal_symm_validated_inv H))
   end : type_equal_symm_validated.
 
 Lemma type_equal_validated_inv : forall E T1 T2 K,
     type_equal_validated E T1 T2 K ->
-    environment E /\ type T1 /\ type T2 /\ kind K.
+    valid_env E /\ kinding E T1 K /\ kinding E T2 K /\ valid_kind E K.
 Proof.
   introv Hk.
   destruct Hk; auto.
@@ -2818,35 +2914,61 @@ Hint Constructors type_equal_validated : type_equal_validated.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : type_equal_validated E _ _ _ |- _ =>
-      apply (proj41 (type_equal_validated_inv H))
-  end : type_equal_validated.
+      apply (proj41 (type_equal_regular_inv
+        (regular_type_equal (unvalidated_type_equal H))))
+  end : type_equal_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : type_equal_validated _ T _ _ |- _ =>
-      apply (proj42 (type_equal_validated_inv H))
+      apply (proj42 (type_equal_regular_inv
+        (regular_type_equal (unvalidated_type_equal H))))
   | H : type_equal_validated _ _ T _ |- _ =>
-      apply (proj43 (type_equal_validated_inv H))
-  end : type_equal_validated.
+      apply (proj43 (type_equal_regular_inv
+        (regular_type_equal (unvalidated_type_equal H))))
+  end : type_equal_regular.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
   | H : type_equal_validated _ _ _ K |- _ =>
-      apply (proj44 (type_equal_validated_inv H))
-  end : type_equal_validated.
+      apply (proj44 (type_equal_regular_inv
+        (regular_type_equal (unvalidated_type_equal H))))
+  end : type_equal_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : type_equal_validated _ _ _ (knd_row cs) |- _ =>
       let Hknd := fresh "Hknd" in
       assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_validated_inv H));
+        by apply (proj44 (type_equal_regular_inv
+         (regular_type_equal (unvalidated_type_equal H))));
       inversion Hknd; assumption
+  end : type_equal_regular.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : type_equal_validated E _ _ _ |- _ =>
+      apply (proj41 (type_equal_validated_inv H))
+  end : type_equal_regular.
+
+Hint Extern 1 (kinding ?E ?T ?K) =>
+  match goal with
+  | H : type_equal_validated E T _ K |- _ =>
+      apply (proj42 (type_equal_validated_inv H))
+  | H : type_equal_validated E _ T K |- _ =>
+      apply (proj43 (type_equal_validated_inv H))
+  end : type_equal_validated.
+
+Hint Extern 1 (valid_kind ?E ?K) =>
+  match goal with
+  | H : type_equal_validated E _ _ K |- _ =>
+      apply (proj44 (type_equal_validated_inv H))
   end : type_equal_validated.
 
 Lemma subtype_validated_inv : forall E T1 T2 cs,
     subtype_validated E T1 T2 cs ->
-    environment E /\ type T1 /\ type T2 /\ CSet.Nonempty cs.
+    valid_env E
+    /\ kinding E T1 (knd_row cs) /\ kinding E T2 (knd_row cs).
 Proof.
   introv Hk.
   destruct Hk; auto.
@@ -2857,21 +2979,39 @@ Hint Constructors subtype_validated : subtype_validated.
 Hint Extern 1 (environment ?E) =>
   match goal with
   | H : subtype_validated E _ _ _ |- _ =>
-      apply (proj41 (subtype_validated_inv H))
-  end : subtype_validated.
+      apply (proj41 (subtype_regular_inv
+        (regular_subtype (unvalidated_subtype H))))
+  end : subtype_regular.
 
 Hint Extern 1 (type ?T) =>
   match goal with
   | H : subtype_validated _ T _ _ |- _ =>
-      apply (proj42 (subtype_validated_inv H))
+      apply (proj42 (subtype_regular_inv
+        (regular_subtype (unvalidated_subtype H))))
   | H : subtype_validated _ _ T _ |- _ =>
-      apply (proj43 (subtype_validated_inv H))
-  end : subtype_validated.
+      apply (proj43 (subtype_regular_inv
+        (regular_subtype (unvalidated_subtype H))))
+  end : subtype_regular.
 
 Hint Extern 1 (CSet.Nonempty ?cs) =>
   match goal with
   | H : subtype_validated _ _ _ cs |- _ =>
-      apply (proj44 (subtype_validated_inv H))
+      apply (proj44 (subtype_regular_inv
+        (regular_subtype (unvalidated_subtype H))))
+  end : subtype_regular.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : subtype_validated E _ _ _ |- _ =>
+      apply (proj31 (subtype_validated_inv H))
+  end : subtype_validated.
+
+Hint Extern 1 (kinding ?E ?T (knd_row ?cs)) =>
+  match goal with
+  | H : subtype_validated E T _ cs |- _ =>
+      apply (proj32 (subtype_validated_inv H))
+  | H : subtype_validated E _ T cs |- _ =>
+      apply (proj33 (subtype_validated_inv H))
   end : subtype_validated.
 
 Lemma validated_combined_kinding :
