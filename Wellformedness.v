@@ -2054,6 +2054,7 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       valid_instance E Us M ->
       typing_regular E (trm_fvar x) (instance M Us)
   | typing_regular_abs : forall L E T1 T2 t1,
+      kinding E T1 knd_type ->
       environment E ->
       (forall x, x \notin L ->
          environment (E & x ~ bind_typ (sch_empty T1))) ->

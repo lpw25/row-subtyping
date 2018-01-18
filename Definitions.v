@@ -751,7 +751,8 @@ Inductive typing : env -> trm -> typ -> Prop :=
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
       typing E (trm_fvar x) (instance M Us)
-  | typing_abs : forall L E T1 T2 t1, 
+  | typing_abs : forall L E T1 T2 t1,
+      kinding E T1 knd_type ->
       (forall x, x \notin L -> 
         typing (E & x ~: sch_empty T1) (t1 ^ x) T2) -> 
       typing E (trm_abs t1) (typ_arrow T1 T2)
