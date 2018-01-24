@@ -21,9 +21,7 @@ Proof.
     autorewrite with rew_env_concat in *; auto.
   remember (E & F & x ~ v) as G.
   destruct He.
-  - destruct (empty_concat_inv HeqG) as [_ Hem].
-    apply empty_single_inv in Hem.
-    contradiction.
+  - exfalso. eapply empty_push_inv. eassumption.
   - destruct (eq_push_inv HeqG) as [_ [_ Hem]].
     rewrite Hem in He.
     auto.
@@ -3814,7 +3812,12 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       type T2 ->
       term_body t1 ->
       valid_env E ->
+      (forall x, x \notin L -> 
+        valid_env (E & x ~ bind_typ (sch_empty T1))) ->
       kinding E T2 knd_type ->
+      (forall x, x \notin L -> 
+        kinding
+          (E & x ~ bind_typ (sch_empty T1)) T2 knd_type) ->
       typing_validated E (trm_abs t1) (typ_arrow T1 T2)
   | typing_validated_app : forall E S T t1 t2, 
       typing_validated E t1 (typ_arrow S T) ->
@@ -3847,8 +3850,16 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       term t1 ->
       term_body t2 ->
       valid_env E ->
+      (forall Xs, fresh L (sch_arity M) Xs ->
+         valid_env (E & Xs ~::* M)) ->
+      (forall x, x \notin L ->
+         valid_env (E & x ~ (bind_typ M))) ->
+      (forall Xs, fresh L (sch_arity M) Xs ->
+         kinding (E & Xs ~::* M) (instance_vars M Xs) knd_type) ->
       valid_scheme E M ->
       kinding E T2 knd_type ->
+      (forall x, x \notin L ->
+         kinding (E & x ~ (bind_typ M)) T2 knd_type) ->
       typing_validated E (trm_let t1 t2) T2
   | typing_validated_constructor : forall c E T1 T2 T3 t,
       kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
@@ -3907,11 +3918,21 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       term_body t2 ->
       term_body t3 ->
       valid_env E ->
+      (forall x, x \notin L ->
+         valid_env (E & x ~: (sch_empty (typ_variant T3)))) ->
+      (forall y, y \notin L -> 
+         valid_env (E & y ~: (sch_empty (typ_variant T5)))) ->
       kinding E T2 (knd_row CSet.universe) ->
       kinding E T4 (knd_row CSet.universe) ->
       kinding E T6 (knd_row CSet.universe) ->
       kinding E T7 knd_type ->
       kinding E T8 knd_type ->
+      (forall x, x \notin L ->
+         kinding (E & x ~: (sch_empty (typ_variant T3)))
+                 T8 knd_type) ->
+      (forall y, y \notin L -> 
+         kinding (E & y ~: (sch_empty (typ_variant T5)))
+                 T8 knd_type) ->
       typing_validated E (trm_match t1 c t2 t3) T8
   | typing_validated_destruct : forall c L E T1 T2 T3 T4 t1 t2,
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
@@ -3933,9 +3954,14 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       term t1 ->
       term_body t2 ->
       valid_env E ->
+      (forall x, x \notin L ->
+         valid_env (E & x ~: (sch_empty T3))) ->
       kinding E T2 (knd_row CSet.universe) ->
       kinding E T3 knd_type ->
       kinding E T4 knd_type ->
+      (forall x, x \notin L ->
+          kinding (E & x ~: (sch_empty T3))
+                  T4 knd_type) ->
       typing_validated E (trm_destruct t1 c t2) T4
   | typing_validated_absurd : forall E T1 T2 t1,
       kinding E T1 (knd_range (typ_bot CSet.universe)
@@ -4013,10 +4039,14 @@ Proof.
     assert (typing_validated (E & x ~: sch_empty T1) (t1 ^ x) T2)
       by auto.
     assert (valid_env E)
-      as Hv by eauto using valid_env_retract with typing_validated.
+      by eauto using valid_env_retract with typing_validated.
     assert (kinding E T2 knd_type)
-      as Hk by eauto using kinding_typ_bind_l with typing_validated.
-    econstr eauto with typing_validated.
+      by eauto using kinding_typ_bind_l with typing_validated.
+    econstructor; eauto with typing_validated;
+      intros y Hn;
+      assert (typing_validated (E & y ~: sch_empty T1) (t1 ^ y) T2)
+        by auto;
+      auto with typing_validated.
   - assert (kinding E (typ_arrow S T) knd_type)
       as Hk by auto with typing_validated.
     inversion Hk; subst.
@@ -4030,7 +4060,18 @@ Proof.
     assert (valid_scheme E M)
       by eauto using binds_push_eq,
          valid_scheme_from_env, valid_scheme_typ_bind_l.
-    econstr auto.
+    econstructor; eauto;
+      try
+        (intros Ys Hf;
+         assert
+           (typing_validated (E & Ys ~::* M) t1 (instance_vars M Ys))
+           by auto;
+         auto with typing_validated);
+      try
+        (intros y Hn;
+         assert (typing_validated (E & y ~: M) (t2 ^ y) T2)
+           by auto;
+         auto with typing_validated).
   - assert (valid_kind E (knd_range (typ_top CSet.universe) T2))
       as Hk by auto with kinding_validated.
     inversion Hk; subst.
@@ -4062,7 +4103,16 @@ Proof.
       by auto.
     assert (kinding E T8 knd_type)
       by eauto using kinding_typ_bind_l with typing_validated.
-    econstr auto with typing_validated.
+    econstructor; eauto with typing_validated;
+      intros y Hn;
+      assert
+        (typing_validated
+           (E & y ~: sch_empty (typ_variant T3)) (t2 ^ y) T8)
+        by auto;
+      assert (typing_validated
+                (E & y ~: sch_empty (typ_variant T5)) (t3 ^ y) T8)
+        by auto;
+      auto with typing_validated.
   - assert (valid_kind E (knd_range T2 (typ_bot CSet.universe)))
       as Hk1 by auto with kinding_validated.
     inversion Hk1; subst.
@@ -4078,7 +4128,12 @@ Proof.
       by auto.
     assert (kinding E T4 knd_type)
       by eauto using kinding_typ_bind_l with typing_validated.
-    econstr auto with typing_validated.
+    econstructor; eauto with typing_validated;
+      intros y Hn;
+      assert (typing_validated
+                (E & y ~: sch_empty T3) (t2 ^ y) T4)
+        by auto;
+      auto with typing_validated.   
   - econstr auto with typing_validated.
 Qed.
 
