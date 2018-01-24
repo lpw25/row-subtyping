@@ -141,8 +141,6 @@ Proof.
     auto.
   - apply valid_scheme_c
       with (L := (L \u dom F)); auto.
-  - apply type_equal_core_or_associative
-      with (cs1 := cs1) (cs2 := cs2) (cs3 := cs3); auto.
 Qed.
 
 Lemma valid_kind_weakening : forall E F G K,
@@ -873,9 +871,6 @@ Proof.
           rewrite knd_subst_fresh; eauto using kinding_weakening_l.
           apply valid_env_binds_knd_closed
             with (E := E0) (Y := X); auto. }
-  - apply kinding_variant
-      with (T1 := typ_subst X S T1) (T2 := typ_subst X S T2).
-    eauto.
   - apply kinding_range_subsumption
       with (T1 := typ_subst X S T1) (T2 := typ_subst X S T2); eauto.
   - apply valid_scheme_vars_bind; eauto.
@@ -915,10 +910,6 @@ Proof.
       autorewrite with rew_env_subst rew_env_concat.
       simpl.
       apply valid_env_type; autorewrite with rew_env_dom; eauto.
-  - apply type_equal_core_or_associative
-      with (cs1 := cs1) (cs2 := cs2) (cs3 := cs3); eauto.
-  - apply type_equal_cong_variant
-      with (T2 := typ_subst X S T2) (T3 := typ_subst X S T3); eauto.
   - apply type_equal_cong_range_subsumption
       with (T3 := typ_subst X S T3) (T4 := typ_subst X S T4); eauto.
 Qed.
@@ -1358,8 +1349,6 @@ Proof.
       destruct (eq_push_inv Heq) as [? [? ?]]; subst.
       rewrite concat_assoc.
       apply valid_env_type; eauto.
-  - apply type_equal_core_or_associative
-      with (cs1 := cs1) (cs2 := cs2) (cs3 := cs3); eauto.
 Qed.      
 
 Lemma valid_kind_typ_bind : forall E F x M K,
@@ -1624,7 +1613,7 @@ with kinding_validated : env -> typ -> knd -> Prop :=
       CSet.Nonempty cs1 ->
       CSet.Nonempty cs2 ->
       valid_env_validated E ->
-      kinding_validated E (typ_or T1 T2) (knd_row cs12)
+      kinding_validated E (typ_or cs1 T1 cs2 T2) (knd_row cs12)
   | kinding_validated_proj : forall E T cs cs',
       kinding_validated E T (knd_row cs) ->
       CSet.Subset cs' cs ->
@@ -1633,7 +1622,7 @@ with kinding_validated : env -> typ -> knd -> Prop :=
       type T ->
       CSet.Nonempty cs ->
       valid_env_validated E ->
-      kinding_validated E (typ_proj T cs') (knd_row cs')
+      kinding_validated E (typ_proj cs T cs') (knd_row cs')
   | kinding_validated_row : forall E T,
       kinding_validated E T (knd_row CSet.universe) ->
       environment E ->
@@ -1641,16 +1630,12 @@ with kinding_validated : env -> typ -> knd -> Prop :=
       valid_env_validated E ->
       valid_kind_validated E (knd_range T T) ->
       kinding_validated E (typ_row T) (knd_range T T)
-  | kinding_validated_variant : forall E T T1 T2,
-      kinding_validated E T (knd_range T1 T2) ->
+  | kinding_validated_variant : forall E T,
+      kinding_validated E T
+        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
       environment E ->
       type T ->
-      type T1 ->
-      type T2 ->
       valid_env_validated E ->
-      kinding_validated E T1 (knd_row CSet.universe) ->
-      kinding_validated E T2 (knd_row CSet.universe) ->
-      subtype_validated E T2 T1 CSet.universe ->
       kinding_validated E (typ_variant T) knd_type
   | kinding_validated_arrow : forall E T1 T2,
       kinding_validated E T1 knd_type -> 
@@ -1774,16 +1759,18 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs2 ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_or T1 T2) (typ_or T2 T1) (knd_row cs12)
+        (typ_or cs1 T1 cs2 T2) (typ_or cs2 T2 cs1 T1) (knd_row cs12)
   | type_equal_core_validated_or_associative :
-      forall E T1 cs1 T2 cs2 T3 cs3 cs123,
+      forall E T1 cs1 T2 cs2 T3 cs3 cs12 cs23 cs123,
       kinding_validated E T1 (knd_row cs1) ->
       kinding_validated E T2 (knd_row cs2) ->
       kinding_validated E T3 (knd_row cs3) ->
       CSet.Disjoint cs1 cs2 ->
       CSet.Disjoint cs1 cs3 ->
       CSet.Disjoint cs2 cs3 ->
-      cs123 = CSet.union cs1 (CSet.union cs2 cs3) ->
+      cs12 = CSet.union cs1 cs2 ->
+      cs23 = CSet.union cs2 cs3 ->
+      cs123 = CSet.union cs1 cs23 ->
       environment E ->
       type T1 ->
       type T2 ->
@@ -1793,7 +1780,8 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs3 ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_or T1 (typ_or T2 T3)) (typ_or (typ_or T1 T2) T3)
+        (typ_or cs1 T1 cs23 (typ_or cs2 T2 cs3 T3))
+        (typ_or cs12 (typ_or cs1 T1 cs2 T2) cs3 T3)
         (knd_row cs123)
   | type_equal_core_validated_or_bot : forall E cs1 cs2 cs12,
       valid_env_validated E ->
@@ -1803,7 +1791,7 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       cs12 = CSet.union cs1 cs2 ->
       environment E ->
       type_equal_core_validated E
-        (typ_or (typ_bot cs1) (typ_bot cs2)) (typ_bot cs12)
+        (typ_or cs1 (typ_bot cs1) cs2 (typ_bot cs2)) (typ_bot cs12)
         (knd_row cs12)
   | type_equal_core_validated_or_top : forall E cs1 cs2 cs12,
       valid_env_validated E ->
@@ -1813,7 +1801,7 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       cs12 = CSet.union cs1 cs2 ->
       environment E ->
       type_equal_core_validated E
-        (typ_or (typ_top cs1) (typ_top cs2)) (typ_top cs12)
+        (typ_or cs1 (typ_top cs1) cs2 (typ_top cs2)) (typ_top cs12)
         (knd_row cs12)
   | type_equal_core_validated_or_meet_distribution :
       forall E T1 T2 T3 T4 cs1 cs2 cs12,
@@ -1832,8 +1820,8 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs2 ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_or (typ_meet T1 T3) (typ_meet T2 T4))
-        (typ_meet (typ_or T1 T2) (typ_or T3 T4))
+        (typ_or cs1 (typ_meet T1 T3) cs2 (typ_meet T2 T4))
+        (typ_meet (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4))
         (knd_row cs12)
   | type_equal_core_validated_or_join_distribution :
       forall E T1 T2 T3 T4 cs1 cs2 cs12,
@@ -1852,8 +1840,8 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs2 ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_or (typ_join T1 T3) (typ_join T2 T4))
-        (typ_join (typ_or T1 T2) (typ_or T3 T4))
+        (typ_or cs1 (typ_join T1 T3) cs2 (typ_join T2 T4))
+        (typ_join (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4))
         (knd_row cs12)
   | type_equal_core_validated_or_proj : forall E T cs1 cs2 cs3 cs23,
       kinding_validated E T (knd_row cs1) ->
@@ -1868,8 +1856,8 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs1 ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_or (typ_proj T cs2) (typ_proj T cs3))
-        (typ_proj T cs23)
+        (typ_or cs2 (typ_proj cs1 T cs2) cs3 (typ_proj cs1 T cs3))
+        (typ_proj cs1 T cs23)
         (knd_row cs23)
   | type_equal_core_validated_proj_id : forall E T cs,
       kinding_validated E T (knd_row cs) ->
@@ -1877,13 +1865,15 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       type T ->
       CSet.Nonempty cs ->
       valid_env_validated E ->
-      type_equal_core_validated E (typ_proj T cs) T (knd_row cs)
-  | type_equal_core_validated_proj_or_l : forall E T1 T2 cs1 cs1' cs2,
+      type_equal_core_validated E (typ_proj cs T cs) T (knd_row cs)
+  | type_equal_core_validated_proj_or_l :
+      forall E T1 T2 cs1 cs1' cs2 cs12,
       kinding_validated E T1 (knd_row cs1) ->
       kinding_validated E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       CSet.Subset cs1' cs1 ->
       CSet.Nonempty cs1' ->
+      cs12 = CSet.union cs1 cs2 ->
       environment E ->
       type T1 ->
       type T2 ->
@@ -1891,14 +1881,17 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs2 ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_proj (typ_or T1 T2) cs1') (typ_proj T1 cs1')
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs1')
+        (typ_proj cs1 T1 cs1')
         (knd_row cs1')
-  | type_equal_core_validated_proj_or_r : forall E T1 T2 cs1 cs2 cs2',
+  | type_equal_core_validated_proj_or_r :
+      forall E T1 T2 cs1 cs2 cs2' cs12,
       kinding_validated E T1 (knd_row cs1) ->
       kinding_validated E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       CSet.Subset cs2' cs2 ->
       CSet.Nonempty cs2' ->
+      cs12 = CSet.union cs1 cs2 ->
       environment E ->
       type T1 ->
       type T2 ->
@@ -1906,10 +1899,11 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs2 ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_proj (typ_or T1 T2) cs2') (typ_proj T2 cs2')
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs2')
+        (typ_proj cs2 T2 cs2')
         (knd_row cs2')
   | type_equal_core_validated_proj_or_both :
-      forall E T1 T2 cs1 cs2 cs1' cs2' cs12',
+      forall E T1 T2 cs1 cs2 cs1' cs2' cs12 cs12',
       kinding_validated E T1 (knd_row cs1) ->
       kinding_validated E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
@@ -1917,6 +1911,7 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs1' ->
       CSet.Subset cs2' cs2 ->
       CSet.Nonempty cs2' ->
+      cs12 = CSet.union cs1 cs2 ->
       cs12' = CSet.union cs1' cs2' ->
       environment E ->
       type T1 ->
@@ -1925,8 +1920,9 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs2 ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_proj (typ_or T1 T2) cs12')
-        (typ_or (typ_proj T1 cs1') (typ_proj T2 cs2'))
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs12')
+        (typ_or cs1' (typ_proj cs1 T1 cs1')
+                cs2' (typ_proj cs2 T2 cs2'))
         (knd_row cs12')
   | type_equal_core_validated_proj_meet : forall E T1 T2 cs cs',
       kinding_validated E T1 (knd_row cs) ->
@@ -1939,8 +1935,8 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_proj (typ_meet T1 T2) cs')
-        (typ_meet (typ_proj T1 cs') (typ_proj T2 cs'))
+        (typ_proj cs (typ_meet T1 T2) cs')
+        (typ_meet (typ_proj cs T1 cs') (typ_proj cs T2 cs'))
         (knd_row cs')
   | type_equal_core_validated_proj_join : forall E T1 T2 cs cs',
       kinding_validated E T1 (knd_row cs) ->
@@ -1953,8 +1949,8 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs ->
       valid_env_validated E ->
       type_equal_core_validated E
-        (typ_proj (typ_join T1 T2) cs')
-        (typ_join (typ_proj T1 cs') (typ_proj T2 cs'))
+        (typ_proj cs (typ_join T1 T2) cs')
+        (typ_join (typ_proj cs T1 cs') (typ_proj cs T2 cs'))
         (knd_row cs')
   | type_equal_core_validated_meet_commutative : forall E T1 T2 cs,
       kinding_validated E T1 (knd_row cs) ->
@@ -2099,7 +2095,7 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding_validated E T1 (knd_row cs1) ->
       kinding_validated E T1' (knd_row cs1) ->
       type_equal_cong_validated E
-        (typ_or T1 T2) (typ_or T1' T2) (knd_row cs12)
+        (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1' cs2 T2) (knd_row cs12)
   | type_equal_cong_validated_or_r : forall E T1 T2 T2' cs1 cs2 cs12,
       kinding_validated E T1 (knd_row cs1) ->
       CSet.Disjoint cs1 cs2 ->
@@ -2115,7 +2111,7 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding_validated E T2 (knd_row cs2) ->
       kinding_validated E T2' (knd_row cs2) ->
       type_equal_cong_validated E
-        (typ_or T1 T2) (typ_or T1 T2') (knd_row cs12)
+        (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1 cs2 T2') (knd_row cs12)
   | type_equal_cong_validated_row : forall E T1 T1',
       type_equal_cong_validated E T1 T1' (knd_row CSet.universe) ->
       environment E ->
@@ -2128,19 +2124,17 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       valid_kind_validated E (knd_range T1 T1) ->
       type_equal_cong_validated E
         (typ_row T1) (typ_row T1') (knd_range T1 T1)
-  | type_equal_cong_validated_variant : forall E T1 T1' T2 T3,
-      type_equal_cong_validated E T1 T1' (knd_range T2 T3) ->
+  | type_equal_cong_validated_variant : forall E T1 T1',
+      type_equal_cong_validated E T1 T1'
+        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
       environment E ->
       type T1 ->
       type T1' ->
-      type T2 ->
-      type T3 ->
       valid_env_validated E ->
-      kinding_validated E T1 (knd_range T2 T3) ->
-      kinding_validated E T1' (knd_range T2 T3) ->
-      kinding_validated E T2 (knd_row CSet.universe) ->
-      kinding_validated E T3 (knd_row CSet.universe) ->
-      subtype_validated E T3 T2 CSet.universe ->
+      kinding_validated E T1
+        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
+      kinding_validated E T1'
+        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
       type_equal_cong_validated E
         (typ_variant T1) (typ_variant T1') knd_type
   | type_equal_cong_validated_arrow_l : forall E T1 T1' T2,
@@ -2363,7 +2357,8 @@ Lemma unvalidated_combined_kinding :
   /\ (forall E T1 T2 cs,
        subtype_validated E T1 T2 cs -> subtype E T1 T2 cs).
 Proof.
-  apply combined_kinding_validated_mutind; intros; subst; econstr auto.
+  apply combined_kinding_validated_mutind;
+    intros; subst; econstr auto.
 Qed.
 
 Lemma unvalidated_valid_kind : forall T1 T2,
@@ -2667,32 +2662,6 @@ Proof.
      [ auto with kinding_validated
      | csetdec
      | eauto with kinding_validated ].
-  - apply kinding_validated_or
-      with (cs1 := cs1) (cs2 := CSet.union cs2 cs3);
-      auto with csetdec.
-    apply kinding_validated_or
-      with (cs1 := cs2) (cs2 := cs3); auto.
-  - apply kinding_validated_or
-      with (cs1 := CSet.union cs1 cs2) (cs2 := cs3);
-      auto with csetdec.
-    apply kinding_validated_or
-      with (cs1 := cs1) (cs2 := cs2); auto.
-  - apply kinding_validated_proj with (cs := CSet.union cs1 cs2);
-      auto with csetdec.
-    apply kinding_validated_or with (cs1 := cs1) (cs2 := cs2);
-      auto.
-  - apply kinding_validated_proj with (cs := CSet.union cs1 cs2);
-      auto with csetdec.
-    apply kinding_validated_or with (cs1 := cs1) (cs2 := cs2);
-      auto.
-  - apply kinding_validated_proj with (cs := CSet.union cs1 cs2);
-      auto with csetdec.
-    apply kinding_validated_or with (cs1 := cs1) (cs2 := cs2);
-      auto.
-  - apply kinding_validated_or with (cs1 := cs1') (cs2 := cs2');
-      auto with csetdec.
-    + apply kinding_validated_proj with (cs := cs1); auto.
-    + apply kinding_validated_proj with (cs := cs2); auto.
 Qed.
 
 Hint Constructors type_equal_core_validated
@@ -3185,8 +3154,6 @@ Proof.
     intros; subst; econstr auto with valid_env_regular.
   - auto using binds_weakening
       with kinding_validated valid_env_validated valid_env_regular.
-  - apply kinding_validated_variant with (T1 := T1) (T2 := T2);
-      auto with valid_env_regular.
   - apply kinding_validated_range_subsumption
       with (T1 := T1) (T2 := T2);
       auto with valid_env_regular.
@@ -3206,11 +3173,6 @@ Proof.
     auto with valid_env_validated valid_env_regular.
   - destruct (eq_push_inv H2) as [_ [? _]].
     discriminate.
-  - apply type_equal_core_validated_or_associative
-      with (cs1 := cs1) (cs2 := cs2) (cs3 := cs3);
-      auto with valid_env_regular.
-  - apply type_equal_cong_validated_variant
-      with (T2 := T2) (T3 := T3); auto with valid_env_regular.
   - apply type_equal_cong_validated_range_subsumption
       with (T3 := T3) (T4 := T4); auto with valid_env_regular.
   - apply type_equal_validated_step with (T2 := T2);
@@ -3480,11 +3442,6 @@ Proof.
   - assert (valid_kind_validated E (knd_range T1 T2)) as Hknd
       by auto with kinding_validated.
     inversion Hknd; subst.
-    apply kinding_validated_variant with (T1 := T1) (T2 := T2);
-      auto with kinding_validated.
-  - assert (valid_kind_validated E (knd_range T1 T2)) as Hknd
-      by auto with kinding_validated.
-    inversion Hknd; subst.
     assert (subtype_validated E T2' T1' CSet.universe)
       by eauto using subtype_validated_transitive.
     apply kinding_validated_range_subsumption
@@ -3514,10 +3471,6 @@ Proof.
       with (T1 := T1') (T2 := T1');
       auto with valid_kind_validated kinding_validated
         type_equal_cong_regular type_equal_cong_validated.
-  - assert (valid_kind_validated E (knd_range T2 T3)) as Hknd
-      by auto with type_equal_cong_validated.
-    inversion Hknd; subst.
-    eauto with type_equal_cong_validated.
   - assert (valid_kind_validated E (knd_range T3 T4)) as Hknd
       by auto with type_equal_cong_validated.
     inversion Hknd; subst.
@@ -3864,7 +3817,7 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
   | typing_validated_constructor : forall c E T1 T2 T3 t,
       kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
       subtype E
-        (typ_proj T2 (CSet.singleton c))
+        (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T3)
         (CSet.singleton c) ->
       typing_validated E t T3 ->
@@ -3880,16 +3833,16 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
   | typing_validated_match : forall c L E T1 T2 T3 T4 T5
                           T6 T7 T8 t1 t2 t3,
       subtype E
-        (typ_proj T2 (CSet.singleton c))
+        (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T7)
         (CSet.singleton c) ->
       subtype E
-        (typ_proj T2 (CSet.singleton c))
-        (typ_proj T4 (CSet.singleton c))
+        (typ_proj CSet.universe T2 (CSet.singleton c))
+        (typ_proj CSet.universe T4 (CSet.singleton c))
         (CSet.singleton c) ->
       subtype E
-        (typ_proj T2 (CSet.cosingleton c))
-        (typ_proj T6 (CSet.cosingleton c))
+        (typ_proj CSet.universe T2 (CSet.cosingleton c))
+        (typ_proj CSet.universe T6 (CSet.cosingleton c))
         (CSet.cosingleton c) ->
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       kinding E T3 (knd_range (typ_top CSet.universe) T4) ->
@@ -3938,7 +3891,7 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       subtype E
         (typ_constructor c T3)
-        (typ_proj T2 (CSet.singleton c))
+        (typ_proj CSet.universe T2 (CSet.singleton c))
         (CSet.singleton c) ->
       typing_validated E t1 (typ_variant T1) ->
       (forall x, x \notin L ->

@@ -17,8 +17,8 @@ Inductive typ : Type :=
   | typ_bvar : nat -> typ
   | typ_fvar : var -> typ
   | typ_constructor : nat -> typ -> typ
-  | typ_or : typ -> typ -> typ
-  | typ_proj : typ -> cset -> typ
+  | typ_or : cset -> typ -> cset -> typ -> typ
+  | typ_proj : cset -> typ -> cset -> typ
   | typ_row : typ -> typ
   | typ_variant : typ -> typ
   | typ_arrow : typ -> typ -> typ
@@ -64,8 +64,9 @@ Fixpoint typ_open_k (k : nat) (U : typ) (T : typ) {struct T}: typ :=
   | typ_bvar i => If k = i then U else (typ_bvar i)
   | typ_fvar x => typ_fvar x 
   | typ_constructor c T => typ_constructor c (typ_open_k k U T)
-  | typ_or T1 T2 => typ_or (typ_open_k k U T1) (typ_open_k k U T2)
-  | typ_proj T cs => typ_proj (typ_open_k k U T) cs
+  | typ_or cs1 T1 cs2 T2 =>
+    typ_or cs1 (typ_open_k k U T1) cs2 (typ_open_k k U T2)
+  | typ_proj cs1 T cs2 => typ_proj cs1 (typ_open_k k U T) cs2
   | typ_row T => typ_row (typ_open_k k U T)
   | typ_variant T => typ_variant (typ_open_k k U T)
   | typ_arrow T1 T2 =>
@@ -138,13 +139,13 @@ Inductive type : typ -> Prop :=
   | type_constructor : forall c T,
       type T ->
       type (typ_constructor c T)
-  | type_or : forall T1 T2,
+  | type_or : forall cs1 T1 cs2 T2,
       type T1 ->
       type T2 ->
-      type (typ_or T1 T2)
-  | type_proj : forall T cs,
+      type (typ_or cs1 T1 cs2 T2)
+  | type_proj : forall cs1 T cs2,
       type T ->
-      type (typ_proj T cs)
+      type (typ_proj cs1 T cs2)
   | type_row : forall T,
       type T ->
       type (typ_row T)
@@ -368,17 +369,18 @@ with kinding : env -> typ -> knd -> Prop :=
       kinding E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      kinding E (typ_or T1 T2) (knd_row cs12)
-  | kinding_proj : forall E T cs cs',
-      kinding E T (knd_row cs) ->
-      CSet.Subset cs' cs ->
-      CSet.Nonempty cs' ->
-      kinding E (typ_proj T cs') (knd_row cs')
+      kinding E (typ_or cs1 T1 cs2 T2) (knd_row cs12)
+  | kinding_proj : forall E T cs1 cs2,
+      kinding E T (knd_row cs1) ->
+      CSet.Subset cs2 cs1 ->
+      CSet.Nonempty cs2 ->
+      kinding E (typ_proj cs1 T cs2) (knd_row cs2)
   | kinding_row : forall E T,
       kinding E T (knd_row CSet.universe) ->
       kinding E (typ_row T) (knd_range T T)
-  | kinding_variant : forall E T T1 T2,
-      kinding E T (knd_range T1 T2) ->
+  | kinding_variant : forall E T,
+      kinding E T
+        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
       kinding E (typ_variant T) knd_type
   | kinding_arrow : forall E T1 T2,
       kinding E T1 knd_type -> 
@@ -446,18 +448,22 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       kinding E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_core E (typ_or T1 T2) (typ_or T2 T1) (knd_row cs12)
+      type_equal_core E
+        (typ_or cs1 T1 cs2 T2) (typ_or cs2 T2 cs1 T1) (knd_row cs12)
   | type_equal_core_or_associative :
-      forall E T1 cs1 T2 cs2 T3 cs3 cs123,
+      forall E T1 cs1 T2 cs2 T3 cs3 cs12 cs23 cs123,
       kinding E T1 (knd_row cs1) ->
       kinding E T2 (knd_row cs2) ->
       kinding E T3 (knd_row cs3) ->
       CSet.Disjoint cs1 cs2 ->
       CSet.Disjoint cs1 cs3 ->
       CSet.Disjoint cs2 cs3 ->
-      cs123 = CSet.union cs1 (CSet.union cs2 cs3) ->
+      cs12 = CSet.union cs1 cs2 ->
+      cs23 = CSet.union cs2 cs3 ->
+      cs123 = CSet.union cs1 cs23 ->
       type_equal_core E
-        (typ_or T1 (typ_or T2 T3)) (typ_or (typ_or T1 T2) T3)
+        (typ_or cs1 T1 cs23 (typ_or cs2 T2 cs3 T3))
+        (typ_or cs12 (typ_or cs1 T1 cs2 T2) cs3 T3)
         (knd_row cs123)
   | type_equal_core_or_bot : forall E cs1 cs2 cs12,
       valid_env E ->
@@ -466,7 +472,7 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
       type_equal_core E
-        (typ_or (typ_bot cs1) (typ_bot cs2)) (typ_bot cs12)
+        (typ_or cs1 (typ_bot cs1) cs2 (typ_bot cs2)) (typ_bot cs12)
         (knd_row cs12)
   | type_equal_core_or_top : forall E cs1 cs2 cs12,
       valid_env E ->
@@ -475,7 +481,7 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
       type_equal_core E
-        (typ_or (typ_top cs1) (typ_top cs2)) (typ_top cs12)
+        (typ_or cs1 (typ_top cs1) cs2 (typ_top cs2)) (typ_top cs12)
         (knd_row cs12)
   | type_equal_core_or_meet_distribution :
       forall E T1 T2 T3 T4 cs1 cs2 cs12,
@@ -486,8 +492,8 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
       type_equal_core E
-        (typ_or (typ_meet T1 T3) (typ_meet T2 T4))
-        (typ_meet (typ_or T1 T2) (typ_or T3 T4))
+        (typ_or cs1 (typ_meet T1 T3) cs2 (typ_meet T2 T4))
+        (typ_meet (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4))
         (knd_row cs12)
   | type_equal_core_or_join_distribution :
       forall E T1 T2 T3 T4 cs1 cs2 cs12,
@@ -498,8 +504,8 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
       type_equal_core E
-        (typ_or (typ_join T1 T3) (typ_join T2 T4))
-        (typ_join (typ_or T1 T2) (typ_or T3 T4))
+        (typ_or cs1 (typ_join T1 T3) cs2 (typ_join T2 T4))
+        (typ_join (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4))
         (knd_row cs12)
   | type_equal_core_or_proj : forall E T cs1 cs2 cs3 cs23,
       kinding E T (knd_row cs1) ->
@@ -510,32 +516,36 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs3 ->
       cs23 = CSet.union cs2 cs3 ->
       type_equal_core E
-        (typ_or (typ_proj T cs2) (typ_proj T cs3))
-        (typ_proj T cs23)
+        (typ_or cs2 (typ_proj cs1 T cs2) cs3 (typ_proj cs1 T cs3))
+        (typ_proj cs1 T cs23)
         (knd_row cs23)
   | type_equal_core_proj_id : forall E T cs,
       kinding E T (knd_row cs) ->
-      type_equal_core E (typ_proj T cs) T (knd_row cs)
-  | type_equal_core_proj_or_l : forall E T1 T2 cs1 cs1' cs2,
+      type_equal_core E (typ_proj cs T cs) T (knd_row cs)
+  | type_equal_core_proj_or_l : forall E T1 T2 cs1 cs1' cs2 cs12,
       kinding E T1 (knd_row cs1) ->
       kinding E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       CSet.Subset cs1' cs1 ->
       CSet.Nonempty cs1' ->
+      cs12 = CSet.union cs1 cs2 ->
       type_equal_core E
-        (typ_proj (typ_or T1 T2) cs1') (typ_proj T1 cs1')
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs1')
+        (typ_proj cs1 T1 cs1')
         (knd_row cs1')
-  | type_equal_core_proj_or_r : forall E T1 T2 cs1 cs2 cs2',
+  | type_equal_core_proj_or_r : forall E T1 T2 cs1 cs2 cs2' cs12,
       kinding E T1 (knd_row cs1) ->
       kinding E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       CSet.Subset cs2' cs2 ->
       CSet.Nonempty cs2' ->
+      cs12 = CSet.union cs1 cs2 ->
       type_equal_core E
-        (typ_proj (typ_or T1 T2) cs2') (typ_proj T2 cs2')
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs2')
+        (typ_proj cs2 T2 cs2')
         (knd_row cs2')
   | type_equal_core_proj_or_both :
-      forall E T1 T2 cs1 cs2 cs1' cs2' cs12',
+      forall E T1 T2 cs1 cs2 cs1' cs2' cs12 cs12',
       kinding E T1 (knd_row cs1) ->
       kinding E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
@@ -543,10 +553,12 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs1' ->
       CSet.Subset cs2' cs2 ->
       CSet.Nonempty cs2' ->
+      cs12 = CSet.union cs1 cs2 ->
       cs12' = CSet.union cs1' cs2' ->
       type_equal_core E
-        (typ_proj (typ_or T1 T2) cs12')
-        (typ_or (typ_proj T1 cs1') (typ_proj T2 cs2'))
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs12')
+        (typ_or cs1' (typ_proj cs1 T1 cs1')
+                cs2' (typ_proj cs2 T2 cs2'))
         (knd_row cs12')
   | type_equal_core_proj_meet : forall E T1 T2 cs cs',
       kinding E T1 (knd_row cs) ->
@@ -554,8 +566,8 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       CSet.Subset cs' cs ->
       CSet.Nonempty cs' ->
       type_equal_core E
-        (typ_proj (typ_meet T1 T2) cs')
-        (typ_meet (typ_proj T1 cs') (typ_proj T2 cs'))
+        (typ_proj cs (typ_meet T1 T2) cs')
+        (typ_meet (typ_proj cs T1 cs') (typ_proj cs T2 cs'))
         (knd_row cs')
   | type_equal_core_proj_join : forall E T1 T2 cs cs',
       kinding E T1 (knd_row cs) ->
@@ -563,8 +575,8 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
       CSet.Subset cs' cs ->
       CSet.Nonempty cs' ->
       type_equal_core E
-        (typ_proj (typ_join T1 T2) cs')
-        (typ_join (typ_proj T1 cs') (typ_proj T2 cs'))
+        (typ_proj cs (typ_join T1 T2) cs')
+        (typ_join (typ_proj cs T1 cs') (typ_proj cs T2 cs'))
         (knd_row cs')
   | type_equal_core_meet_commutative : forall E T1 T2 cs,
       kinding E T1 (knd_row cs) ->
@@ -635,18 +647,21 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
       type_equal_cong E T1 T1' (knd_row cs1) ->
-      type_equal_cong E (typ_or T1 T2) (typ_or T1' T2) (knd_row cs12)
+      type_equal_cong E
+        (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1' cs2 T2) (knd_row cs12)
   | type_equal_cong_or_r : forall E T1 T2 T2' cs1 cs2 cs12,
       kinding E T1 (knd_row cs1) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
       type_equal_cong E T2 T2' (knd_row cs2) ->
-      type_equal_cong E (typ_or T1 T2) (typ_or T1 T2') (knd_row cs12)
+      type_equal_cong E
+        (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1 cs2 T2') (knd_row cs12)
   | type_equal_cong_row : forall E T1 T1',
       type_equal_cong E T1 T1' (knd_row CSet.universe) ->
       type_equal_cong E (typ_row T1) (typ_row T1') (knd_range T1 T1)
-  | type_equal_cong_variant : forall E T1 T1' T2 T3,
-      type_equal_cong E T1 T1' (knd_range T2 T3) ->
+  | type_equal_cong_variant : forall E T1 T1',
+      type_equal_cong E T1 T1'
+        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
       type_equal_cong E
         (typ_variant T1) (typ_variant T1') knd_type
   | type_equal_cong_arrow_l : forall E T1 T1' T2,
@@ -770,7 +785,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_constructor : forall c E T1 T2 T3 t,
       kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
       subtype E
-        (typ_proj T2 (CSet.singleton c))
+        (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T3)
         (CSet.singleton c) ->
       typing E t T3 ->
@@ -780,16 +795,16 @@ Inductive typing : env -> trm -> typ -> Prop :=
       kinding E T3 (knd_range (typ_top CSet.universe) T4) ->
       kinding E T5 (knd_range (typ_top CSet.universe) T6) ->
       subtype E
-        (typ_proj T2 (CSet.singleton c))
+        (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T7)
         (CSet.singleton c) ->
       subtype E
-        (typ_proj T2 (CSet.singleton c))
-        (typ_proj T4 (CSet.singleton c))
+        (typ_proj CSet.universe T2 (CSet.singleton c))
+        (typ_proj CSet.universe T4 (CSet.singleton c))
         (CSet.singleton c) ->
       subtype E
-        (typ_proj T2 (CSet.cosingleton c))
-        (typ_proj T6 (CSet.cosingleton c))
+        (typ_proj CSet.universe T2 (CSet.cosingleton c))
+        (typ_proj CSet.universe T6 (CSet.cosingleton c))
         (CSet.cosingleton c) ->
       typing E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
@@ -803,7 +818,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       subtype E
         (typ_constructor c T3)
-        (typ_proj T2 (CSet.singleton c))
+        (typ_proj CSet.universe T2 (CSet.singleton c))
         (CSet.singleton c) ->
       typing E t1 (typ_variant T1) ->
       (forall x, x \notin L ->

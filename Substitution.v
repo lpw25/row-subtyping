@@ -16,8 +16,8 @@ Fixpoint typ_fv (T : typ) {struct T} : vars :=
   | typ_bvar i => \{}
   | typ_fvar x => \{x}
   | typ_constructor c T1 => (typ_fv T1)
-  | typ_or T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  | typ_proj T1 cs => (typ_fv T1)
+  | typ_or cs1 T1 cs2 T2 => (typ_fv T1) \u (typ_fv T2)
+  | typ_proj cs1 T1 cs2 => (typ_fv T1)
   | typ_row T1 => (typ_fv T1)
   | typ_variant T1 => (typ_fv T1)
   | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
@@ -81,9 +81,9 @@ Fixpoint typ_subst (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   | typ_bvar i => typ_bvar i
   | typ_fvar X => If X = Z then U else (typ_fvar X)
   | typ_constructor c T1 => typ_constructor c (typ_subst Z U T1)
-  | typ_or T1 T2 =>
-      typ_or (typ_subst Z U T1) (typ_subst Z U T2)
-  | typ_proj T1 cs => typ_proj (typ_subst Z U T1) cs
+  | typ_or cs1 T1 cs2 T2 =>
+      typ_or cs1 (typ_subst Z U T1) cs2 (typ_subst Z U T2)
+  | typ_proj cs1 T1 cs2 => typ_proj cs1 (typ_subst Z U T1) cs2
   | typ_row T1 => typ_row (typ_subst Z U T1)
   | typ_variant T1 => typ_variant (typ_subst Z U T1)
   | typ_arrow T1 T2 =>
