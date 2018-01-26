@@ -1565,7 +1565,7 @@ Proof.
 Qed.
 
 (* *************************************************************** *)
-(** * "Validated" versions of judgements *)
+(** * "Validated" versions of kinding judgements *)
 
 Inductive valid_kind_validated : env -> knd -> Prop :=
   | valid_kind_validated_type : forall E,
@@ -3741,6 +3741,127 @@ Hint Extern 1 (kinding ?E ?T (knd_row ?cs)) =>
                (proj33 (subtype_validated_inv (validated_subtype H))))
   end : subtype_validated.
 
+(* *************************************************************** *)
+(** Type equality in an equivalence *)
+
+Lemma type_equal_reflexive : forall E T K,
+    kinding E T K ->
+    type_equal E T T K.
+Proof.
+  auto.
+Qed.
+
+Lemma type_equal_transitive : forall E T1 T2 T3 K,
+    type_equal E T1 T2 K ->
+    type_equal E T2 T3 K ->
+    type_equal E T1 T3 K.
+Proof.
+  introv Hte1 Hte2.
+  apply validated_type_equal in Hte1.
+  apply validated_type_equal in Hte2.
+  eauto using type_equal_validated_transitive.
+Qed.
+
+Lemma type_equal_symmetric : forall E T1 T2 K,
+    type_equal E T1 T2 K ->
+    type_equal E T2 T1 K.
+Proof.
+  introv Hte.
+  apply validated_type_equal in Hte.
+  eauto using type_equal_validated_symmetric.
+Qed.
+
+(* *************************************************************** *)
+(** Subtyping is a partial order *)
+
+Lemma subtype_refl : forall E T cs,
+    kinding E T (knd_row cs) ->
+    subtype E T T cs.
+Proof.
+  introv Hk.
+  apply validated_kinding in Hk.
+  eauto using subtype_validated_refl.
+Qed.
+
+Lemma subtype_reflexive : forall E T1 T2 cs,
+    type_equal E T1 T2 (knd_row cs) ->
+    subtype E T1 T2 cs.
+Proof.
+  introv Hte.
+  apply validated_type_equal in Hte.
+  eauto using subtype_validated_reflexive.
+Qed.
+     
+Lemma subtype_transitive : forall E T1 T2 T3 cs,
+    subtype E T1 T2 cs ->
+    subtype E T2 T3 cs ->
+    subtype E T1 T3 cs.
+Proof.
+  introv Hs1 Hs2.
+  apply validated_subtype in Hs1.
+  apply validated_subtype in Hs2.
+  eauto using subtype_validated_transitive.
+Qed.
+
+Lemma subtype_antisymmetric : forall E T1 T2 cs,
+    subtype E T1 T2 cs ->
+    subtype E T2 T1 cs ->
+    type_equal E T1 T2 (knd_row cs).
+Proof.
+  introv Hs1 Hs2.
+  apply validated_subtype in Hs1.
+  apply validated_subtype in Hs2.
+  eauto using subtype_validated_antisymmetric.
+Qed.
+
+(* *************************************************************** *)
+(** Typing lattice is bounded *)
+
+Lemma subtype_top : forall E T cs,
+    kinding E T (knd_row cs) ->
+    subtype E T (typ_top cs) cs.
+Proof.
+  introv Hk.
+  apply validated_kinding in Hk.
+  apply subtype_c.
+  apply type_equal_step with (typ_meet T (typ_top cs));
+    auto with kinding_validated kinding_regular.
+Qed.
+
+Lemma subtype_bot : forall E T cs,
+    kinding E T (knd_row cs) ->
+    subtype E (typ_bot cs) T cs.
+Proof.
+  introv Hk.
+  apply validated_kinding in Hk.
+  apply subtype_c.
+  apply type_equal_step
+    with (typ_meet (typ_bot cs) (typ_join (typ_bot cs) T));
+    auto with kinding_validated kinding_regular.
+  apply type_equal_step
+    with (typ_meet (typ_bot cs) (typ_join T (typ_bot cs)));
+    auto 6 with kinding_validated kinding_regular.
+  apply type_equal_step with (typ_meet (typ_bot cs) T);
+    auto 6 with kinding_validated kinding_regular.
+Qed.  
+
+Lemma kinding_range_top_bot : forall E T1 T2 T3,
+    kinding E T1 (knd_range T2 T3) ->
+    kinding E T1
+      (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)).
+Proof.
+  introv Hk.
+  apply validated_kinding in Hk.
+  assert (valid_kind_validated E (knd_range T2 T3))
+    as Hknd by auto with kinding_validated.
+  inversion Hknd; subst.  
+  apply kinding_range_subsumption with (T1 := T2) (T2 := T3);
+    auto using subtype_top, subtype_bot.
+Qed.  
+
+(* *************************************************************** *)
+(** * "Validated" version of typing judgement *)
+
 Inductive typing_validated : env -> trm -> typ -> Prop :=
   | typing_validated_var : forall E x M Us,
       valid_env E -> 
@@ -3942,7 +4063,7 @@ Lemma typing_validated_inv : forall E t T,
     valid_env E /\ kinding E T knd_type.
 Proof.
   introv Ht.
-  induction Ht; splits; eauto.
+  induction Ht; splits; eauto using kinding_range_top_bot.
 Qed.
 
 Hint Constructors typing_validated : typing_validated.
@@ -4110,76 +4231,3 @@ Hint Extern 1 (kinding ?E ?T knd_type) =>
   | H : typing E _ T |- _ =>
       apply (proj2 (typing_validated_inv (validated_typing H)))
   end : typing_validated.
-
-(* *************************************************************** *)
-(** Type equality in an equivalence *)
-
-Lemma type_equal_reflexive : forall E T K,
-    kinding E T K ->
-    type_equal E T T K.
-Proof.
-  auto.
-Qed.
-
-Lemma type_equal_transitive : forall E T1 T2 T3 K,
-    type_equal E T1 T2 K ->
-    type_equal E T2 T3 K ->
-    type_equal E T1 T3 K.
-Proof.
-  introv Hte1 Hte2.
-  apply validated_type_equal in Hte1.
-  apply validated_type_equal in Hte2.
-  eauto using type_equal_validated_transitive.
-Qed.
-
-Lemma type_equal_symmetric : forall E T1 T2 K,
-    type_equal E T1 T2 K ->
-    type_equal E T2 T1 K.
-Proof.
-  introv Hte.
-  apply validated_type_equal in Hte.
-  eauto using type_equal_validated_symmetric.
-Qed.
-
-(* *************************************************************** *)
-(** Subtyping is a partial order *)
-
-Lemma subtype_refl : forall E T cs,
-    kinding E T (knd_row cs) ->
-    subtype E T T cs.
-Proof.
-  introv Hk.
-  apply validated_kinding in Hk.
-  eauto using subtype_validated_refl.
-Qed.
-
-Lemma subtype_reflexive : forall E T1 T2 cs,
-    type_equal E T1 T2 (knd_row cs) ->
-    subtype E T1 T2 cs.
-Proof.
-  introv Hte.
-  apply validated_type_equal in Hte.
-  eauto using subtype_validated_reflexive.
-Qed.
-     
-Lemma subtype_transitive : forall E T1 T2 T3 cs,
-    subtype E T1 T2 cs ->
-    subtype E T2 T3 cs ->
-    subtype E T1 T3 cs.
-Proof.
-  introv Hs1 Hs2.
-  apply validated_subtype in Hs1.
-  apply validated_subtype in Hs2.
-  eauto using subtype_validated_transitive.
-Qed.
-
-Lemma subtype_antisymmetric : forall E T1 T2 cs,
-    subtype E T1 T2 cs ->
-    subtype E T2 T1 cs ->
-    type_equal E T1 T2 (knd_row cs).
-Proof.
-  introv Hs1 Hs2.
-  apply validated_subtype in Hs1.
-  apply validated_subtype in Hs2.
-  eauto using subtype_validated_antisymmetric.
-Qed.
