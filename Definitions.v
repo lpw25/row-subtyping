@@ -761,11 +761,12 @@ Inductive valid_instance : env -> list typ -> sch -> Prop :=
 (** ** Description of typing *)
 
 Inductive typing : env -> trm -> typ -> Prop :=
-  | typing_var : forall E x M Us, 
+  | typing_var : forall E x M T Us, 
       valid_env E -> 
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
-      typing E (trm_fvar x) (instance M Us)
+      T = instance M Us ->
+      typing E (trm_fvar x) T
   | typing_abs : forall L E T1 T2 t1,
       kinding E T1 knd_type ->
       (forall x, x \notin L -> 

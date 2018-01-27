@@ -2044,15 +2044,16 @@ Hint Extern 1 (scheme ?M) =>
   end : valid_instance_regular.
 
 Inductive typing_regular : env -> trm -> typ -> Prop :=
-  | typing_regular_var : forall E x M Us,
+  | typing_regular_var : forall E x M T Us,
       environment E ->
       scheme M ->
       types (sch_arity M) Us ->
-      type (instance M Us) ->
+      type T ->
       valid_env E -> 
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
-      typing_regular E (trm_fvar x) (instance M Us)
+      T = instance M Us ->
+      typing_regular E (trm_fvar x) T
   | typing_regular_abs : forall L E T1 T2 t1,
       kinding E T1 knd_type ->
       environment E ->
@@ -2218,8 +2219,9 @@ Proof.
     assert (types (sch_arity M) Us)
       by auto with valid_instance_regular.   
     assert (type (instance M Us))
-      by auto using scheme_instance_type.
-    auto with typing_regular.
+      as Ht by auto using scheme_instance_type.
+    replace (instance M Us) with T in Ht.
+    eauto with typing_regular.
   - pick_fresh_gen L x.
     assert (typing_regular (E & x ~: sch_empty T1) (t1 ^ x) T2)
       by auto.

@@ -3863,17 +3863,18 @@ Qed.
 (** * "Validated" version of typing judgement *)
 
 Inductive typing_validated : env -> trm -> typ -> Prop :=
-  | typing_validated_var : forall E x M Us,
+  | typing_validated_var : forall E x M T Us,
       valid_env E -> 
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
+      T = instance M Us ->
       environment E ->
       scheme M ->
       types (sch_arity M) Us ->
-      type (instance M Us) ->
+      type T ->
       valid_scheme E M ->
-      kinding E (instance M Us) knd_type ->
-      typing_validated E (trm_fvar x) (instance M Us)
+      kinding E T knd_type ->
+      typing_validated E (trm_fvar x) T
   | typing_validated_abs : forall L E T1 T2 t1,
       kinding E T1 knd_type ->
       (forall x, x \notin L -> 
@@ -4106,9 +4107,9 @@ Lemma validated_typing_regular : forall E t T,
 Proof.
   introv Ht.
   induction Ht.
-  - econstructor; auto.
+  - econstructor; try eassumption; auto.
     + apply valid_scheme_from_env with (x := x); assumption.
-    + apply kinding_instance; assumption.
+    + subst; apply kinding_instance; assumption.
   - pick_fresh x.
     assert (typing_validated (E & x ~: sch_empty T1) (t1 ^ x) T2)
       by auto.
