@@ -1205,6 +1205,26 @@ Proof.
       apply binds_push_neq; auto.
 Qed.
 
+Lemma env_subst_binds_knd : forall X K E Z U,
+    binds X (bind_knd K) E ->
+    binds X (bind_knd (knd_subst Z U K)) (env_subst Z U E).
+Proof.
+  introv Hbd.
+  fold (bind_subst Z U (bind_knd K)).
+  apply env_subst_binds.
+  assumption.
+Qed.
+
+Lemma env_subst_binds_typ : forall x M E Z U,
+    binds x (bind_typ M) E ->
+    binds x (bind_typ (sch_subst Z U M)) (env_subst Z U E).
+Proof.
+  introv Hbd.
+  fold (bind_subst Z U (bind_typ M)).
+  apply env_subst_binds.
+  assumption.
+Qed.
+
 Lemma env_substs_binds : forall X B E Zs Us,
     binds X B E ->
     binds X (bind_substs Zs Us B) (env_substs Zs Us E).

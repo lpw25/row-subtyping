@@ -109,17 +109,10 @@ Proof.
   generalize dependent E.
   generalize dependent F.
   induction Ht; introv Heq Hk; subst.
-  - assert (binds x (bind_typ M) (E0 & X ~:: K & F))
-      as Hb by assumption.
-    destruct (binds_middle_inv Hb) as [?|[[_[_?]]|[?[??]]]].
-    + apply typing_var
+  - apply typing_var
         with (M := sch_subst X S M)
              (Us := (List.map (typ_subst X S) Us));
-        eauto using valid_env_typ_subst, valid_instance_typ_subst.
-      admit.
-      admit.
-    + discriminate.
-    + apply typing_var
-        with (M := M)
-             (Us := (List.map (typ_subst X S) Us));
-        eauto using valid_env_typ_subst, valid_instance_typ_subst.
+      eauto using valid_env_typ_subst, valid_instance_typ_subst,
+                  sch_subst_instance, binds_typ_typ_subst
+            with kinding_regular.
+  - 

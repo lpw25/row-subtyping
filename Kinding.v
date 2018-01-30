@@ -660,6 +660,24 @@ Proof.
   intuition eauto.
 Qed.
 
+Lemma valid_env_binds_typ_closed : forall E X x M,
+    valid_env E ->
+    X # E ->
+    binds x (bind_typ M) E ->
+    X \notin (sch_fv M).
+Proof.
+  introv He Hn Hb.
+  induction He.
+  - exfalso. eapply binds_empty_inv. eassumption.
+  - destruct (binds_push_inv Hb) as [[? ?]|[? ?]].
+    + discriminate.
+    + auto.
+  - destruct (binds_push_inv Hb) as [[? Heq]|[? ?]].
+    + inversion Heq; subst.
+      eauto using valid_scheme_closed.
+    + auto.     
+Qed.
+
 Lemma valid_env_knd_closed : forall E X K,
     valid_env (E & X ~:: K) ->
     X # E ->
@@ -674,6 +692,22 @@ Proof.
     eauto using valid_kind_closed.
   - destruct (eq_push_inv HeqEX) as [? [HeqK ?]].
     discriminate.
+Qed.
+
+Lemma valid_env_typ_closed : forall E x M,
+    valid_env (E & x ~: M) ->
+    x # E ->
+    x \notin sch_fv M.
+Proof.
+  introv He Hn.
+  remember (E & x ~: M) as Ex.
+  induction He; intros; subst.
+  - exfalso. eapply empty_push_inv. eassumption.
+  - destruct (eq_push_inv HeqEx) as [? [HeqK ?]].
+    discriminate.
+  - destruct (eq_push_inv HeqEx) as [? [HeqK ?]].
+    inversion HeqK; subst.
+    eauto using valid_scheme_closed.
 Qed.
 
 Lemma type_equal_core_closed : forall E T1 T2 K X,
@@ -1019,6 +1053,31 @@ Proof.
   pose combined_kinding_typ_subst.
   intuition eauto.
 Qed.
+
+Lemma binds_typ_typ_subst : forall E F X J S x M,
+    valid_env (E & X ~:: J & F) ->
+    kinding E S J ->
+    binds x (bind_typ M) (E & X ~:: J & F) ->
+    binds x (bind_typ (sch_subst X S M)) (E & env_subst X S F).
+Proof.
+  introv Hv Hk Hb.
+  assert (valid_env (E & env_subst X S F))
+      by eauto using valid_env_typ_subst.
+  assert (ok (E & X ~:: J & F)) as Hok1
+    by auto using ok_from_environment with valid_env_regular.
+  destruct (ok_middle_inv Hok1).
+  assert (ok (E & env_subst X S F)) as Hok2
+    by auto using ok_from_environment with valid_env_regular.
+  destruct (binds_middle_inv Hb) as [?|[[_[_?]]|[_[_?]]]].
+  + eauto using binds_concat_right, env_subst_binds_typ.
+  + discriminate.
+  + replace (sch_subst X S M) with M;
+      auto using binds_concat_left_ok.
+    symmetry.
+    apply sch_subst_fresh.
+    eapply valid_env_binds_typ_closed with (E := E);
+      eauto using valid_env_retract.
+Qed.  
 
 Lemma type_equal_core_typ_subst : forall E F X J S T1 T2 K,
     type_equal_core (E & X ~:: J & F) T1 T2 K ->
