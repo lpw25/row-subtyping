@@ -1600,6 +1600,26 @@ Proof.
   eauto using subtype_typ_bind.
 Qed.
 
+Lemma valid_instance_typ_bind : forall E F x M1 Ts M2,
+    valid_instance (E & x ~: M1 & F) Ts M2 ->
+    valid_instance (E & F) Ts M2.
+Proof.
+  introv Hv.
+  remember (E & x ~: M1 & F) as ExF.
+  remember (E & F) as EF.
+  induction Hv; subst; eauto using kinding_typ_bind.
+Qed.
+
+Lemma valid_instance_typ_bind_l : forall E x M1 Ts M2,
+    valid_instance (E & x ~: M1) Ts M2 ->
+    valid_instance E Ts M2.
+Proof.
+  introv Hv.
+  rewrite <- concat_empty_r with (E := E & x ~: M1) in Hv.
+  rewrite <- concat_empty_r with (E := E).
+  eauto using valid_instance_typ_bind.
+Qed.
+
 (* *************************************************************** *)
 (** Kinding of schemes with no parameters *)
 
@@ -2420,8 +2440,8 @@ Proof.
     intros; subst; econstr auto.
 Qed.
 
-Lemma unvalidated_valid_kind : forall T1 T2,
-    valid_kind_validated T1 T2 -> valid_kind T1 T2.
+Lemma unvalidated_valid_kind : forall E K,
+    valid_kind_validated E K -> valid_kind E K.
 Proof.
   pose unvalidated_combined_kinding.
   tauto.
@@ -3799,6 +3819,87 @@ Hint Extern 1 (kinding ?E ?T (knd_row ?cs)) =>
       apply (unvalidated_kinding
                (proj33 (subtype_validated_inv (validated_subtype H))))
   end : subtype_validated.
+
+Inductive valid_instance_validated
+  : env -> list typ -> sch -> Prop :=
+  | valid_instance_validated_empty : forall E T,
+      kinding E T knd_type ->
+      valid_env E ->
+      valid_instance_validated E nil (sch_empty T)
+  | valid_instance_validated_bind : forall E K M T Ts,
+      kinding E T K ->
+      valid_instance_validated E Ts (M ^^ T) ->
+      valid_env E ->
+      valid_instance_validated E (T :: Ts) (sch_bind K M).
+
+Lemma unvalidated_valid_instance : forall E Ts M,
+    valid_instance_validated E Ts M -> valid_instance E Ts M.
+Proof.
+  introv Hv.
+  induction Hv; auto.
+Qed.
+
+Hint Constructors valid_instance_validated : valid_instance_validated.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_instance_validated E _ _ |- _ =>
+      apply (proj31 (valid_instance_regular_inv
+               (regular_valid_instance
+                  (unvalidated_valid_instance H))))
+  end : valid_instance_regular.
+
+Hint Extern 1 (types (sch_arity ?M) ?Ts) =>
+  match goal with
+  | H : valid_instance_validated _ Ts M |- _ =>
+      apply (proj32 (valid_instance_regular_inv
+               (regular_valid_instance
+                  (unvalidated_valid_instance H))))
+  end : valid_instance_regular.
+
+Hint Extern 1 (scheme ?M) =>
+  match goal with
+  | H : valid_instance_validated _ _ M |- _ =>
+      apply (proj33 (valid_instance_regular_inv
+               (regular_valid_instance
+                  (unvalidated_valid_instance H))))
+  end : valid_instance_regular.
+
+Lemma valid_instance_validated_inv : forall E Ts M,
+    valid_instance_validated E Ts M ->
+    valid_env E.
+Proof.
+  introv Hv.
+  destruct Hv; auto.
+Qed.    
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : valid_instance_validated E _ _ |- _ =>
+      apply (valid_instance_validated_inv H)
+  end : valid_instance_validated.
+
+Lemma validated_valid_instance_regular : forall E Ts M,
+    valid_instance_regular E Ts M -> valid_instance_validated E Ts M.
+Proof.
+  introv Hv.
+  induction Hv; auto with valid_instance_validated kinding_validated.
+Qed.
+
+Lemma validated_valid_instance : forall E Ts M,
+    valid_instance E Ts M -> valid_instance_validated E Ts M.
+Proof.
+  introv Hv.
+  auto using
+    regular_valid_instance, validated_valid_instance_regular.
+Qed.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : valid_instance E _ _ |- _ =>
+      apply (valid_instance_validated_inv
+               (validated_valid_instance H))
+  end : valid_instance_validated.
 
 (* *************************************************************** *)
 (** Type equality in an equivalence *)

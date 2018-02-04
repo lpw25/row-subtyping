@@ -854,12 +854,27 @@ Proof.
     rewrite <- sch_subst_open; auto.
 Qed.
 
+Lemma sch_subst_instance_vars : forall Z U M Xs,
+    type U -> fresh \{Z} (sch_arity M) Xs ->
+    typ_subst Z U (instance_vars M Xs) = 
+    instance_vars (sch_subst Z U M) Xs.
+Proof.
+  introv Ht Hf.
+  unfold instance_vars.
+  fresh_length Hf as Hl.
+  rewrite Hl in Hf.
+  rewrite <- typ_subst_fresh_typ_fvars
+    with (X := Z) (U := U) at 2; auto.
+  apply sch_subst_instance.
+  assumption.
+Qed.
+
 Lemma typ_substs_intro_instance : forall M Xs Us,
   fresh (sch_fv M \u typ_fv_list Us) (sch_arity M) Xs -> 
   types (sch_arity M) Us ->
   instance M Us = typ_substs Xs Us (instance_vars M Xs).
 Proof.
-  introv Hf Ht. unfold instance_vars.
+  introv Hf Ht. (*unfold instance_vars.*)
   fresh_length Hf as Hl1.
   rewrite Hl1 in *.
   destruct Ht as [Hl2 Ht].
@@ -868,12 +883,14 @@ Proof.
   induction Xs; introv Hl1 Hf Hl2 Ht;
     destruct Us; destruct M; simpl; try discriminate.
   - reflexivity.
-  - inversion Ht; inversion Hf; subst.
-    rewrite sch_subst_instance; auto.
+  - inversion Ht; subst. inversion Hf; subst.
+    unfold instance_vars; simpl;
+      fold (instance_vars (sch_open M (typ_fvar a)) Xs).
+    inversion Hl1.
+    rewrite sch_subst_instance_vars;
+      autorewrite with rew_sch_arity; auto.
     fold (sch_open_var M a).
     rewrite <- sch_subst_intro; auto.
-    rewrite typ_subst_fresh_typ_fvars; auto.
-    inversion Hl1.
     apply IHXs; autorewrite with rew_sch_arity; auto.
     simpl in *.
     assert (fresh (sch_fv (sch_open M t)) (length Xs) Xs)
