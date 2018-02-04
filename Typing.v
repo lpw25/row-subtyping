@@ -108,11 +108,39 @@ Proof.
   remember (E & X ~:: K & F) as EXF.
   generalize dependent E.
   generalize dependent F.
-  induction Ht; introv Heq Hk; subst.
+  induction Ht; introv Heq Hk; subst; eauto.
   - apply typing_var
         with (M := sch_subst X S M)
              (Us := (List.map (typ_subst X S) Us));
       eauto using valid_env_typ_subst, valid_instance_typ_subst,
                   sch_subst_instance, binds_typ_typ_subst
             with kinding_regular.
-  - 
+  - apply typing_abs with (L := L \u \{X} \u dom E0 \u dom F);    
+      fold (knd_subst X S knd_type);
+      eauto using kinding_typ_subst.
+    introv Hn.
+    rewrite <- sch_subst_empty.
+    rewrite <- concat_assoc.
+    rewrite <- env_subst_typ.
+    auto using concat_assoc.
+  - apply typing_let
+      with (L := L \u \{X} \u dom E0 \u dom F) (M := sch_subst X S M).
+    + introv Hf.
+      autorewrite with rew_sch_arity in Hf.
+      fresh_length Hf as Hl.
+      rewrite <- env_subst_bind_knds;
+        autorewrite with rew_env_dom; auto with kinding_regular.
+      rewrite <- concat_assoc.
+      rewrite <- env_subst_concat.
+      unfold instance_vars.
+      rewrite <- typ_subst_fresh_typ_fvars
+        with (X := X) (U := S); auto.
+      rewrite <- sch_subst_instance; auto with kinding_regular.
+      eauto using concat_assoc.
+    + introv Hn.
+      rewrite <- concat_assoc.
+      rewrite <- env_subst_typ.
+      auto using concat_assoc.
+  - apply typing_constructor
+      with (T2 := typ_subst X S T2) (T3 := typ_subst X S T3).
+    + fold (knd_subst X S (knd_range (typ_top CSet.universe) T2)).

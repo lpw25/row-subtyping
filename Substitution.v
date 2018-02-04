@@ -116,34 +116,12 @@ Definition knd_subst Z U K :=
   | knd_range T1 T2 => knd_range (typ_subst Z U T1) (typ_subst Z U T2)
   end.
 
-Fixpoint knd_substs (Zs : list var) (Us : list typ) (K : knd)
-         {struct Zs} :=
-  match Zs with
-  | nil => K
-  | Z :: Zs =>
-    match Us with
-    | nil => K
-    | U :: Us => knd_substs Zs Us (knd_subst Z U K)
-    end
-  end.
-
 (** Substitution for names for schemes. *)
 
 Fixpoint sch_subst (Z : var) (U : typ) (M : sch) {struct M} :=
   match M with
   | sch_empty T => sch_empty (typ_subst Z U T)
   | sch_bind K M => sch_bind (knd_subst Z U K) (sch_subst Z U M)
-  end.
-
-Fixpoint sch_substs (Zs : list var) (Us : list typ) (M : sch)
-         {struct Zs} :=
-  match Zs with
-  | nil => M
-  | Z :: Zs =>
-    match Us with
-    | nil => M
-    | U :: Us => sch_substs Zs Us (sch_subst Z U M)
-    end
   end.
 
 (** Substitution for bindings *)
@@ -153,31 +131,9 @@ Definition bind_subst Z U B :=
   | bind_typ M => bind_typ (sch_subst Z U M)
   end.
 
-Fixpoint bind_substs (Zs : list var) (Us : list typ) (B : bind)
-         {struct Zs} :=
-  match Zs with
-  | nil => B
-  | Z :: Zs =>
-    match Us with
-    | nil => B
-    | U :: Us => bind_substs Zs Us (bind_subst Z U B)
-    end
-  end.
-
 (** Substitution for environments *)
 Definition env_subst Z U E :=
   map (bind_subst Z U) E.
-
-Fixpoint env_substs (Zs : list var) (Us : list typ) (E : env)
-         {struct Zs} :=
-  match Zs with
-  | nil => E
-  | Z :: Zs =>
-    match Us with
-    | nil => E
-    | U :: Us => env_substs Zs Us (env_subst Z U E)
-    end
-  end.
 
 (** Substitution for name in a term. *)
 
@@ -366,27 +322,66 @@ Qed.
 (* =============================================================== *)
 (** * Properties of types *)
 
-Lemma typ_open_k_fv : forall X U T k,
+Lemma typ_open_k_fv_inv : forall X U T k,
     X \notin (typ_fv (typ_open_k k U T)) -> X \notin (typ_fv T).
 Proof.
   introv Hn.
   induction T; simpl in *; auto.
 Qed.
 
-Lemma typ_open_fv : forall X U T,
+Lemma typ_open_k_fv : forall X U T k,
+     X \notin (typ_fv T) -> X \notin (typ_fv U) ->
+     X \notin (typ_fv (typ_open_k k U T)).
+Proof.
+  introv HnT HnU.
+  induction T; simpl in *; try case_nat; auto.
+Qed.
+
+Lemma typ_open_fv_inv : forall X U T,
     X \notin (typ_fv (typ_open T U)) -> X \notin (typ_fv T).
 Proof.
   intros.
-  eapply typ_open_k_fv;
+  eapply typ_open_k_fv_inv.
+  eassumption.
+Qed.
+
+Lemma typ_open_fv : forall X U T,
+    X \notin (typ_fv T) -> X \notin (typ_fv U) ->
+    X \notin (typ_fv (typ_open T U)).
+Proof.
+  intros.
+  apply typ_open_k_fv; assumption.
+Qed.
+
+Lemma typ_open_fresh_fv : forall Xs n U T,
+    fresh (typ_fv T \u typ_fv U) n Xs ->
+    fresh (typ_fv (typ_open T U)) n Xs.
+Proof.
+  introv Hf.
+  generalize dependent n.
+  induction Xs; intros n Hf; subst;
+    destruct n; simpl in *; auto.
+  destruct Hf as [Hn Hf].
+  split.
+  - apply typ_open_fv; auto.
+  - assert (fresh (typ_fv (typ_open T U)) n Xs) by auto.
+    auto.
+Qed.
+
+Lemma typ_open_var_fv_inv : forall X Y T,
+     X \notin (typ_fv (typ_open_var T Y)) -> X \notin (typ_fv T).
+Proof.
+  intros.
+  eapply typ_open_fv_inv.
   eassumption.
 Qed.
 
 Lemma typ_open_var_fv : forall X Y T,
-     X \notin (typ_fv (typ_open_var T Y)) -> X \notin (typ_fv T).
+    X \notin (typ_fv T) -> X <> Y ->
+     X \notin (typ_fv (typ_open_var T Y)).
 Proof.
   intros.
-  eapply typ_open_fv.
-  eassumption.
+  apply typ_open_fv; simpl; auto.
 Qed.
 
 (** Open on a type is the identity. *)
@@ -543,27 +538,51 @@ Qed.
 (* *************************************************************** *)
 (** ** Kinds *)
 
-Lemma knd_open_k_fv : forall X U K k,
+Lemma knd_open_k_fv_inv : forall X U K k,
     X \notin (knd_fv (knd_open_k k U K)) -> X \notin (knd_fv K).
 Proof.
   introv Hn.
-  induction K; simpl in *; eauto using typ_open_k_fv.
+  induction K; simpl in *; eauto using typ_open_k_fv_inv.
 Qed.
 
-Lemma knd_open_fv : forall X U K,
+Lemma knd_open_k_fv : forall X U K k,
+    X \notin (knd_fv K) -> X \notin (typ_fv U) ->
+    X \notin (knd_fv (knd_open_k k U K)).
+Proof.
+  introv HnK HnU.
+  induction K; simpl in *; auto using typ_open_k_fv.
+Qed.
+
+Lemma knd_open_fv_inv : forall X U K,
     X \notin (knd_fv (knd_open K U)) -> X \notin (knd_fv K).
 Proof.
   intros.
-  eapply knd_open_k_fv;
+  eapply knd_open_k_fv_inv.
+  eassumption.
+Qed.
+
+Lemma knd_open_fv : forall X U K,
+    X \notin (knd_fv K) -> X \notin (typ_fv U) ->
+    X \notin (knd_fv (knd_open K U)).
+Proof.
+  intros.
+  apply knd_open_k_fv; assumption.
+Qed.  
+
+Lemma knd_open_var_fv_inv : forall X Y K,
+     X \notin (knd_fv (knd_open_var K Y)) -> X \notin (knd_fv K).
+Proof.
+  intros.
+  eapply knd_open_fv_inv.
   eassumption.
 Qed.
 
 Lemma knd_open_var_fv : forall X Y K,
-     X \notin (knd_fv (knd_open_var K Y)) -> X \notin (knd_fv K).
+    X \notin (knd_fv K) -> X <> Y ->
+    X \notin (knd_fv (knd_open_var K Y)).
 Proof.
   intros.
-  eapply knd_open_fv.
-  eassumption.
+  apply knd_open_fv; simpl; auto.
 Qed.
 
 (** Open on a kind is the identity. *)
@@ -634,51 +653,6 @@ Proof.
   rewrite* knd_subst_fresh. simpl. case_var*.
 Qed.
 
-Lemma knd_substs_fresh : forall Xs Us K, 
-  fresh (knd_fv K) (length Xs) Xs ->
-  knd_substs Xs Us K = K.
-Proof.
-  introv H. generalize dependent Us.
-  induction Xs; intro; simpl; auto.
-  destruct Us; auto.
-  destruct H.
-  rewrite knd_subst_fresh; auto.
-Qed.
-
-Lemma knd_substs_open_k : forall k Xs Us K T,
-  types (length Us) Us -> 
-  knd_substs Xs Us (knd_open_k k T K) = 
-   knd_open_k k (typ_substs Xs Us T) (knd_substs Xs Us K).
-Proof.
-  intros k Xs.
-  induction Xs; introv H; simpl; auto.
-  destruct Us; auto.
-  simpl in H.
-  rewrite types_cons in H.
-  destruct H.
-  rewrite knd_subst_open_k; auto.
-Qed.
-
-Lemma knd_substs_open : forall Xs Us K T,
-    types (length Us) Us -> 
-    knd_substs Xs Us (knd_open K T) = 
-    knd_open (knd_substs Xs Us K) (typ_substs Xs Us T).
-Proof.
-  intros. unfold knd_open. apply knd_substs_open_k. assumption.
-Qed.
-
-Lemma knd_substs_open_var : forall Xs Y Us T,
-    fresh \{Y} (length Xs) Xs ->
-    types (length Us) Us ->
-    knd_open_var (knd_substs Xs Us T) Y
-    = knd_substs Xs Us (knd_open_var T Y).
-Proof.
-  introv Nin Wu. unfold knd_open_var. 
-  rewrite knd_substs_open; auto.
-  f_equal.
-  rewrite typ_substs_fresh; auto.
-Qed.
-
 (* *************************************************************** *)
 (** ** Schemes *)
 
@@ -713,29 +687,70 @@ Qed.
 Hint Rewrite sch_open_k_arity sch_open_arity
      sch_open_var_arity sch_subst_arity : rew_sch_arity.
 
-Lemma sch_open_k_fv : forall X U M k,
+Lemma sch_open_k_fv_inv : forall X U M k,
     X \notin (sch_fv (sch_open_k k U M)) -> X \notin (sch_fv M).
 Proof.
   introv Hn.
   generalize dependent k.
   induction M; intros; simpl in *;
-    eauto using typ_open_k_fv, knd_open_k_fv.   
+    eauto using typ_open_k_fv_inv, knd_open_k_fv_inv.
 Qed.
 
-Lemma sch_open_fv : forall X U M,
+Lemma sch_open_k_fv : forall X U M k,
+    X \notin (sch_fv M) -> X \notin (typ_fv U) ->
+    X \notin (sch_fv (sch_open_k k U M)).
+Proof.
+  introv Hn.
+  generalize dependent k.
+  induction M; intros; simpl in *;
+    auto using typ_open_k_fv, knd_open_k_fv.   
+Qed.
+
+Lemma sch_open_fv_inv : forall X U M,
     X \notin (sch_fv (M ^^ U)) -> X \notin (sch_fv M).
 Proof.
   intros.
-  eapply sch_open_k_fv;
+  eapply sch_open_k_fv_inv.
   eassumption.
 Qed.
 
-Lemma sch_open_var_fv : forall X Y M,
+Lemma sch_open_fv : forall X U M,
+    X \notin (sch_fv M) -> X \notin (typ_fv U) ->
+    X \notin (sch_fv (M ^^ U)).
+Proof.
+  intros.
+  apply sch_open_k_fv; assumption.
+Qed.
+
+Lemma sch_open_fresh_fv : forall Xs n U M,
+    fresh (sch_fv M \u typ_fv U) n Xs ->
+    fresh (sch_fv (sch_open M U)) n Xs.
+Proof.
+  introv Hf.
+  generalize dependent n.
+  induction Xs; intros n Hf; subst;
+    destruct n; simpl in *; auto.
+  destruct Hf as [Hn Hf].
+  split.
+  - apply sch_open_fv; auto.
+  - assert (fresh (sch_fv (sch_open M U)) n Xs) by auto.
+    auto.
+Qed.
+
+Lemma sch_open_var_fv_inv : forall X Y M,
      X \notin (sch_fv (M ^ Y)) -> X \notin (sch_fv M).
 Proof.
   intros.
-  eapply sch_open_fv.
+  eapply sch_open_fv_inv.
   eassumption.
+Qed. 
+
+Lemma sch_open_var_fv : forall X Y M,
+    X \notin (sch_fv M) -> X <> Y ->
+    X \notin (sch_fv (M ^ Y)).
+Proof.
+  intros.
+  apply sch_open_fv; simpl; auto.
 Qed. 
 
 (** Open on a scheme is the identity. *)
@@ -817,51 +832,6 @@ Proof.
   rewrite* sch_subst_fresh. simpl. case_var*.
 Qed.
 
-Lemma sch_substs_fresh : forall Xs Us M, 
-  fresh (sch_fv M) (length Xs) Xs ->
-  sch_substs Xs Us M = M.
-Proof.
-  introv H. generalize dependent Us.
-  induction Xs; intro; simpl; auto.
-  destruct Us; auto.
-  destruct H.
-  rewrite sch_subst_fresh; auto.
-Qed.
-
-Lemma sch_substs_open_k : forall k Xs Us M T,
-  types (length Us) Us -> 
-  sch_substs Xs Us (sch_open_k k T M) = 
-   sch_open_k k (typ_substs Xs Us T) (sch_substs Xs Us M).
-Proof.
-  intros k Xs.
-  induction Xs; introv H; simpl; auto.
-  destruct Us; auto.
-  simpl in H.
-  rewrite types_cons in H.
-  destruct H.
-  rewrite sch_subst_open_k; auto.
-Qed.
-
-Lemma sch_substs_open : forall Xs Us M T,
-    types (length Us) Us -> 
-    sch_substs Xs Us (sch_open M T) = 
-    sch_open (sch_substs Xs Us M) (typ_substs Xs Us T).
-Proof.
-  intros. unfold sch_open. apply sch_substs_open_k. assumption.
-Qed.
-
-Lemma sch_substs_open_var : forall Xs Y Us M,
-    fresh \{Y} (length Xs) Xs ->
-    types (length Us) Us ->
-    sch_open_var (sch_substs Xs Us M) Y
-    = sch_substs Xs Us (sch_open_var M Y).
-Proof.
-  introv Nin Wu. unfold sch_open_var. 
-  rewrite sch_substs_open; auto.
-  f_equal.
-  rewrite typ_substs_fresh; auto.
-Qed.
-
 (** Substitution distributes on the sch_body. *)
 
 Lemma sch_subst_body : forall X U M, type U ->
@@ -884,34 +854,31 @@ Proof.
     rewrite <- sch_subst_open; auto.
 Qed.
 
-Lemma sch_substs_instance : forall Xs Us M Ts,
-    types (length Us) Us -> 
-    typ_substs Xs Us (instance M Ts) = 
-    instance (sch_substs Xs Us M) (List.map (typ_substs Xs Us) Ts).
-Proof.
-  intro.
-  induction Xs; introv H; simpl.
-  - rewrite map_identity. reflexivity.
-  - destruct Us.
-    + rewrite map_identity. reflexivity.
-    + rewrite map_compose.
-      apply types_cons in H.
-      destruct H.
-      rewrite sch_subst_instance; auto.
-Qed.
-
 Lemma typ_substs_intro_instance : forall M Xs Us,
   fresh (sch_fv M \u typ_fv_list Us) (sch_arity M) Xs -> 
   types (sch_arity M) Us ->
   instance M Us = typ_substs Xs Us (instance_vars M Xs).
 Proof.
   introv Hf Ht. unfold instance_vars.
-  fresh_length Hf as Hl.
-  rewrite Hl in *.
-  destruct Ht.
-  rewrite sch_substs_instance; try (split; auto).
-  rewrite sch_substs_fresh; auto.
-  rewrite typ_substs_fvars; auto.
+  fresh_length Hf as Hl1.
+  rewrite Hl1 in *.
+  destruct Ht as [Hl2 Ht].
+  generalize dependent Us.
+  generalize dependent M.
+  induction Xs; introv Hl1 Hf Hl2 Ht;
+    destruct Us; destruct M; simpl; try discriminate.
+  - reflexivity.
+  - inversion Ht; inversion Hf; subst.
+    rewrite sch_subst_instance; auto.
+    fold (sch_open_var M a).
+    rewrite <- sch_subst_intro; auto.
+    rewrite typ_subst_fresh_typ_fvars; auto.
+    inversion Hl1.
+    apply IHXs; autorewrite with rew_sch_arity; auto.
+    simpl in *.
+    assert (fresh (sch_fv (sch_open M t)) (length Xs) Xs)
+      by auto using sch_open_fresh_fv.
+    auto.  
 Qed.
 
 Lemma sch_subst_empty : forall X U T,
@@ -932,17 +899,6 @@ Proof.
   intros. destruct B; simpls; f_equal*. 
   - apply knd_subst_fresh; auto.
   - apply sch_subst_fresh; auto.
-Qed.
-
-Lemma bind_substs_fresh : forall Xs Us B, 
-  fresh (bind_fv B) (length Xs) Xs ->
-  bind_substs Xs Us B = B.
-Proof.
-  introv H. generalize dependent Us.
-  induction Xs; intro; simpl; auto.
-  destruct Us; auto.
-  destruct H.
-  rewrite bind_subst_fresh; auto.
 Qed.
 
 (* *************************************************************** *)
@@ -1030,7 +986,7 @@ Proof.
 Qed.
 
 Lemma env_subst_bind_knds : forall X U Xs M,
-  X # (Xs ~::* M) -> type U ->
+  fresh \{X} (sch_arity M) Xs -> type U ->
   env_subst X U (Xs ~::* M) = Xs ~::* (sch_subst X U M).
 Proof.
   introv Hn Ht.
@@ -1039,7 +995,8 @@ Proof.
   - apply env_subst_empty.
   - destruct M; simpl in *.
     + apply env_subst_empty.
-    + autorewrite with rew_env_dom in Hn.
+    + destruct Hn as [Hn Hf].
+      rewrite <- sch_open_var_arity with (X := a) in Hf.
       rewrite env_subst_concat.
       rewrite env_subst_single.
       simpl.
@@ -1051,80 +1008,6 @@ Hint Rewrite env_subst_empty env_subst_single env_subst_concat
   : rew_env_subst.
 Hint Rewrite env_subst_bind_knds using auto
   : rew_env_subst.
-
-Lemma env_substs_empty : forall Xs Us,
-  env_substs Xs Us empty = empty.
-Proof.
-  intros.
-  generalize dependent Us.
-  induction Xs; intro Us; simpl.
-  - reflexivity.
-  - destruct Us.
-    + reflexivity.
-    + autorewrite with rew_env_subst.
-      auto.
-Qed.
-
-Lemma env_substs_single : forall Xs Us x v,
-  env_substs Xs Us (x ~ v) = (x ~ bind_substs Xs Us v).
-Proof.
-  intros.
-  generalize dependent Us.
-  generalize dependent v.
-  induction Xs; intros; simpl.
-  - reflexivity.
-  - destruct Us.
-    + reflexivity.
-    + autorewrite with rew_env_subst.
-      auto.
-Qed.  
-
-Lemma env_substs_concat : forall Xs Us E F,
-  env_substs Xs Us (E & F) = env_substs Xs Us E & env_substs Xs Us F.
-Proof.
-  intros.
-  generalize dependent Us.
-  generalize dependent E.
-  generalize dependent F.
-  induction Xs; intros; simpl.
-  - reflexivity.
-  - destruct Us.
-    + reflexivity.
-    + autorewrite with rew_env_subst.
-      auto.
-Qed.
-
-Lemma env_substs_bind_knds : forall Zs Us Xs M,
-  fresh (dom (Xs ~::* M)) (length Zs) Zs ->
-  types (length Us) Us ->
-  env_substs Zs Us (Xs ~::* M) = Xs ~::* (sch_substs Zs Us M).
-Proof.
-  introv Hf Hts.
-  generalize dependent Us.
-  generalize dependent M.
-  induction Zs; intros; simpl.
-  - reflexivity.
-  - destruct Us; simpl in *.
-    + reflexivity.
-    + rewrite types_cons in *.
-      autorewrite with rew_env_subst; intuition auto.
-      apply IHZs; auto.
-      assert (dom (Xs ~::* sch_subst a t M) = dom (Xs ~::* M)) as Hd.
-      { clear IHZs H0.
-        generalize dependent M.
-        induction Xs; introv Hn; simpl; auto.
-        destruct M; simpl in *; auto.
-        autorewrite with rew_env_dom in *.
-        rewrite sch_subst_open_var; auto.
-        rewrite IHXs; auto. }
-      rewrite Hd.
-      auto.
-Qed.
-
-Hint Rewrite env_substs_empty env_substs_single env_substs_concat
-  : rew_env_substs.
-Hint Rewrite env_substs_bind_knds using auto
-  : rew_env_substs.
 
 Lemma env_dom_bind_kinds : forall Xs M,
   sch_arity M = length Xs ->
@@ -1150,23 +1033,7 @@ Proof.
   - rewrite IHE. reflexivity.
 Qed.
 
-Lemma env_dom_substs : forall Zs Us E,
-    dom (env_substs Zs Us E) = dom E.
-Proof.
-  intros.
-  generalize dependent E.
-  generalize dependent Us.
-  induction Zs; intros.
-  - simpl. reflexivity.
-  - destruct Us.
-    + simpl. reflexivity.
-    + simpl.
-      rewrite IHZs with (Us := Us).
-      apply env_dom_subst.
-Qed.
-
-Hint Rewrite env_dom_bind_kinds env_dom_subst env_dom_substs
-  : rew_env_dom.
+Hint Rewrite env_dom_bind_kinds env_dom_subst : rew_env_dom.
 
 Lemma env_subst_fresh : forall X U E, 
   X \notin env_fv E -> 
@@ -1178,17 +1045,6 @@ Proof.
   - reflexivity.
   - rewrite bind_subst_fresh; auto.
     rewrite IHE; auto.
-Qed.
-
-Lemma env_substs_fresh : forall Xs Us E, 
-  fresh (env_fv E) (length Xs) Xs ->
-  env_substs Xs Us E = E.
-Proof.
-  introv H. generalize dependent Us.
-  induction Xs; intro; simpl; auto.
-  destruct Us; auto.
-  destruct H.
-  rewrite env_subst_fresh; auto.
 Qed.
 
 Lemma env_subst_binds : forall X B E Z U,
@@ -1221,21 +1077,6 @@ Lemma env_subst_binds_typ : forall x M E Z U,
 Proof.
   introv Hbd.
   fold (bind_subst Z U (bind_typ M)).
-  apply env_subst_binds.
-  assumption.
-Qed.
-
-Lemma env_substs_binds : forall X B E Zs Us,
-    binds X B E ->
-    binds X (bind_substs Zs Us B) (env_substs Zs Us E).
-Proof.
-  introv Hb.
-  generalize dependent E.
-  generalize dependent Us.
-  generalize dependent B.
-  induction Zs; intros; try assumption.
-  destruct Us; try assumption.
-  apply IHZs.
   apply env_subst_binds.
   assumption.
 Qed.

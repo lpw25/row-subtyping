@@ -580,7 +580,7 @@ Proof.
     eauto using get_some_inv, binds_get.
   - eauto.
   - autorewrite with rew_sch_arity in *.
-    eauto using sch_open_var_fv.
+    eauto using sch_open_var_fv_inv.
   - pick_freshes_gen (L \u \{X}) (sch_arity M) Xs.
     eauto.
   - exfalso.
@@ -802,7 +802,7 @@ Proof.
     apply kinding_closed with (X := X) in Hk; auto.
     assert (X \notin typ_fv_list Ts \u sch_fv (sch_open M T)) as Hn2
       by auto.
-    eauto using sch_open_fv.
+    eauto using sch_open_fv_inv.
 Qed.
 
 (* *************************************************************** *)
