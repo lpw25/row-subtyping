@@ -447,13 +447,9 @@ Lemma environment_kinds_weakening : forall E F G Xs M,
 Proof.
   introv Hf He1 He2.
   fresh_length Hf as Hl.
-  remember (E & G) as EG.
-  generalize dependent E.
   generalize dependent G.
-  generalize dependent EG.
-  generalize dependent F.
   generalize dependent M.
-  induction Xs; introv Hl Hf He1 Heq He2; subst; simpl.
+  induction Xs; introv Hf Hl He1 He2; subst; simpl.
   - autorewrite with rew_env_concat; auto.
   - destruct M; simpl in Hl; try discriminate.
     simpl in He1.
@@ -461,7 +457,7 @@ Proof.
     destruct Hf.
     inversion Hl.
     rewrite <- concat_assoc with (E := E & F).
-    apply IHXs with (EG := E & G & a ~:: k);
+    apply IHXs with (G := G & a ~:: k);
       autorewrite with rew_sch_arity;
       autorewrite with rew_env_dom;
       autorewrite with rew_env_concat; auto.
@@ -951,6 +947,22 @@ with type_equal_core_regular : env -> typ -> typ -> knd -> Prop :=
         (typ_meet (typ_join T1 T2) (typ_join T1 T3))
         (knd_row cs)
 
+with type_equal_symm_regular : env -> typ -> typ -> knd -> Prop :=
+  | type_equal_symm_regular_l : forall E T1 T2 K,
+      type_equal_core_regular E T1 T2 K ->
+      environment E ->
+      type T1 ->
+      type T2 ->
+      kind K ->
+      type_equal_symm_regular E T1 T2 K
+  | type_equal_symm_regular_r : forall E T1 T2 K,
+      type_equal_core_regular E T1 T2 K ->
+      environment E ->
+      type T1 ->
+      type T2 ->
+      kind K ->
+      type_equal_symm_regular E T2 T1 K
+
 with type_equal_cong_regular : env -> typ -> typ -> knd -> Prop :=
   | type_equal_cong_regular_constructor : forall E c T1 T1' cs,
       type_equal_cong_regular E T1 T1' knd_type ->
@@ -1073,29 +1085,13 @@ with type_equal_cong_regular : env -> typ -> typ -> knd -> Prop :=
       type T4 ->
       type T4' ->
       type_equal_cong_regular E T1 T2 (knd_range T3' T4')
-  | type_equal_cong_regular_core : forall E T1 T1' K,
-      type_equal_core_regular E T1 T1' K ->
+  | type_equal_cong_regular_symm : forall E T1 T1' K,
+      type_equal_symm_regular E T1 T1' K ->
       environment E ->
       type T1 ->
       type T1' ->
       kind K ->
       type_equal_cong_regular E T1 T1' K
-
-with type_equal_symm_regular : env -> typ -> typ -> knd -> Prop :=
-  | type_equal_symm_regular_l : forall E T1 T2 K,
-      type_equal_cong_regular E T1 T2 K ->
-      environment E ->
-      type T1 ->
-      type T2 ->
-      kind K ->
-      type_equal_symm_regular E T1 T2 K
-  | type_equal_symm_regular_r : forall E T1 T2 K,
-      type_equal_cong_regular E T1 T2 K ->
-      environment E ->
-      type T1 ->
-      type T2 ->
-      kind K ->
-      type_equal_symm_regular E T2 T1 K
 
 with type_equal_regular : env -> typ -> typ -> knd -> Prop :=
   | type_equal_regular_refl : forall E T K,
@@ -1105,7 +1101,7 @@ with type_equal_regular : env -> typ -> typ -> knd -> Prop :=
       kind K ->
       type_equal_regular E T T K
   | type_equal_regular_step : forall E T1 T2 T3 K,
-      type_equal_symm_regular E T1 T2 K ->
+      type_equal_cong_regular E T1 T2 K ->
       type_equal_regular E T2 T3 K ->
       environment E ->
       type T1 ->
@@ -1135,10 +1131,10 @@ Scheme valid_kind_regular_mutind :=
          Induction for valid_env_regular Sort Prop
   with type_equal_core_regular_mutind :=
          Induction for type_equal_core_regular Sort Prop
-  with type_equal_cong_regular_mutind :=
-         Induction for type_equal_cong_regular Sort Prop
   with type_equal_symm_regular_mutind :=
          Induction for type_equal_symm_regular Sort Prop
+  with type_equal_cong_regular_mutind :=
+         Induction for type_equal_cong_regular Sort Prop
   with type_equal_regular_mutind :=
          Induction for type_equal_regular Sort Prop
   with subtype_regular_mutind :=
@@ -1148,7 +1144,7 @@ Combined Scheme combined_kinding_regular_mutind
   from valid_kind_regular_mutind, kinding_regular_mutind,
        valid_scheme_vars_regular_mutind, valid_scheme_regular_mutind,
        valid_env_regular_mutind, type_equal_core_regular_mutind,
-       type_equal_cong_regular_mutind, type_equal_symm_regular_mutind,
+       type_equal_symm_regular_mutind, type_equal_cong_regular_mutind,
        type_equal_regular_mutind, subtype_regular_mutind.
 
 Lemma valid_kind_regular_inv : forall E K,
@@ -1318,45 +1314,6 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
       inversion Hknd; assumption
   end : type_equal_core_regular.
 
-Lemma type_equal_cong_regular_inv : forall E T1 T2 K,
-    type_equal_cong_regular E T1 T2 K ->
-    environment E /\ type T1 /\ type T2 /\ kind K.
-Proof.
-  introv Hte.
-  destruct Hte; split; auto with csetdec.
-Qed.
-
-Hint Constructors type_equal_cong_regular : type_equal_cong_regular.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : type_equal_cong_regular E _ _ _ |- _ =>
-      apply (proj41 (type_equal_cong_regular_inv H))
-  end : type_equal_cong_regular.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H : type_equal_cong_regular _ T _ _ |- _ =>
-      apply (proj42 (type_equal_cong_regular_inv H))
-  | H : type_equal_cong_regular _ _ T _ |- _ =>
-      apply (proj43 (type_equal_cong_regular_inv H))
-  end : type_equal_cong_regular.
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : type_equal_cong_regular _ _ _ K |- _ =>
-      apply (proj44 (type_equal_cong_regular_inv H))
-  end : type_equal_cong_regular.
-
-Hint Extern 1 (CSet.Nonempty ?cs) =>
-  match goal with
-  | H : type_equal_cong_regular _ _ _ (knd_row cs) |- _ =>
-      let Hknd := fresh "Hknd" in
-      assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_cong_regular_inv H));
-      inversion Hknd; assumption
-  end : type_equal_cong_regular.
-
 Lemma type_equal_symm_regular_inv : forall E T1 T2 K,
     type_equal_symm_regular E T1 T2 K ->
     environment E /\ type T1 /\ type T2 /\ kind K.
@@ -1395,6 +1352,45 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
         by apply (proj44 (type_equal_symm_regular_inv H));
       inversion Hknd; assumption
   end : type_equal_symm_regular.
+
+Lemma type_equal_cong_regular_inv : forall E T1 T2 K,
+    type_equal_cong_regular E T1 T2 K ->
+    environment E /\ type T1 /\ type T2 /\ kind K.
+Proof.
+  introv Hte.
+  destruct Hte; split; auto with csetdec.
+Qed.
+
+Hint Constructors type_equal_cong_regular : type_equal_cong_regular.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_cong_regular E _ _ _ |- _ =>
+      apply (proj41 (type_equal_cong_regular_inv H))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_cong_regular _ T _ _ |- _ =>
+      apply (proj42 (type_equal_cong_regular_inv H))
+  | H : type_equal_cong_regular _ _ T _ |- _ =>
+      apply (proj43 (type_equal_cong_regular_inv H))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_cong_regular _ _ _ K |- _ =>
+      apply (proj44 (type_equal_cong_regular_inv H))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_cong_regular _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_cong_regular_inv H));
+      inversion Hknd; assumption
+  end : type_equal_cong_regular.
 
 Lemma type_equal_regular_inv : forall E T1 T2 K,
     type_equal_regular E T1 T2 K ->
@@ -1475,9 +1471,9 @@ Lemma regular_combined_kinding :
   /\ (forall E T1 T2 K,
        type_equal_core E T1 T2 K -> type_equal_core_regular E T1 T2 K)
   /\ (forall E T1 T2 K,
-       type_equal_cong E T1 T2 K -> type_equal_cong_regular E T1 T2 K)
-  /\ (forall E T1 T2 K,
        type_equal_symm E T1 T2 K -> type_equal_symm_regular E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_cong E T1 T2 K -> type_equal_cong_regular E T1 T2 K)
   /\ (forall E T1 T2 K,
        type_equal E T1 T2 K -> type_equal_regular E T1 T2 K)
   /\ (forall E T1 T2 cs,
@@ -1487,7 +1483,7 @@ Proof.
     eauto with valid_kind_regular kinding_regular
       valid_scheme_vars_regular valid_scheme_regular
       valid_env_regular type_equal_core_regular
-      type_equal_cong_regular type_equal_symm_regular
+      type_equal_symm_regular type_equal_cong_regular
       type_equal_regular subtype_regular.
   - assert (environment E) by auto with valid_env_regular.
     assert (kind K) by (eapply kind_from_env; eassumption).
@@ -1515,9 +1511,9 @@ Lemma unregular_combined_kinding :
   /\ (forall E T1 T2 K,
        type_equal_core_regular E T1 T2 K -> type_equal_core E T1 T2 K)
   /\ (forall E T1 T2 K,
-       type_equal_cong_regular E T1 T2 K -> type_equal_cong E T1 T2 K)
-  /\ (forall E T1 T2 K,
        type_equal_symm_regular E T1 T2 K -> type_equal_symm E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_cong_regular E T1 T2 K -> type_equal_cong E T1 T2 K)
   /\ (forall E T1 T2 K,
        type_equal_regular E T1 T2 K -> type_equal E T1 T2 K)
   /\ (forall E T1 T2 cs,
@@ -1742,56 +1738,6 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
       inversion Hknd; assumption
   end : type_equal_core_regular.
 
-Lemma regular_type_equal_cong : forall E T1 T2 K,
-    type_equal_cong E T1 T2 K -> type_equal_cong_regular E T1 T2 K.
-Proof.
-  pose regular_combined_kinding.
-  tauto.
-Qed.
-
-Lemma unregular_type_equal_cong : forall E T1 T2 K,
-    type_equal_cong_regular E T1 T2 K -> type_equal_cong E T1 T2 K.
-Proof.
-  pose unregular_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unregular_type_equal_cong.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : type_equal_cong E _ _ _ |- _ =>
-      apply (proj41 (type_equal_cong_regular_inv
-                       (regular_type_equal_cong H)))
-  end : type_equal_cong_regular.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H : type_equal_cong _ T _ _ |- _ =>
-      apply (proj42 (type_equal_cong_regular_inv
-                       (regular_type_equal_cong H)))
-  | H : type_equal_cong _ _ T _ |- _ =>
-      apply (proj43 (type_equal_cong_regular_inv
-                       (regular_type_equal_cong H)))
-  end : type_equal_cong_regular.
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : type_equal_cong _ _ _ K |- _ =>
-      apply (proj44 (type_equal_cong_regular_inv
-                       (regular_type_equal_cong H)))
-  end : type_equal_cong_regular.
-
-Hint Extern 1 (CSet.Nonempty ?cs) =>
-  match goal with
-  | H : type_equal_cong _ _ _ (knd_row cs) |- _ =>
-      let Hknd := fresh "Hknd" in
-      assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_cong_regular_inv
-                            (regular_type_equal_cong H)));
-      inversion Hknd; assumption
-  end : type_equal_cong_regular.
-
 Lemma regular_type_equal_symm : forall E T1 T2 K,
     type_equal_symm E T1 T2 K -> type_equal_symm_regular E T1 T2 K.
 Proof.
@@ -1841,6 +1787,56 @@ Hint Extern 1 (CSet.Nonempty ?cs) =>
                             (regular_type_equal_symm H)));
       inversion Hknd; assumption
   end : type_equal_symm_regular.
+
+Lemma regular_type_equal_cong : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K -> type_equal_cong_regular E T1 T2 K.
+Proof.
+  pose regular_combined_kinding.
+  tauto.
+Qed.
+
+Lemma unregular_type_equal_cong : forall E T1 T2 K,
+    type_equal_cong_regular E T1 T2 K -> type_equal_cong E T1 T2 K.
+Proof.
+  pose unregular_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unregular_type_equal_cong.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_cong E _ _ _ |- _ =>
+      apply (proj41 (type_equal_cong_regular_inv
+                       (regular_type_equal_cong H)))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_cong _ T _ _ |- _ =>
+      apply (proj42 (type_equal_cong_regular_inv
+                       (regular_type_equal_cong H)))
+  | H : type_equal_cong _ _ T _ |- _ =>
+      apply (proj43 (type_equal_cong_regular_inv
+                       (regular_type_equal_cong H)))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_cong _ _ _ K |- _ =>
+      apply (proj44 (type_equal_cong_regular_inv
+                       (regular_type_equal_cong H)))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_cong _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_cong_regular_inv
+                            (regular_type_equal_cong H)));
+      inversion Hknd; assumption
+  end : type_equal_cong_regular.
 
 Lemma regular_type_equal : forall E T1 T2 K,
     type_equal E T1 T2 K -> type_equal_regular E T1 T2 K.
@@ -2052,7 +2048,7 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       valid_env E -> 
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
-      T = instance M Us ->
+      type_equal E T (instance M Us) knd_type ->
       typing_regular E (trm_fvar x) T
   | typing_regular_abs : forall L E T1 T2 t1,
       kinding E T1 knd_type ->
@@ -2218,9 +2214,8 @@ Proof.
       by (eapply scheme_from_env; eassumption).
     assert (types (sch_arity M) Us)
       by auto with valid_instance_regular.   
-    assert (type (instance M Us))
-      as Ht by auto using scheme_instance_type.
-    replace (instance M Us) with T in Ht.
+    assert (type T)
+      as Ht by auto with type_equal_regular.
     eauto with typing_regular.
   - pick_fresh_gen L x.
     assert (typing_regular (E & x ~: sch_empty T1) (t1 ^ x) T2)

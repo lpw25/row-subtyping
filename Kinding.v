@@ -8,7 +8,7 @@ Require Import LibLN Cofinite Definitions Substitution Wellformedness.
 
 Hint Constructors
      valid_kind kinding valid_scheme_vars valid_instance valid_env
-     type_equal_core type_equal_cong type_equal_symm type_equal.
+     type_equal_core type_equal_symm type_equal_cong type_equal.
 
 (* *************************************************************** *)
 (** * Retraction of valid environments *)
@@ -63,7 +63,7 @@ Proof.
     inversion Hm.
     subst.
     auto.
-Qed.
+Qed.    
 
 (* *************************************************************** *)
 (** Weakening *)
@@ -102,17 +102,17 @@ Lemma combined_kinding_weakening :
           valid_env (E & F & G) ->
           type_equal_core (E & F & G) T1 T2 K))
   /\ (forall EG T1 T2 K,
-      type_equal_cong_regular EG T1 T2 K ->
-      (forall E F G,
-          EG = E & G ->
-          valid_env (E & F & G) ->
-          type_equal_cong (E & F & G) T1 T2 K))
-  /\ (forall EG T1 T2 K,
       type_equal_symm_regular EG T1 T2 K ->
       (forall E F G,
           EG = E & G ->
           valid_env (E & F & G) ->
           type_equal_symm (E & F & G) T1 T2 K))
+  /\ (forall EG T1 T2 K,
+      type_equal_cong_regular EG T1 T2 K ->
+      (forall E F G,
+          EG = E & G ->
+          valid_env (E & F & G) ->
+          type_equal_cong (E & F & G) T1 T2 K))
   /\ (forall EG T1 T2 K,
       type_equal_regular EG T1 T2 K ->
       (forall E F G,
@@ -251,27 +251,6 @@ Proof.
   apply type_equal_core_weakening; rewrite concat_empty_r; assumption.
 Qed.
 
-Lemma type_equal_cong_weakening : forall E F G T1 T2 K,
-   type_equal_cong (E & G) T1 T2 K -> 
-   valid_env (E & F & G) ->
-   type_equal_cong (E & F & G) T1 T2 K.
-Proof.
-  introv Hte He.
-  apply regular_type_equal_cong in Hte.
-  pose combined_kinding_weakening.
-  intuition eauto.
-Qed.
-
-Lemma type_equal_cong_weakening_l : forall E F T1 T2 K,
-   type_equal_cong E T1 T2 K -> 
-   valid_env (E & F) ->
-   type_equal_cong (E & F) T1 T2 K.
-Proof.
-  introv Hv He.
-  rewrite <- concat_empty_r with (E := E & F).
-  apply type_equal_cong_weakening; rewrite concat_empty_r; assumption.
-Qed.
-
 Lemma type_equal_symm_weakening : forall E F G T1 T2 K,
    type_equal_symm (E & G) T1 T2 K -> 
    valid_env (E & F & G) ->
@@ -291,6 +270,27 @@ Proof.
   introv Hv He.
   rewrite <- concat_empty_r with (E := E & F).
   apply type_equal_symm_weakening; rewrite concat_empty_r; assumption.
+Qed.
+
+Lemma type_equal_cong_weakening : forall E F G T1 T2 K,
+   type_equal_cong (E & G) T1 T2 K -> 
+   valid_env (E & F & G) ->
+   type_equal_cong (E & F & G) T1 T2 K.
+Proof.
+  introv Hte He.
+  apply regular_type_equal_cong in Hte.
+  pose combined_kinding_weakening.
+  intuition eauto.
+Qed.
+
+Lemma type_equal_cong_weakening_l : forall E F T1 T2 K,
+   type_equal_cong E T1 T2 K -> 
+   valid_env (E & F) ->
+   type_equal_cong (E & F) T1 T2 K.
+Proof.
+  introv Hv He.
+  rewrite <- concat_empty_r with (E := E & F).
+  apply type_equal_cong_weakening; rewrite concat_empty_r; assumption.
 Qed.
 
 Lemma type_equal_weakening : forall E F G T1 T2 K,
@@ -411,13 +411,9 @@ Lemma valid_env_kinds_weakening : forall E F G Xs M,
 Proof.
   introv Hf He1 He2.
   fresh_length Hf as Hl.
-  remember (E & G) as EG.
-  generalize dependent E.
   generalize dependent G.
-  generalize dependent EG.
-  generalize dependent F.
   generalize dependent M.
-  induction Xs; introv Hl Hf He1 Heq He2; subst; simpl.
+  induction Xs; introv Hf Hl He1 He2; subst; simpl.
   - autorewrite with rew_env_concat; auto.
   - destruct M; simpl in Hl; try discriminate.
     simpl in He1.
@@ -425,7 +421,7 @@ Proof.
     destruct Hf.
     inversion Hl.
     rewrite <- concat_assoc with (E := E & F).
-    apply IHXs with (EG := E & G & a ~:: k);
+    apply IHXs with (G := G & a ~:: k);
       autorewrite with rew_sch_arity;
       autorewrite with rew_env_dom;
       autorewrite with rew_env_concat; auto.
@@ -532,7 +528,7 @@ Lemma combined_kinding_closed :
           X # E ->
           X \notin (knd_fv K)))
   /\ (forall E T1 T2 K,
-      type_equal_cong_regular E T1 T2 K ->
+      type_equal_symm_regular E T1 T2 K ->
          (forall X,
           X # E ->
           X \notin (typ_fv T1))
@@ -543,7 +539,7 @@ Lemma combined_kinding_closed :
           X # E ->
           X \notin (knd_fv K)))
   /\ (forall E T1 T2 K,
-      type_equal_symm_regular E T1 T2 K ->
+      type_equal_cong_regular E T1 T2 K ->
          (forall X,
           X # E ->
           X \notin (typ_fv T1))
@@ -726,13 +722,13 @@ Proof.
   intuition auto.
 Qed.
 
-Lemma type_equal_cong_closed : forall E T1 T2 K X,
-    type_equal_cong E T1 T2 K ->
+Lemma type_equal_symm_closed : forall E T1 T2 K X,
+    type_equal_symm E T1 T2 K ->
     X # E ->
     X \notin ((typ_fv T1) \u (typ_fv T2) \u (knd_fv K)).
 Proof.
   introv Hte Hn.
-  apply regular_type_equal_cong in Hte.
+  apply regular_type_equal_symm in Hte.
   pose combined_kinding_closed.
   jauto_set.
   assert
@@ -742,13 +738,13 @@ Proof.
   intuition auto.
 Qed.
 
-Lemma type_equal_symm_closed : forall E T1 T2 K X,
-    type_equal_symm E T1 T2 K ->
+Lemma type_equal_cong_closed : forall E T1 T2 K X,
+    type_equal_cong E T1 T2 K ->
     X # E ->
     X \notin ((typ_fv T1) \u (typ_fv T2) \u (knd_fv K)).
 Proof.
   introv Hte Hn.
-  apply regular_type_equal_symm in Hte.
+  apply regular_type_equal_cong in Hte.
   pose combined_kinding_closed.
   jauto_set.
   assert
@@ -850,18 +846,18 @@ Lemma combined_kinding_typ_subst :
           type_equal_core (E & env_subst X S F)
             (typ_subst X S T1) (typ_subst X S T2) (knd_subst X S K)))
   /\ (forall EXF T1 T2 K,
-      type_equal_cong_regular EXF T1 T2 K ->
-      (forall E F X J S,
-          EXF = E & X ~:: J & F ->
-          kinding E S J ->
-          type_equal_cong (E & env_subst X S F)
-            (typ_subst X S T1) (typ_subst X S T2) (knd_subst X S K)))
-  /\ (forall EXF T1 T2 K,
       type_equal_symm_regular EXF T1 T2 K ->
       (forall E F X J S,
           EXF = E & X ~:: J & F ->
           kinding E S J ->
           type_equal_symm (E & env_subst X S F)
+            (typ_subst X S T1) (typ_subst X S T2) (knd_subst X S K)))
+  /\ (forall EXF T1 T2 K,
+      type_equal_cong_regular EXF T1 T2 K ->
+      (forall E F X J S,
+          EXF = E & X ~:: J & F ->
+          kinding E S J ->
+          type_equal_cong (E & env_subst X S F)
             (typ_subst X S T1) (typ_subst X S T2) (knd_subst X S K)))
   /\ (forall EXF T1 T2 K,
       type_equal_regular EXF T1 T2 K ->
@@ -1104,31 +1100,6 @@ Proof.
   eauto using type_equal_core_typ_subst.
 Qed.
 
-Lemma type_equal_cong_typ_subst : forall E F X J S T1 T2 K,
-    type_equal_cong (E & X ~:: J & F) T1 T2 K ->
-    kinding E S J ->
-    type_equal_cong (E & env_subst X S F)
-      (typ_subst X S T1) (typ_subst X S T2) (knd_subst X S K).
-Proof.
-  introv Hte Hk.
-  apply regular_type_equal_cong in Hte.
-  pose combined_kinding_typ_subst.
-  intuition eauto.
-Qed.
-
-Lemma type_equal_cong_typ_subst_l : forall E X J S T1 T2 K,
-    type_equal_cong (E & X ~:: J) T1 T2 K ->
-    kinding E S J ->
-    type_equal_cong E
-      (typ_subst X S T1) (typ_subst X S T2) (knd_subst X S K).
-Proof.
-  introv Hte Hk.
-  rewrite <- concat_empty_r with (E := E & X ~:: J) in Hte.
-  rewrite <- concat_empty_r with (E := E).
-  rewrite <- env_subst_empty with (X := X) (U := S).
-  eauto using type_equal_cong_typ_subst.
-Qed.
-
 Lemma type_equal_symm_typ_subst : forall E F X J S T1 T2 K,
     type_equal_symm (E & X ~:: J & F) T1 T2 K ->
     kinding E S J ->
@@ -1152,6 +1123,31 @@ Proof.
   rewrite <- concat_empty_r with (E := E).
   rewrite <- env_subst_empty with (X := X) (U := S).
   eauto using type_equal_symm_typ_subst.
+Qed.
+
+Lemma type_equal_cong_typ_subst : forall E F X J S T1 T2 K,
+    type_equal_cong (E & X ~:: J & F) T1 T2 K ->
+    kinding E S J ->
+    type_equal_cong (E & env_subst X S F)
+      (typ_subst X S T1) (typ_subst X S T2) (knd_subst X S K).
+Proof.
+  introv Hte Hk.
+  apply regular_type_equal_cong in Hte.
+  pose combined_kinding_typ_subst.
+  intuition eauto.
+Qed.
+
+Lemma type_equal_cong_typ_subst_l : forall E X J S T1 T2 K,
+    type_equal_cong (E & X ~:: J) T1 T2 K ->
+    kinding E S J ->
+    type_equal_cong E
+      (typ_subst X S T1) (typ_subst X S T2) (knd_subst X S K).
+Proof.
+  introv Hte Hk.
+  rewrite <- concat_empty_r with (E := E & X ~:: J) in Hte.
+  rewrite <- concat_empty_r with (E := E).
+  rewrite <- env_subst_empty with (X := X) (U := S).
+  eauto using type_equal_cong_typ_subst.
 Qed.
 
 Lemma type_equal_typ_subst : forall E F X J S T1 T2 K,
@@ -1323,9 +1319,9 @@ Proof.
 Qed.
 
 (* *************************************************************** *)
-(** Not affected by type bindings *)
+(** Can remove type bindings *)
 
-Lemma combined_kinding_typ_bind :
+Lemma combined_kinding_remove_typ_bind :
      (forall EXF K,
       valid_kind EXF K ->
       (forall E F x M,
@@ -1357,15 +1353,15 @@ Lemma combined_kinding_typ_bind :
           EXF = E & x ~: M & F ->
           type_equal_core (E & F) T1 T2 K))
   /\ (forall EXF T1 T2 K,
-      type_equal_cong EXF T1 T2 K ->
-      (forall E F x M,
-          EXF = E & x ~: M & F ->
-          type_equal_cong (E & F) T1 T2 K))
-  /\ (forall EXF T1 T2 K,
       type_equal_symm EXF T1 T2 K ->
       (forall E F x M,
           EXF = E & x ~: M & F ->
           type_equal_symm (E & F) T1 T2 K))
+  /\ (forall EXF T1 T2 K,
+      type_equal_cong EXF T1 T2 K ->
+      (forall E F x M,
+          EXF = E & x ~: M & F ->
+          type_equal_cong (E & F) T1 T2 K))
   /\ (forall EXF T1 T2 K,
       type_equal EXF T1 T2 K ->
       (forall E F x M,
@@ -1410,214 +1406,678 @@ Proof.
       apply valid_env_type; eauto.
 Qed.      
 
-Lemma valid_kind_typ_bind : forall E F x M K,
+Lemma valid_kind_remove_typ_bind : forall E F x M K,
     valid_kind (E & x ~: M & F) K ->
     valid_kind (E & F) K.
 Proof.
   introv Hv.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma valid_kind_typ_bind_l : forall E x M K,
+Lemma valid_kind_remove_typ_bind_l : forall E x M K,
     valid_kind (E & x ~: M) K ->
     valid_kind E K.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using valid_kind_typ_bind.
+  eauto using valid_kind_remove_typ_bind.
 Qed.
 
-Lemma kinding_typ_bind : forall E F x M T K,
+Lemma kinding_remove_typ_bind : forall E F x M T K,
     kinding (E & x ~: M & F) T K ->
     kinding (E & F) T K.
 Proof.
   introv Hk.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma kinding_typ_bind_l : forall E x M T K,
+Lemma kinding_remove_typ_bind_l : forall E x M T K,
     kinding (E & x ~: M) T K ->
     kinding E T K.
 Proof.
   introv Hk.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hk.
   rewrite <- concat_empty_r with (E := E).
-  eauto using kinding_typ_bind.
+  eauto using kinding_remove_typ_bind.
 Qed.
 
-Lemma valid_scheme_vars_typ_bind : forall E F x M Ms Xs,
+Lemma valid_scheme_vars_remove_typ_bind : forall E F x M Ms Xs,
     valid_scheme_vars (E & x ~: M & F) Ms Xs ->
     valid_scheme_vars (E & F) Ms Xs.
 Proof.
   introv Hv.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma valid_scheme_vars_typ_bind_l : forall E x M Ms Xs,
+Lemma valid_scheme_vars_remove_typ_bind_l : forall E x M Ms Xs,
     valid_scheme_vars (E & x ~: M) Ms Xs ->
     valid_scheme_vars E Ms Xs.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using valid_scheme_vars_typ_bind.
+  eauto using valid_scheme_vars_remove_typ_bind.
 Qed.
 
-Lemma valid_scheme_typ_bind : forall E F x M Ms,
+Lemma valid_scheme_remove_typ_bind : forall E F x M Ms,
     valid_scheme (E & x ~: M & F) Ms ->
     valid_scheme (E & F) Ms.
 Proof.
   introv Hv.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma valid_scheme_typ_bind_l : forall E x M Ms,
+Lemma valid_scheme_remove_typ_bind_l : forall E x M Ms,
     valid_scheme (E & x ~: M) Ms ->
     valid_scheme E Ms.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using valid_scheme_typ_bind.
+  eauto using valid_scheme_remove_typ_bind.
 Qed.
 
-Lemma valid_env_typ_bind : forall E F x M,
+Lemma valid_env_remove_typ_bind : forall E F x M,
     valid_env (E & x ~: M & F) ->
     valid_env (E & F).
 Proof.
   introv Hv.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma valid_env_typ_bind_l : forall E x M,
+Lemma valid_env_remove_typ_bind_l : forall E x M,
     valid_env (E & x ~: M) ->
     valid_env E.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using valid_env_typ_bind.
+  eauto using valid_env_remove_typ_bind.
 Qed.
 
-Lemma type_equal_core_typ_bind : forall E F x M T1 T2 K,
+Lemma type_equal_core_remove_typ_bind : forall E F x M T1 T2 K,
     type_equal_core (E & x ~: M & F) T1 T2 K ->
     type_equal_core (E & F) T1 T2 K.
 Proof.
   introv Hte.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma type_equal_core_typ_bind_l : forall E x M T1 T2 K,
+Lemma type_equal_core_remove_typ_bind_l : forall E x M T1 T2 K,
     type_equal_core (E & x ~: M) T1 T2 K ->
     type_equal_core E T1 T2 K.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using type_equal_core_typ_bind.
+  eauto using type_equal_core_remove_typ_bind.
 Qed.
 
-Lemma type_equal_cong_typ_bind : forall E F x M T1 T2 K,
-    type_equal_cong (E & x ~: M & F) T1 T2 K ->
-    type_equal_cong (E & F) T1 T2 K.
-Proof.
-  introv Hte.
-  pose combined_kinding_typ_bind.
-  intuition eauto.
-Qed.
-
-Lemma type_equal_cong_typ_bind_l : forall E x M T1 T2 K,
-    type_equal_cong (E & x ~: M) T1 T2 K ->
-    type_equal_cong E T1 T2 K.
-Proof.
-  introv Hv.
-  rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
-  rewrite <- concat_empty_r with (E := E).
-  eauto using type_equal_cong_typ_bind.
-Qed.
-
-Lemma type_equal_symm_typ_bind : forall E F x M T1 T2 K,
+Lemma type_equal_symm_remove_typ_bind : forall E F x M T1 T2 K,
     type_equal_symm (E & x ~: M & F) T1 T2 K ->
     type_equal_symm (E & F) T1 T2 K.
 Proof.
   introv Hte.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma type_equal_symm_typ_bind_l : forall E x M T1 T2 K,
+Lemma type_equal_symm_remove_typ_bind_l : forall E x M T1 T2 K,
     type_equal_symm (E & x ~: M) T1 T2 K ->
     type_equal_symm E T1 T2 K.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using type_equal_symm_typ_bind.
+  eauto using type_equal_symm_remove_typ_bind.
 Qed.
 
-Lemma type_equal_typ_bind : forall E F x M T1 T2 K,
+Lemma type_equal_cong_remove_typ_bind : forall E F x M T1 T2 K,
+    type_equal_cong (E & x ~: M & F) T1 T2 K ->
+    type_equal_cong (E & F) T1 T2 K.
+Proof.
+  introv Hte.
+  pose combined_kinding_remove_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma type_equal_cong_remove_typ_bind_l : forall E x M T1 T2 K,
+    type_equal_cong (E & x ~: M) T1 T2 K ->
+    type_equal_cong E T1 T2 K.
+Proof.
+  introv Hv.
+  rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
+  rewrite <- concat_empty_r with (E := E).
+  eauto using type_equal_cong_remove_typ_bind.
+Qed.
+
+Lemma type_equal_remove_typ_bind : forall E F x M T1 T2 K,
     type_equal (E & x ~: M & F) T1 T2 K ->
     type_equal (E & F) T1 T2 K.
 Proof.
   introv Hte.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma type_equal_typ_bind_l : forall E x M T1 T2 K,
+Lemma type_equal_remove_typ_bind_l : forall E x M T1 T2 K,
     type_equal (E & x ~: M) T1 T2 K ->
     type_equal E T1 T2 K.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using type_equal_typ_bind.
+  eauto using type_equal_remove_typ_bind.
 Qed.
 
-Lemma subtype_typ_bind : forall E F x M T1 T2 cs,
+Lemma subtype_remove_typ_bind : forall E F x M T1 T2 cs,
     subtype (E & x ~: M & F) T1 T2 cs ->
     subtype (E & F) T1 T2 cs.
 Proof.
   introv Hs.
-  pose combined_kinding_typ_bind.
+  pose combined_kinding_remove_typ_bind.
   intuition eauto.
 Qed.
 
-Lemma subtype_typ_bind_l : forall E x M T1 T2 cs,
+Lemma subtype_remove_typ_bind_l : forall E x M T1 T2 cs,
     subtype (E & x ~: M) T1 T2 cs ->
     subtype E T1 T2 cs.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using subtype_typ_bind.
+  eauto using subtype_remove_typ_bind.
 Qed.
 
-Lemma valid_instance_typ_bind : forall E F x M1 Ts M2,
+Lemma valid_instance_remove_typ_bind : forall E F x M1 Ts M2,
     valid_instance (E & x ~: M1 & F) Ts M2 ->
     valid_instance (E & F) Ts M2.
 Proof.
   introv Hv.
   remember (E & x ~: M1 & F) as ExF.
   remember (E & F) as EF.
-  induction Hv; subst; eauto using kinding_typ_bind.
+  induction Hv; subst; eauto using kinding_remove_typ_bind.
 Qed.
 
-Lemma valid_instance_typ_bind_l : forall E x M1 Ts M2,
+Lemma valid_instance_remove_typ_bind_l : forall E x M1 Ts M2,
     valid_instance (E & x ~: M1) Ts M2 ->
     valid_instance E Ts M2.
 Proof.
   introv Hv.
   rewrite <- concat_empty_r with (E := E & x ~: M1) in Hv.
   rewrite <- concat_empty_r with (E := E).
-  eauto using valid_instance_typ_bind.
+  eauto using valid_instance_remove_typ_bind.
+Qed.
+
+(* *************************************************************** *)
+(** Can add type bindings *)
+
+Lemma combined_kinding_add_typ_bind :
+     (forall EF K,
+      valid_kind EF K ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          valid_kind (E & x ~: M & F) K))
+  /\ (forall EF T K,
+      kinding EF T K ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          kinding (E & x ~: M & F) T K))
+  /\ (forall EF Ms Xs,
+      valid_scheme_vars EF Ms Xs ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          x \notin (from_list Xs) ->
+          valid_scheme_vars (E & x ~: M & F) Ms Xs))
+  /\ (forall EF Ms,
+      valid_scheme EF Ms ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          valid_scheme (E & x ~: M & F) Ms))
+  /\ (forall EF,
+      valid_env EF ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          valid_env (E & x ~: M & F)))
+  /\ (forall EF T1 T2 K,
+      type_equal_core EF T1 T2 K ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          type_equal_core (E & x ~: M & F) T1 T2 K))
+  /\ (forall EF T1 T2 K,
+      type_equal_symm EF T1 T2 K ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          type_equal_symm (E & x ~: M & F) T1 T2 K))
+  /\ (forall EF T1 T2 K,
+      type_equal_cong EF T1 T2 K ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          type_equal_cong (E & x ~: M & F) T1 T2 K))
+  /\ (forall EF T1 T2 K,
+      type_equal EF T1 T2 K ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          type_equal (E & x ~: M & F) T1 T2 K))
+  /\ (forall EF T1 T2 cs,
+      subtype EF T1 T2 cs ->
+      (forall E F x M,
+          EF = E & F ->
+          valid_scheme E M ->
+          x # E & F ->
+          subtype (E & x ~: M & F) T1 T2 cs)).
+Proof.
+  apply combined_kinding_mutind; intros; subst; simpl; econstr eauto.
+  - assert (valid_env (E0 & x ~: M & F)) by auto.
+    auto using binds_weakening with valid_env_regular.
+  - rewrite from_list_cons in *.
+    apply valid_scheme_vars_bind; eauto.
+    rewrite <- concat_assoc.
+    eauto using concat_assoc.
+  - apply valid_scheme_c with (L := L \u \{x}).
+    introv Hf.
+    eauto using fresh_single_notin.
+  - assert (empty = E & F) as He by assumption.
+    destruct (empty_concat_inv He); subst.
+    rewrite concat_empty_r.
+    auto.
+  - assert (E & X ~:: K = E0 & F) as Heq
+      by assumption.
+    destruct F using env_ind.
+    + autorewrite with rew_env_concat in *; subst.
+      auto.
+    + rewrite concat_assoc in Heq.
+      destruct (eq_push_inv Heq) as [? [? ?]]; subst.
+      rewrite concat_assoc.
+      eauto.
+  - assert (E & x ~: M = E0 & F) as Heq
+      by assumption.
+    destruct F using env_ind.
+    + autorewrite with rew_env_concat in *; subst.
+      auto.
+    + rewrite concat_assoc in Heq.
+      destruct (eq_push_inv Heq) as [? [? ?]]; subst.
+      rewrite concat_assoc.
+      eauto.
+Qed.      
+
+Lemma valid_kind_add_typ_bind : forall E F x M K,
+    valid_kind (E & F) K ->
+    valid_scheme E M ->
+    x # E & F ->
+    valid_kind (E & x ~: M & F) K.
+Proof.
+  introv Hv Hs Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma valid_kind_add_typ_bind_l : forall E x M K,
+    valid_kind E K ->
+    valid_scheme E M ->
+    x # E ->
+    valid_kind (E & x ~: M) K.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using valid_kind_add_typ_bind.
+Qed.
+
+Lemma kinding_add_typ_bind : forall E F x M T K,
+    kinding (E & F) T K ->
+    valid_scheme E M ->
+    x # E & F ->
+    kinding (E & x ~: M & F) T K.
+Proof.
+  introv Hk Hs Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma kinding_add_typ_bind_l : forall E x M T K,
+    kinding E T K ->
+    valid_scheme E M ->
+    x # E ->
+    kinding (E & x ~: M) T K.
+Proof.
+  introv Hk Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hk.
+  eauto using kinding_add_typ_bind.
+Qed.
+
+Lemma valid_scheme_vars_add_typ_bind : forall E F x M Ms Xs,
+    valid_scheme_vars (E & F) Ms Xs ->
+    valid_scheme E M ->
+    x # E & F ->
+    x \notin (from_list Xs) ->
+    valid_scheme_vars (E & x ~: M & F) Ms Xs.
+Proof.
+  introv Hk Hs Hn1 Hn2.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma valid_scheme_vars_add_typ_bind_l : forall E x M Ms Xs,
+    valid_scheme_vars E Ms Xs ->
+    valid_scheme E M ->
+    x # E ->
+    x \notin (from_list Xs) ->
+    valid_scheme_vars (E & x ~: M) Ms Xs.
+Proof.
+  introv Hv Hs Hn1 Hn2.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using valid_scheme_vars_add_typ_bind.
+Qed.
+
+Lemma valid_scheme_add_typ_bind : forall E F x M Ms,
+    valid_scheme (E & F) Ms ->
+    valid_scheme E M ->
+    x # E & F ->
+    valid_scheme (E & x ~: M & F) Ms.
+Proof.
+  introv Hk Hs Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma valid_scheme_add_typ_bind_l : forall E x M Ms,
+    valid_scheme E Ms ->
+    valid_scheme E M ->
+    x # E ->
+    valid_scheme (E & x ~: M) Ms.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using valid_scheme_add_typ_bind.
+Qed.
+
+Lemma valid_env_add_typ_bind : forall E F x M,
+    valid_env (E & F) ->
+    valid_scheme E M ->
+    x # E & F ->
+    valid_env (E & x ~: M & F).
+Proof.
+  introv Hk Hs Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma valid_env_add_typ_bind_l : forall E x M,
+    valid_env E ->
+    valid_scheme E M ->
+    x # E ->
+    valid_env (E & x ~: M).
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using valid_env_add_typ_bind.
+Qed.
+
+Lemma type_equal_core_add_typ_bind : forall E F x M T1 T2 K,
+    type_equal_core (E & F) T1 T2 K ->
+    valid_scheme E M ->
+    x # E & F ->
+    type_equal_core (E & x ~: M & F) T1 T2 K.
+Proof.
+  introv Hte Hs Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma type_equal_core_add_typ_bind_l : forall E x M T1 T2 K,
+    type_equal_core E T1 T2 K ->
+    valid_scheme E M ->
+    x # E ->
+    type_equal_core (E & x ~: M) T1 T2 K.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using type_equal_core_add_typ_bind.
+Qed.
+
+Lemma type_equal_symm_add_typ_bind : forall E F x M T1 T2 K,
+    type_equal_symm (E & F) T1 T2 K ->
+    valid_scheme E M ->
+    x # E & F ->
+    type_equal_symm (E & x ~: M & F) T1 T2 K.
+Proof.
+  introv Hte Hs Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma type_equal_symm_add_typ_bind_l : forall E x M T1 T2 K,
+    type_equal_symm E T1 T2 K ->
+    valid_scheme E M ->
+    x # E ->
+    type_equal_symm (E & x ~: M) T1 T2 K.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using type_equal_symm_add_typ_bind.
+Qed.
+
+Lemma type_equal_cong_add_typ_bind : forall E F x M T1 T2 K,
+    type_equal_cong (E & F) T1 T2 K ->
+    valid_scheme E M ->
+    x # E & F ->
+    type_equal_cong (E & x ~: M & F) T1 T2 K.
+Proof.
+  introv Hte Hs Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma type_equal_cong_add_typ_bind_l : forall E x M T1 T2 K,
+    type_equal_cong E T1 T2 K ->
+    valid_scheme E M ->
+    x # E ->
+    type_equal_cong (E & x ~: M) T1 T2 K.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using type_equal_cong_add_typ_bind.
+Qed.
+
+Lemma type_equal_add_typ_bind : forall E F x M T1 T2 K,
+    type_equal (E & F) T1 T2 K ->
+    valid_scheme E M ->
+    x # E & F ->
+    type_equal (E & x ~: M & F) T1 T2 K.
+Proof.
+  introv Hte Hs Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma type_equal_add_typ_bind_l : forall E x M T1 T2 K,
+    type_equal E T1 T2 K ->
+    valid_scheme E M ->
+    x # E ->
+    type_equal (E & x ~: M) T1 T2 K.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using type_equal_add_typ_bind.
+Qed.
+
+Lemma subtype_add_typ_bind : forall E F x M T1 T2 cs,
+    subtype (E & F) T1 T2 cs ->
+    valid_scheme E M ->
+    x # E & F ->
+    subtype (E & x ~: M & F) T1 T2 cs.
+Proof.
+  introv Hs Hsc Hn.
+  pose combined_kinding_add_typ_bind.
+  intuition eauto.
+Qed.
+
+Lemma subtype_add_typ_bind_l : forall E x M T1 T2 cs,
+    subtype E T1 T2 cs ->
+    valid_scheme E M ->
+    x # E ->
+    subtype (E & x ~: M) T1 T2 cs.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using subtype_add_typ_bind.
+Qed.
+
+Lemma valid_instance_add_typ_bind : forall E F x M1 Ts M2,
+    valid_instance (E & F) Ts M2 ->
+    valid_scheme E M1 ->
+    x # E & F ->
+    valid_instance (E & x ~: M1 & F) Ts M2.
+Proof.
+  introv Hv Hs Hn.
+  remember (E & x ~: M1 & F) as ExF.
+  remember (E & F) as EF.
+  induction Hv; subst; eauto using kinding_add_typ_bind.
+Qed.
+
+Lemma valid_instance_add_typ_bind_l : forall E x M1 Ts M2,
+    valid_instance E Ts M2 ->
+    valid_scheme E M1 ->
+    x # E ->
+    valid_instance (E & x ~: M1) Ts M2.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M1).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using valid_instance_add_typ_bind.
+Qed.
+
+(* *************************************************************** *)
+(** Can swap type bindings *)
+
+Lemma environment_middle_inv : forall E F x b,
+    environment (E & x ~ b & F) ->
+    x # (E & F).
+Proof.
+  introv He.
+  assert (ok (E & x ~ b & F)) as Hok
+    by auto using ok_from_environment.
+  destruct (ok_middle_inv Hok).
+  auto.
+Qed.
+
+Lemma valid_kind_swap_typ_bind : forall E F x M1 M2 K,
+    valid_kind (E & x ~: M1 & F) K ->
+    valid_scheme E M2 ->
+    valid_kind (E & x ~: M2 & F) K.
+Proof.
+  introv Hk Hs.
+  apply valid_kind_add_typ_bind;
+    eauto
+      using valid_kind_remove_typ_bind, environment_middle_inv
+      with valid_kind_regular.
+Qed.
+
+Lemma kinding_swap_typ_bind : forall E F x M1 M2 T K,
+    kinding (E & x ~: M1 & F) T K ->
+    valid_scheme E M2 ->
+    kinding (E & x ~: M2 & F) T K.
+Proof.
+  introv Hk Hs.
+  apply kinding_add_typ_bind;
+    eauto
+      using kinding_remove_typ_bind, environment_middle_inv
+      with kinding_regular.
+Qed.
+
+Lemma valid_scheme_swap_typ_bind : forall E F x M1 M2 Ms,
+    valid_scheme (E & x ~: M1 & F) Ms ->
+    valid_scheme E M2 ->
+    valid_scheme (E & x ~: M2 & F) Ms.
+Proof.
+  introv Hs1 Hs2.
+  apply valid_scheme_add_typ_bind;
+    eauto
+      using valid_scheme_remove_typ_bind, environment_middle_inv
+      with valid_scheme_regular.
+Qed.
+
+Lemma valid_env_swap_typ_bind : forall E F x M1 M2,
+    valid_env (E & x ~: M1 & F) ->
+    valid_scheme E M2 ->
+    valid_env (E & x ~: M2 & F).
+Proof.
+  introv He Hs.
+  apply valid_env_add_typ_bind;
+    eauto
+      using valid_env_remove_typ_bind, environment_middle_inv
+      with valid_env_regular.
+Qed.  
+
+Lemma type_equal_swap_typ_bind : forall E F x M1 M2 T1 T2 K,
+    type_equal (E & x ~: M1 & F) T1 T2 K ->
+    valid_scheme E M2 ->
+    type_equal (E & x ~: M2 & F) T1 T2 K.
+Proof.
+  introv Hte Hs.
+  apply type_equal_add_typ_bind;
+    eauto
+      using type_equal_remove_typ_bind, environment_middle_inv
+      with type_equal_regular.
+Qed.
+
+Lemma subtype_swap_typ_bind : forall E F x M1 M2 T1 T2 cs,
+    subtype (E & x ~: M1 & F) T1 T2 cs ->
+    valid_scheme E M2 ->
+    subtype (E & x ~: M2 & F) T1 T2 cs.
+Proof.
+  introv Hs Hsc.
+  apply subtype_add_typ_bind;
+    eauto
+      using subtype_remove_typ_bind, environment_middle_inv
+      with subtype_regular.
+Qed.
+
+Lemma valid_instance_swap_typ_bind : forall E F x M1 M2 Ts M3,
+    valid_instance (E & x ~: M1 & F) Ts M3 ->
+    valid_scheme E M2 ->
+    valid_instance (E & x ~: M2 & F) Ts M3.
+Proof.
+  introv Hs Hsc.
+  apply valid_instance_add_typ_bind;
+    eauto
+      using valid_instance_remove_typ_bind, environment_middle_inv
+      with valid_instance_regular.
 Qed.
 
 (* *************************************************************** *)
@@ -2146,6 +2606,30 @@ with type_equal_core_validated : env -> typ -> typ -> knd -> Prop :=
         (typ_meet (typ_join T1 T2) (typ_join T1 T3))
         (knd_row cs)
 
+with type_equal_symm_validated : env -> typ -> typ -> knd -> Prop :=
+  | type_equal_symm_validated_l : forall E T1 T2 K,
+      type_equal_core_validated E T1 T2 K ->
+      environment E ->
+      type T1 ->
+      type T2 ->
+      kind K ->
+      valid_env_validated E ->
+      kinding_validated E T1 K ->
+      kinding_validated E T2 K ->
+      valid_kind_validated E K ->
+      type_equal_symm_validated E T1 T2 K
+  | type_equal_symm_validated_r : forall E T1 T2 K,
+      type_equal_core_validated E T1 T2 K ->
+      environment E ->
+      type T1 ->
+      type T2 ->
+      kind K ->
+      valid_env_validated E ->
+      kinding_validated E T1 K ->
+      kinding_validated E T2 K ->
+      valid_kind_validated E K ->
+      type_equal_symm_validated E T2 T1 K
+
 with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
   | type_equal_cong_validated_constructor : forall E c T1 T1' cs,
       type_equal_cong_validated E T1 T1' knd_type ->
@@ -2316,8 +2800,8 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       valid_kind_validated E (knd_range T3 T4) ->
       valid_kind_validated E (knd_range T3' T4') ->
       type_equal_cong_validated E T1 T2 (knd_range T3' T4')
-  | type_equal_cong_validated_core : forall E T1 T1' K,
-      type_equal_core_validated E T1 T1' K ->
+  | type_equal_cong_validated_symm : forall E T1 T1' K,
+      type_equal_symm_validated E T1 T1' K ->
       environment E ->
       type T1 ->
       type T1' ->
@@ -2327,30 +2811,6 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding_validated E T1' K ->
       valid_kind_validated E K ->
       type_equal_cong_validated E T1 T1' K
-
-with type_equal_symm_validated : env -> typ -> typ -> knd -> Prop :=
-  | type_equal_symm_validated_l : forall E T1 T2 K,
-      type_equal_cong_validated E T1 T2 K ->
-      environment E ->
-      type T1 ->
-      type T2 ->
-      kind K ->
-      valid_env_validated E ->
-      kinding_validated E T1 K ->
-      kinding_validated E T2 K ->
-      valid_kind_validated E K ->
-      type_equal_symm_validated E T1 T2 K
-  | type_equal_symm_validated_r : forall E T1 T2 K,
-      type_equal_cong_validated E T1 T2 K ->
-      environment E ->
-      type T1 ->
-      type T2 ->
-      kind K ->
-      valid_env_validated E ->
-      kinding_validated E T1 K ->
-      kinding_validated E T2 K ->
-      valid_kind_validated E K ->
-      type_equal_symm_validated E T2 T1 K
 
 with type_equal_validated : env -> typ -> typ -> knd -> Prop :=
   | type_equal_validated_refl : forall E T K,
@@ -2362,7 +2822,7 @@ with type_equal_validated : env -> typ -> typ -> knd -> Prop :=
       valid_kind_validated E K ->
       type_equal_validated E T T K
   | type_equal_validated_step : forall E T1 T2 T3 K,
-      type_equal_symm_validated E T1 T2 K ->
+      type_equal_cong_validated E T1 T2 K ->
       type_equal_validated E T2 T3 K ->
       environment E ->
       type T1 ->
@@ -2400,10 +2860,10 @@ Scheme valid_kind_validated_mutind :=
          Induction for valid_env_validated Sort Prop
   with type_equal_core_validated_mutind :=
          Induction for type_equal_core_validated Sort Prop
-  with type_equal_cong_validated_mutind :=
-         Induction for type_equal_cong_validated Sort Prop
   with type_equal_symm_validated_mutind :=
          Induction for type_equal_symm_validated Sort Prop
+  with type_equal_cong_validated_mutind :=
+         Induction for type_equal_cong_validated Sort Prop
   with type_equal_validated_mutind :=
          Induction for type_equal_validated Sort Prop
   with subtype_validated_mutind :=
@@ -2414,8 +2874,8 @@ Combined Scheme combined_kinding_validated_mutind
        valid_scheme_vars_validated_mutind,
        valid_scheme_validated_mutind,
        valid_env_validated_mutind, type_equal_core_validated_mutind,
-       type_equal_cong_validated_mutind,
        type_equal_symm_validated_mutind,
+       type_equal_cong_validated_mutind,
        type_equal_validated_mutind, subtype_validated_mutind.
 
 Lemma unvalidated_combined_kinding :
@@ -2428,9 +2888,9 @@ Lemma unvalidated_combined_kinding :
   /\ (forall E T1 T2 K,
        type_equal_core_validated E T1 T2 K -> type_equal_core E T1 T2 K)
   /\ (forall E T1 T2 K,
-       type_equal_cong_validated E T1 T2 K -> type_equal_cong E T1 T2 K)
-  /\ (forall E T1 T2 K,
        type_equal_symm_validated E T1 T2 K -> type_equal_symm E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_cong_validated E T1 T2 K -> type_equal_cong E T1 T2 K)
   /\ (forall E T1 T2 K,
        type_equal_validated E T1 T2 K -> type_equal E T1 T2 K)
   /\ (forall E T1 T2 cs,
@@ -2494,15 +2954,6 @@ Qed.
 
 Hint Resolve unvalidated_type_equal_core.
 
-Lemma unvalidated_type_equal_cong : forall E T1 T2 K,
-    type_equal_cong_validated E T1 T2 K -> type_equal_cong E T1 T2 K.
-Proof.
-  pose unvalidated_combined_kinding.
-  tauto.
-Qed.
-
-Hint Resolve unvalidated_type_equal_cong.
-
 Lemma unvalidated_type_equal_symm : forall E T1 T2 K,
     type_equal_symm_validated E T1 T2 K -> type_equal_symm E T1 T2 K.
 Proof.
@@ -2511,6 +2962,15 @@ Proof.
 Qed.
 
 Hint Resolve unvalidated_type_equal_symm.
+
+Lemma unvalidated_type_equal_cong : forall E T1 T2 K,
+    type_equal_cong_validated E T1 T2 K -> type_equal_cong E T1 T2 K.
+Proof.
+  pose unvalidated_combined_kinding.
+  tauto.
+Qed.
+
+Hint Resolve unvalidated_type_equal_cong.
 
 Lemma unvalidated_type_equal : forall E T1 T2 K,
     type_equal_validated E T1 T2 K -> type_equal E T1 T2 K.
@@ -2824,6 +3284,98 @@ Hint Extern 1 (valid_kind ?E ?K) =>
                (proj44 (type_equal_core_validated_inv H)))
   end : type_equal_core_validated.
 
+Lemma type_equal_symm_validated_inv : forall E T1 T2 K,
+    type_equal_symm_validated E T1 T2 K ->
+    valid_env_validated E
+    /\ kinding_validated E T1 K
+    /\ kinding_validated E T2 K
+    /\ valid_kind_validated E K.
+Proof.
+  introv Hte.
+  destruct Hte; auto.
+Qed.
+
+Hint Constructors type_equal_symm_validated
+  : type_equal_symm_validated.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : type_equal_symm_validated E _ _ _ |- _ =>
+      apply (proj41 (type_equal_symm_regular_inv
+        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (type ?T) =>
+  match goal with
+  | H : type_equal_symm_validated _ T _ _ |- _ =>
+      apply (proj42 (type_equal_symm_regular_inv
+        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
+  | H : type_equal_symm_validated _ _ T _ |- _ =>
+      apply (proj43 (type_equal_symm_regular_inv
+        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (kind ?K) =>
+  match goal with
+  | H : type_equal_symm_validated _ _ _ K |- _ =>
+      apply (proj44 (type_equal_symm_regular_inv
+        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (CSet.Nonempty ?cs) =>
+  match goal with
+  | H : type_equal_symm_validated _ _ _ (knd_row cs) |- _ =>
+      let Hknd := fresh "Hknd" in
+      assert (kind (knd_row cs)) as Hknd
+        by apply (proj44 (type_equal_symm_regular_inv
+         (regular_type_equal_symm (unvalidated_type_equal_symm H))));
+      inversion Hknd; assumption
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (valid_env_validated ?E) =>
+  match goal with
+  | H : type_equal_symm_validated E _ _ _ |- _ =>
+      apply (proj41 (type_equal_symm_validated_inv H))
+  end : type_equal_symm_validated.
+
+Hint Extern 1 (kinding_validated ?E ?T ?K) =>
+  match goal with
+  | H : type_equal_symm_validated E T _ K |- _ =>
+      apply (proj42 (type_equal_symm_validated_inv H))
+  | H : type_equal_symm_validated E _ T K |- _ =>
+      apply (proj43 (type_equal_symm_validated_inv H))
+  end : type_equal_symm_validated.
+
+Hint Extern 1 (valid_kind_validated ?E ?K) =>
+  match goal with
+  | H : type_equal_symm_validated E _ _ K |- _ =>
+      apply (proj44 (type_equal_symm_validated_inv H))
+  end : type_equal_symm_validated.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : type_equal_symm_validated E _ _ _ |- _ =>
+      apply (unvalidated_valid_env
+               (proj41 (type_equal_symm_validated_inv H)))
+  end : type_equal_symm_regular.
+
+Hint Extern 1 (kinding ?E ?T ?K) =>
+  match goal with
+  | H : type_equal_symm_validated E T _ K |- _ =>
+      apply (unvalidated_kinding
+               (proj42 (type_equal_symm_validated_inv H)))
+  | H : type_equal_symm_validated E _ T K |- _ =>
+      apply (unvalidated_kinding
+               (proj43 (type_equal_symm_validated_inv H)))
+  end : type_equal_symm_validated.
+
+Hint Extern 1 (valid_kind ?E ?K) =>
+  match goal with
+  | H : type_equal_symm_validated E _ _ K |- _ =>
+      apply (unvalidated_valid_kind
+               (proj44 (type_equal_symm_validated_inv H)))
+  end : type_equal_symm_validated.
+
 Lemma type_equal_cong_validated_inv : forall E T1 T2 K,
     type_equal_cong_validated E T1 T2 K ->
     valid_env_validated E
@@ -2917,98 +3469,6 @@ Hint Extern 1 (valid_kind ?E ?K) =>
       apply (unvalidated_valid_kind
                (proj44 (type_equal_cong_validated_inv H)))
   end : type_equal_cong_validated.
-
-Lemma type_equal_symm_validated_inv : forall E T1 T2 K,
-    type_equal_symm_validated E T1 T2 K ->
-    valid_env_validated E
-    /\ kinding_validated E T1 K
-    /\ kinding_validated E T2 K
-    /\ valid_kind_validated E K.
-Proof.
-  introv Hte.
-  destruct Hte; auto.
-Qed.
-
-Hint Constructors type_equal_symm_validated
-  : type_equal_symm_validated.
-
-Hint Extern 1 (environment ?E) =>
-  match goal with
-  | H : type_equal_symm_validated E _ _ _ |- _ =>
-      apply (proj41 (type_equal_symm_regular_inv
-        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
-  end : type_equal_symm_regular.
-
-Hint Extern 1 (type ?T) =>
-  match goal with
-  | H : type_equal_symm_validated _ T _ _ |- _ =>
-      apply (proj42 (type_equal_symm_regular_inv
-        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
-  | H : type_equal_symm_validated _ _ T _ |- _ =>
-      apply (proj43 (type_equal_symm_regular_inv
-        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
-  end : type_equal_symm_regular.
-
-Hint Extern 1 (kind ?K) =>
-  match goal with
-  | H : type_equal_symm_validated _ _ _ K |- _ =>
-      apply (proj44 (type_equal_symm_regular_inv
-        (regular_type_equal_symm (unvalidated_type_equal_symm H))))
-  end : type_equal_symm_regular.
-
-Hint Extern 1 (CSet.Nonempty ?cs) =>
-  match goal with
-  | H : type_equal_symm_validated _ _ _ (knd_row cs) |- _ =>
-      let Hknd := fresh "Hknd" in
-      assert (kind (knd_row cs)) as Hknd
-        by apply (proj44 (type_equal_symm_regular_inv
-         (regular_type_equal_symm (unvalidated_type_equal_symm H))));
-      inversion Hknd; assumption
-  end : type_equal_symm_regular.
-
-Hint Extern 1 (valid_env_validated ?E) =>
-  match goal with
-  | H : type_equal_symm_validated E _ _ _ |- _ =>
-      apply (proj41 (type_equal_symm_validated_inv H))
-  end : type_equal_symm_validated.
-
-Hint Extern 1 (kinding_validated ?E ?T ?K) =>
-  match goal with
-  | H : type_equal_symm_validated E T _ K |- _ =>
-      apply (proj42 (type_equal_symm_validated_inv H))
-  | H : type_equal_symm_validated E _ T K |- _ =>
-      apply (proj43 (type_equal_symm_validated_inv H))
-  end : type_equal_symm_validated.
-
-Hint Extern 1 (valid_kind_validated ?E ?K) =>
-  match goal with
-  | H : type_equal_symm_validated E _ _ K |- _ =>
-      apply (proj44 (type_equal_symm_validated_inv H))
-  end : type_equal_symm_validated.
-
-Hint Extern 1 (valid_env ?E) =>
-  match goal with
-  | H : type_equal_symm_validated E _ _ _ |- _ =>
-      apply (unvalidated_valid_env
-               (proj41 (type_equal_symm_validated_inv H)))
-  end : type_equal_symm_regular.
-
-Hint Extern 1 (kinding ?E ?T ?K) =>
-  match goal with
-  | H : type_equal_symm_validated E T _ K |- _ =>
-      apply (unvalidated_kinding
-               (proj42 (type_equal_symm_validated_inv H)))
-  | H : type_equal_symm_validated E _ T K |- _ =>
-      apply (unvalidated_kinding
-               (proj43 (type_equal_symm_validated_inv H)))
-  end : type_equal_symm_validated.
-
-Hint Extern 1 (valid_kind ?E ?K) =>
-  match goal with
-  | H : type_equal_symm_validated E _ _ K |- _ =>
-      apply (unvalidated_valid_kind
-               (proj44 (type_equal_symm_validated_inv H)))
-  end : type_equal_symm_validated.
 
 Lemma type_equal_validated_inv : forall E T1 T2 K,
     type_equal_validated E T1 T2 K ->
@@ -3205,17 +3665,17 @@ Lemma combined_kinding_validated_weakening :
           valid_env_validated (E & F & G) ->
           type_equal_core_validated (E & F & G) T1 T2 K))
   /\ (forall EG T1 T2 K,
-      type_equal_cong_validated EG T1 T2 K ->
-      (forall E F G,
-          EG = E & G ->
-          valid_env_validated (E & F & G) ->
-          type_equal_cong_validated (E & F & G) T1 T2 K))
-  /\ (forall EG T1 T2 K,
       type_equal_symm_validated EG T1 T2 K ->
       (forall E F G,
           EG = E & G ->
           valid_env_validated (E & F & G) ->
           type_equal_symm_validated (E & F & G) T1 T2 K))
+  /\ (forall EG T1 T2 K,
+      type_equal_cong_validated EG T1 T2 K ->
+      (forall E F G,
+          EG = E & G ->
+          valid_env_validated (E & F & G) ->
+          type_equal_cong_validated (E & F & G) T1 T2 K))
   /\ (forall EG T1 T2 K,
       type_equal_validated EG T1 T2 K ->
       (forall E F G,
@@ -3287,7 +3747,7 @@ Proof.
       rewrite concat_empty_r; auto with valid_env_validated.
 Qed.
 
-(* (Validated) Type equality is an equivalence *)
+(* (Validated) Type equality is a preorder *)
 
 Lemma type_equal_validated_reflexive : forall E T K,
     kinding_validated E T K ->
@@ -3307,36 +3767,6 @@ Proof.
   induction Hte1;
     eauto using type_equal_validated
       with type_equal_regular type_equal_validated.
-Qed.
-
-Lemma type_equal_symm_validated_symmetric : forall E T1 T2 K,
-    type_equal_symm_validated E T1 T2 K ->
-    type_equal_symm_validated E T2 T1 K.
-Proof.
-  introv Hte.
-  induction Hte; auto using type_equal_symm_validated.
-Qed.
-
-Lemma type_equal_validated_symmetric_ind : forall E T1 T2 T3 K,
-    type_equal_validated E T2 T1 K ->
-    type_equal_validated E T2 T3 K ->
-    type_equal_validated E T3 T1 K.
-Proof.
-  introv Hacc Hte.
-  induction Hte;
-    eauto using type_equal_symm_validated_symmetric
-      with type_equal_validated type_equal_regular.
-Qed.
-
-Lemma type_equal_validated_symmetric : forall E T1 T2 K,
-    type_equal_validated E T1 T2 K ->
-    type_equal_validated E T2 T1 K.
-Proof.
-  introv Hte.
-  apply type_equal_validated_symmetric_ind with (T2 := T1);
-    try assumption.
-  apply type_equal_validated_refl;
-    auto with type_equal_regular type_equal_validated.
 Qed.
 
 (* Useful properties of type equality on meets *)
@@ -3374,12 +3804,7 @@ Proof.
   - apply type_equal_validated_step
       with (T2 := typ_meet T1 T2);
       auto with kinding_regular kinding_validated.
-    assert (type_equal_symm_validated E T0 T2 (knd_row cs)) as Htes
-      by assumption.
-    remember (knd_row cs).
-    destruct Htes; subst;
-      auto with kinding_regular kinding_validated
-        type_equal_symm_validated type_equal_cong_validated.
+    eauto using type_equal_cong_validated with kinding_regular.
 Qed.
 
 Lemma type_equal_validated_meet_l : forall E T1 T1' T2 cs,
@@ -3396,15 +3821,10 @@ Proof.
   - apply type_equal_validated_step
       with (T2 := typ_meet T0 T2);
       auto with kinding_regular kinding_validated.
-    assert (type_equal_symm_validated E T1 T0 (knd_row cs)) as Htes
-      by assumption.
-    remember (knd_row cs).
-    destruct Htes; subst;
-      auto with kinding_regular kinding_validated
-        type_equal_symm_validated type_equal_cong_validated.
+    eauto using type_equal_cong_validated with kinding_regular.
 Qed.
 
-(* (Validated) Subtyping is a partial order *)
+(* (Validated) Subtyping is reflexive *)
 
 Lemma subtype_validated_refl : forall E T cs,
     kinding_validated E T (knd_row cs) ->
@@ -3440,7 +3860,75 @@ Proof.
   auto using type_equal_validated_meet_r
     with type_equal_validated.
 Qed.
+
+(* (Validated) Type equality is symmetric (and thus an equivalence) *)
     
+Lemma type_equal_symm_validated_symmetric : forall E T1 T2 K,
+    type_equal_symm_validated E T1 T2 K ->
+    type_equal_symm_validated E T2 T1 K.
+Proof.
+  introv Hte.
+  induction Hte; auto using type_equal_symm_validated.
+Qed.
+
+Lemma type_equal_cong_validated_symmetric : forall E T1 T2 K,
+    type_equal_cong_validated E T1 T2 K ->
+    type_equal_cong_validated E T2 T1 K.
+Proof.
+  introv Hte.
+  induction Hte;
+    eauto using type_equal_symm_validated_symmetric,
+      type_equal_cong_validated.
+  assert (type_equal_validated E T1 T1' (knd_row CSet.universe))
+    by eauto
+         using type_equal_validated_reflexive, type_equal_validated
+         with kinding_regular kinding_validated.
+  assert (type_equal_validated E T1' T1 (knd_row CSet.universe))
+    by eauto
+         using type_equal_validated_reflexive, type_equal_validated
+         with kinding_regular kinding_validated.
+  assert (subtype_validated E T1 T1' CSet.universe)
+    by auto using subtype_validated_reflexive.
+  assert (subtype_validated E T1' T1 CSet.universe)
+    by auto using subtype_validated_reflexive.
+  assert (valid_kind_validated E (knd_range T1' T1'))
+    by auto using valid_kind_validated, subtype_validated_refl.
+  assert (kinding_validated E (typ_row T1') (knd_range T1' T1'))
+    by eauto using kinding_validated.
+  assert (kinding_validated E (typ_row T1) (knd_range T1' T1'))
+    by (eapply kinding_validated_range_subsumption;
+          eauto using subtype_validated_refl with kinding_validated).
+  apply type_equal_cong_validated_range_subsumption
+    with (T3 := T1') (T4 := T1');
+    eauto using subtype_validated_refl, type_equal_cong_validated,
+      valid_kind_validated, subtype_validated_refl.
+Qed.
+
+Lemma type_equal_validated_symmetric_ind : forall E T1 T2 T3 K,
+    type_equal_validated E T2 T1 K ->
+    type_equal_validated E T2 T3 K ->
+    type_equal_validated E T3 T1 K.
+Proof.
+  introv Hacc Hte.
+  induction Hte;
+    eauto using type_equal_cong_validated_symmetric
+      with type_equal_validated type_equal_regular.
+Qed.
+
+Lemma type_equal_validated_symmetric : forall E T1 T2 K,
+    type_equal_validated E T1 T2 K ->
+    type_equal_validated E T2 T1 K.
+Proof.
+  introv Hte.
+  apply type_equal_validated_symmetric_ind with (T2 := T1);
+    try assumption.
+  apply type_equal_validated_refl;
+    auto with type_equal_regular type_equal_validated.
+Qed.
+
+(* (Validated) Subtyping is transitive and antisymmetric (and
+   thus a partial order) *)
+
 Lemma subtype_validated_transitive : forall E T1 T2 T3 cs,
     subtype_validated E T1 T2 cs ->
     subtype_validated E T2 T3 cs ->
@@ -3496,11 +3984,11 @@ Lemma validated_combined_kinding_regular :
        type_equal_core_regular E T1 T2 K ->
        type_equal_core_validated E T1 T2 K)
   /\ (forall E T1 T2 K,
-       type_equal_cong_regular E T1 T2 K ->
-       type_equal_cong_validated E T1 T2 K)
-  /\ (forall E T1 T2 K,
        type_equal_symm_regular E T1 T2 K ->
        type_equal_symm_validated E T1 T2 K)
+  /\ (forall E T1 T2 K,
+       type_equal_cong_regular E T1 T2 K ->
+       type_equal_cong_validated E T1 T2 K)
   /\ (forall E T1 T2 K,
        type_equal_regular E T1 T2 K -> type_equal_validated E T1 T2 K)
   /\ (forall E T1 T2 cs,
@@ -3510,7 +3998,7 @@ Proof.
     econstr auto with valid_kind_validated kinding_validated
            valid_scheme_vars_validated valid_scheme_validated
            valid_env_validated type_equal_core_validated
-           type_equal_cong_validated type_equal_symm_validated
+           type_equal_symm_validated type_equal_cong_validated
            type_equal_validated subtype_validated.
   - assert (valid_env_validated E) by auto with valid_env_validated.
     assert (valid_kind_validated E K)
@@ -3538,12 +4026,14 @@ Proof.
            with type_equal_cong_validated.
     assert (subtype_validated E T1 T1' CSet.universe)
       by eauto using subtype_validated_reflexive
-           with type_equal_validated type_equal_symm_validated
-             type_equal_cong_regular type_equal_cong_validated.
+           with type_equal_validated
+                  type_equal_cong_regular type_equal_cong_validated.
     assert (subtype_validated E T1' T1 CSet.universe)
-      by eauto using subtype_validated_reflexive
-           with type_equal_validated type_equal_symm_validated
-             type_equal_cong_regular type_equal_cong_validated.
+      by eauto
+           using subtype_validated_reflexive,
+                   type_equal_validated_symmetric
+           with type_equal_validated
+                  type_equal_cong_regular type_equal_cong_validated.
     apply type_equal_cong_validated_row;
       auto with valid_kind_validated type_equal_cong_validated.
     apply kinding_validated_range_subsumption
@@ -3683,43 +4173,6 @@ Hint Extern 1 (valid_kind ?E ?K) =>
                           (validated_type_equal_core H))))
   end : type_equal_core_validated.
 
-Lemma validated_type_equal_cong : forall E T1 T2 K,
-    type_equal_cong E T1 T2 K -> type_equal_cong_validated E T1 T2 K.
-Proof.
-  introv He.
-  apply regular_type_equal_cong in He.
-  pose validated_combined_kinding_regular.
-  intuition auto.
-Qed.
-
-Hint Extern 1 (valid_env ?E) =>
-  match goal with
-  | H : type_equal_cong E _ _ _ |- _ =>
-      apply (unvalidated_valid_env
-               (proj41 (type_equal_cong_validated_inv
-                          (validated_type_equal_cong H))))
-  end : type_equal_cong_regular.
-
-Hint Extern 1 (kinding ?E ?T ?K) =>
-  match goal with
-  | H : type_equal_cong E T _ K |- _ =>
-      apply (unvalidated_kinding
-               (proj42 (type_equal_cong_validated_inv
-                          (validated_type_equal_cong H))))
-  | H : type_equal_cong E _ T K |- _ =>
-      apply (unvalidated_kinding
-               (proj43 (type_equal_cong_validated_inv
-                          (validated_type_equal_cong H))))
-  end : type_equal_cong_validated.
-
-Hint Extern 1 (valid_kind ?E ?K) =>
-  match goal with
-  | H : type_equal_cong E _ _ K |- _ =>
-      apply (unvalidated_valid_kind
-               (proj44 (type_equal_cong_validated_inv
-                          (validated_type_equal_cong H))))
-  end : type_equal_cong_validated.
-
 Lemma validated_type_equal_symm : forall E T1 T2 K,
     type_equal_symm E T1 T2 K -> type_equal_symm_validated E T1 T2 K.
 Proof.
@@ -3756,6 +4209,43 @@ Hint Extern 1 (valid_kind ?E ?K) =>
                (proj44 (type_equal_symm_validated_inv
                           (validated_type_equal_symm H))))
   end : type_equal_symm_validated.
+
+Lemma validated_type_equal_cong : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K -> type_equal_cong_validated E T1 T2 K.
+Proof.
+  introv He.
+  apply regular_type_equal_cong in He.
+  pose validated_combined_kinding_regular.
+  intuition auto.
+Qed.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : type_equal_cong E _ _ _ |- _ =>
+      apply (unvalidated_valid_env
+               (proj41 (type_equal_cong_validated_inv
+                          (validated_type_equal_cong H))))
+  end : type_equal_cong_regular.
+
+Hint Extern 1 (kinding ?E ?T ?K) =>
+  match goal with
+  | H : type_equal_cong E T _ K |- _ =>
+      apply (unvalidated_kinding
+               (proj42 (type_equal_cong_validated_inv
+                          (validated_type_equal_cong H))))
+  | H : type_equal_cong E _ T K |- _ =>
+      apply (unvalidated_kinding
+               (proj43 (type_equal_cong_validated_inv
+                          (validated_type_equal_cong H))))
+  end : type_equal_cong_validated.
+
+Hint Extern 1 (valid_kind ?E ?K) =>
+  match goal with
+  | H : type_equal_cong E _ _ K |- _ =>
+      apply (unvalidated_valid_kind
+               (proj44 (type_equal_cong_validated_inv
+                          (validated_type_equal_cong H))))
+  end : type_equal_cong_validated.
 
 Lemma validated_type_equal : forall E T1 T2 K,
     type_equal E T1 T2 K -> type_equal_validated E T1 T2 K.
@@ -3931,6 +4421,16 @@ Proof.
   eauto using type_equal_validated_symmetric.
 Qed.
 
+Lemma type_equal_cong_symmetric : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K ->
+    type_equal_cong E T2 T1 K.
+Proof.
+  introv Hte.
+  apply validated_type_equal_cong in Hte.
+  eauto using type_equal_cong_validated_symmetric.
+Qed.
+    
+
 (* *************************************************************** *)
 (** Subtyping is a partial order *)
 
@@ -4020,6 +4520,124 @@ Proof.
 Qed.  
 
 (* *************************************************************** *)
+(** Kinding respects type equality *)
+(*
+Lemma kinding_type_equal_core_l : forall E T1 T2 K1 K2,
+    kinding E T1 K1 ->
+    type_equal_core E T1 T2 K2 ->
+    kinding E T2 K1.
+Proof.
+  introv Hk Hte.
+  generalize dependent K2.
+  generalize dependent T2.
+  induction Hk; introv Hte;
+    eauto; inversion Hte; subst; auto; auto with csetdec;
+    inversion Hk2; subst; auto.
+Qed.
+
+Lemma kinding_type_equal_core_r : forall E T1 T2 K1 K2,
+    kinding E T1 K1 ->
+    type_equal_core E T2 T1 K2 ->
+    kinding E T2 K1.
+Proof.
+  introv Hk Hte.
+  generalize dependent K1.
+  induction Hte; introv Hk.
+  - remember (typ_or cs2 T2 cs1 T1) as T.
+    induction Hk; inversion HeqT; subst; eauto with csetdec.
+  - remember (typ_or cs12 (typ_or cs1 T1 cs2 T2) cs3 T3) as T.
+    induction Hk; inversion HeqT; subst; eauto with csetdec.
+  - remember (typ_bot cs12) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_top cs12) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember
+      (typ_meet (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4)) as T.
+    induction Hk; inversion HeqT; subst; eauto;
+      inversion Hk1; inversion Hk2; subst; auto.
+  - remember
+      (typ_join (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4)) as T.
+    induction Hk; inversion HeqT; subst; eauto;
+      inversion Hk1; inversion Hk2; subst; auto.
+  - remember (typ_proj cs1 T cs23) as Tk.
+    induction Hk; inversion HeqTk; subst; eauto.
+  - induction Hk; eauto; inversion H; subst;
+      auto with csetdec kinding_regular.
+    + assert (bind_knd K = bind_knd (knd_row cs)) as Heq
+        by eauto using binds_func.
+      inversion Heq; subst.
+      auto with csetdec kinding_regular.
+    + apply IHHk1.
+
+  induction Hk; introv Hte.
+  - inversion Hte; subst.
+    + assert (kinding E (typ_fvar X) (knd_row cs)) as Hk2
+        by assumption.
+      inversion Hk2; subst.
+      assert (bind_knd K = bind_knd (knd_row cs)) as Heq
+        by eauto using binds_func.
+      inversion Heq; subst.
+      apply kinding_proj; auto with csetdec kinding_regular.
+    + 
+Qed.
+
+Lemma kinding_type_equal_cong : forall E T1 T2 K1 K2,
+    kinding E T1 K1 ->
+    type_equal_cong E T1 T2 K2 ->
+    kinding E T2 K1.
+Proof.
+  introv Hk Hte.
+  generalize dependent K1.
+  induction Hte; introv Hk.
+  - remember (typ_constructor c T1) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_or cs1 T1 cs2 T2) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_or cs1 T1 cs2 T2) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_row T1) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+    apply kinding_range_subsumption
+      with (T1 := T1') (T2 := T1'); auto;
+      apply subtype_reflexive; eauto using type_equal_symmetric.
+  - remember (typ_variant T1) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_arrow T1 T2) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_arrow T1 T2) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_meet T1 T2) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_meet T1 T2) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_join T1 T2) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - remember (typ_join T1 T2) as T.
+    induction Hk; inversion HeqT; subst; eauto.
+  - auto.
+  - eauto using kinding_type_equal_core.
+Qed.
+
+Lemma kinding_type_equal_symm : forall E T1 T2 K1 K2,
+    kinding E T1 K1 ->
+    type_equal_symm E T1 T2 K2 ->
+    kinding E T2 K1.
+Proof.
+  introv Hk Hte.
+  destruct Hte;
+    eauto using kinding_type_equal_cong.
+
+
+Lemma kinding_type_equal : forall E T1 T2 K1 K2,
+    kinding E T1 K1 ->
+    type_equal E T1 T2 K2 ->
+    kinding E T2 K1.
+Proof.
+  introv Hk Hte.
+  induction Hk.
+*)  
+
+(* *************************************************************** *)
 (** * "Validated" version of typing judgement *)
 
 Inductive typing_validated : env -> trm -> typ -> Prop :=
@@ -4027,7 +4645,7 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       valid_env E -> 
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
-      T = instance M Us ->
+      type_equal E T (instance M Us) knd_type ->
       environment E ->
       scheme M ->
       types (sch_arity M) Us ->
@@ -4269,14 +4887,14 @@ Proof.
   induction Ht.
   - econstructor; try eassumption; auto.
     + apply valid_scheme_from_env with (x := x); assumption.
-    + subst; apply kinding_instance; assumption.
+    + auto with type_equal_validated.
   - pick_fresh x.
     assert (typing_validated (E & x ~: sch_empty T1) (t1 ^ x) T2)
       by auto.
     assert (valid_env E)
       by eauto using valid_env_retract with typing_validated.
     assert (kinding E T2 knd_type)
-      by eauto using kinding_typ_bind_l with typing_validated.
+      by eauto using kinding_remove_typ_bind_l with typing_validated.
     econstructor; eauto with typing_validated;
       intros y Hn;
       assert (typing_validated (E & y ~: sch_empty T1) (t1 ^ y) T2)
@@ -4289,12 +4907,12 @@ Proof.
   - pick_fresh x.
     assert (typing_validated (E & x ~: M) (t2 ^ x) T2) by auto.
     assert (kinding E T2 knd_type)
-      by eauto using kinding_typ_bind_l with typing_validated.
+      by eauto using kinding_remove_typ_bind_l with typing_validated.
     assert (valid_env (E & x ~: M)) by auto with typing_validated.
     assert (valid_env E) by eauto using valid_env_retract.
     assert (valid_scheme E M)
       by eauto using binds_push_eq,
-         valid_scheme_from_env, valid_scheme_typ_bind_l.
+         valid_scheme_from_env, valid_scheme_remove_typ_bind_l.
     econstructor; eauto;
       try
         (intros Ys Hf;
@@ -4337,7 +4955,7 @@ Proof.
                              (t3 ^ x) T8)
       by auto.
     assert (kinding E T8 knd_type)
-      by eauto using kinding_typ_bind_l with typing_validated.
+      by eauto using kinding_remove_typ_bind_l with typing_validated.
     econstructor; eauto with typing_validated;
       intros y Hn;
       assert
@@ -4362,7 +4980,7 @@ Proof.
                              (t2 ^ x) T4)
       by auto.
     assert (kinding E T4 knd_type)
-      by eauto using kinding_typ_bind_l with typing_validated.
+      by eauto using kinding_remove_typ_bind_l with typing_validated.
     econstructor; eauto with typing_validated;
       intros y Hn;
       assert (typing_validated

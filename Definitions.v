@@ -633,7 +633,17 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
         (typ_meet (typ_join T1 T2) (typ_join T1 T3))
         (knd_row cs)
 
-(* Congruence closure of type_equal_core *)
+(* Symetric closure of type_equal_core *)
+
+with type_equal_symm : env -> typ -> typ -> knd -> Prop :=
+  | type_equal_symm_l : forall E T1 T2 K,
+      type_equal_core E T1 T2 K ->
+      type_equal_symm E T1 T2 K
+  | type_equal_symm_r : forall E T1 T2 K,
+      type_equal_core E T1 T2 K ->
+      type_equal_symm E T2 T1 K
+
+(* Congruence closure of type_equal_symm *)
 
 with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
   | type_equal_cong_constructor : forall E c T1 T1' cs,
@@ -697,19 +707,9 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
       subtype E T3 T3' CSet.universe ->
       subtype E T4' T4 CSet.universe ->
       type_equal_cong E T1 T2 (knd_range T3' T4')
-  | type_equal_cong_core : forall E T1 T1' K,
-      type_equal_core E T1 T1' K ->
+  | type_equal_cong_symm : forall E T1 T1' K,
+      type_equal_symm E T1 T1' K ->
       type_equal_cong E T1 T1' K
-
-(* Symetric closure of type_equal_cong *)
-
-with type_equal_symm : env -> typ -> typ -> knd -> Prop :=
-  | type_equal_symm_l : forall E T1 T2 K,
-      type_equal_cong E T1 T2 K ->
-      type_equal_symm E T1 T2 K
-  | type_equal_symm_r : forall E T1 T2 K,
-      type_equal_cong E T1 T2 K ->
-      type_equal_symm E T2 T1 K
 
 (* Reflexive transitive closure of type_equal_symm *)
 
@@ -718,7 +718,7 @@ with type_equal : env -> typ -> typ -> knd -> Prop :=
       kinding E T K ->
       type_equal E T T K
   | type_equal_step : forall E T1 T2 T3 K,
-      type_equal_symm E T1 T2 K ->
+      type_equal_cong E T1 T2 K ->
       type_equal E T2 T3 K ->
       type_equal E T1 T3 K
 
@@ -735,17 +735,17 @@ Scheme valid_kind_mutind := Induction for valid_kind Sort Prop
   with valid_env_mutind := Induction for valid_env Sort Prop
   with type_equal_core_mutind :=
          Induction for type_equal_core Sort Prop
-  with type_equal_cong_mutind :=
-         Induction for type_equal_cong Sort Prop
   with type_equal_symm_mutind :=
          Induction for type_equal_symm Sort Prop
+  with type_equal_cong_mutind :=
+         Induction for type_equal_cong Sort Prop
   with type_equal_mutind := Induction for type_equal Sort Prop
   with subtype_mutind := Induction for subtype Sort Prop.
 
 Combined Scheme combined_kinding_mutind
   from valid_kind_mutind, kinding_mutind, valid_scheme_vars_mutind,
        valid_scheme_mutind, valid_env_mutind, type_equal_core_mutind,
-       type_equal_cong_mutind, type_equal_symm_mutind,
+       type_equal_symm_mutind, type_equal_cong_mutind,
        type_equal_mutind, subtype_mutind.
 
 Inductive valid_instance : env -> list typ -> sch -> Prop :=
@@ -765,7 +765,7 @@ Inductive typing : env -> trm -> typ -> Prop :=
       valid_env E -> 
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
-      T = instance M Us ->
+      type_equal E T (instance M Us) knd_type ->
       typing E (trm_fvar x) T
   | typing_abs : forall L E T1 T2 t1,
       kinding E T1 knd_type ->
