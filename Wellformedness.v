@@ -999,6 +999,16 @@ with type_equal_cong_regular : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs2 ->
       type_equal_cong_regular E
         (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1 cs2 T2') (knd_row cs12)
+  | type_equal_cong_regular_proj : forall E T1 T1' cs1 cs2,
+      CSet.Subset cs2 cs1 ->
+      CSet.Nonempty cs2 ->
+      type_equal_cong_regular E T1 T1' (knd_row cs1) ->
+      environment E ->
+      type T1 ->
+      type T1' ->
+      CSet.Nonempty cs1 ->
+      type_equal_cong_regular E
+        (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) (knd_row cs2)
   | type_equal_cong_regular_row : forall E T1 T1',
       type_equal_cong_regular E T1 T1' (knd_row CSet.universe) ->
       environment E ->

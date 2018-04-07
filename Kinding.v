@@ -2675,6 +2675,19 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding_validated E T2' (knd_row cs2) ->
       type_equal_cong_validated E
         (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1 cs2 T2') (knd_row cs12)
+  | type_equal_cong_validated_proj : forall E T1 T1' cs1 cs2,
+      CSet.Subset cs2 cs1 ->
+      CSet.Nonempty cs2 ->
+      type_equal_cong_validated E T1 T1' (knd_row cs1) ->
+      environment E ->
+      type T1 ->
+      type T1' ->
+      CSet.Nonempty cs1 ->
+      valid_env_validated E ->
+      kinding_validated E T1 (knd_row cs1) ->
+      kinding_validated E T1' (knd_row cs1) ->
+      type_equal_cong_validated E
+        (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) (knd_row cs2)
   | type_equal_cong_validated_row : forall E T1 T1',
       type_equal_cong_validated E T1 T1' (knd_row CSet.universe) ->
       environment E ->
@@ -3971,6 +3984,62 @@ Proof.
   apply type_equal_validated_symmetric; auto.
 Qed.
 
+(* *************************************************************** *)
+(** (Validated) Typing lattice is bounded *)
+
+Lemma subtype_validated_top : forall E T cs,
+    kinding_validated E T (knd_row cs) ->
+    subtype_validated E T (typ_top cs) cs.
+Proof.
+  introv Hk.
+  apply subtype_validated_c;
+    auto with kinding_regular kinding_validated.
+  apply type_equal_validated_step with (typ_meet T (typ_top cs));
+    auto using type_equal_validated_reflexive
+      with kinding_validated kinding_regular
+        type_equal_cong_validated type_equal_symm_validated
+        type_equal_core_validated.
+Qed.
+
+Lemma subtype_validated_bot : forall E T cs,
+    kinding_validated E T (knd_row cs) ->
+    subtype_validated E (typ_bot cs) T cs.
+Proof.
+  introv Hk.
+  apply subtype_validated_c;
+    auto with kinding_regular kinding_validated.
+  apply type_equal_validated_step
+    with (typ_meet (typ_bot cs) (typ_join (typ_bot cs) T));
+    auto 6 with kinding_validated kinding_regular
+      type_equal_cong_validated type_equal_symm_validated
+      type_equal_core_validated.
+  apply type_equal_validated_step
+    with (typ_meet (typ_bot cs) (typ_join T (typ_bot cs)));
+    auto 6 with kinding_validated kinding_regular
+      type_equal_cong_validated type_equal_symm_validated
+      type_equal_core_validated.
+  apply type_equal_validated_step with (typ_meet (typ_bot cs) T);
+    auto 6 using type_equal_validated_reflexive
+      with kinding_validated kinding_regular
+      type_equal_cong_validated type_equal_symm_validated
+      type_equal_core_validated.
+Qed.
+
+Lemma kinding_validated_range_top_bot : forall E T1 T2 T3,
+    kinding_validated E T1 (knd_range T2 T3) ->
+    kinding_validated E T1
+      (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)).
+Proof.
+  introv Hk.
+  assert (valid_kind_validated E (knd_range T2 T3))
+    as Hknd by auto with kinding_validated.
+  inversion Hknd; subst.  
+  apply kinding_validated_range_subsumption
+    with (T1 := T2) (T2 := T3);
+      auto using subtype_validated_top, subtype_validated_bot
+        with kinding_validated kinding_regular valid_kind_validated.
+Qed.  
+
 Lemma validated_combined_kinding_regular :
   (forall E K, valid_kind_regular E K -> valid_kind_validated E K)
   /\ (forall E T K, kinding_regular E T K -> kinding_validated E T K)
@@ -4392,252 +4461,6 @@ Hint Extern 1 (valid_env ?E) =>
   end : valid_instance_validated.
 
 (* *************************************************************** *)
-(** Type equality in an equivalence *)
-
-Lemma type_equal_reflexive : forall E T K,
-    kinding E T K ->
-    type_equal E T T K.
-Proof.
-  auto.
-Qed.
-
-Lemma type_equal_transitive : forall E T1 T2 T3 K,
-    type_equal E T1 T2 K ->
-    type_equal E T2 T3 K ->
-    type_equal E T1 T3 K.
-Proof.
-  introv Hte1 Hte2.
-  apply validated_type_equal in Hte1.
-  apply validated_type_equal in Hte2.
-  eauto using type_equal_validated_transitive.
-Qed.
-
-Lemma type_equal_symmetric : forall E T1 T2 K,
-    type_equal E T1 T2 K ->
-    type_equal E T2 T1 K.
-Proof.
-  introv Hte.
-  apply validated_type_equal in Hte.
-  eauto using type_equal_validated_symmetric.
-Qed.
-
-Lemma type_equal_cong_symmetric : forall E T1 T2 K,
-    type_equal_cong E T1 T2 K ->
-    type_equal_cong E T2 T1 K.
-Proof.
-  introv Hte.
-  apply validated_type_equal_cong in Hte.
-  eauto using type_equal_cong_validated_symmetric.
-Qed.
-    
-
-(* *************************************************************** *)
-(** Subtyping is a partial order *)
-
-Lemma subtype_refl : forall E T cs,
-    kinding E T (knd_row cs) ->
-    subtype E T T cs.
-Proof.
-  introv Hk.
-  apply validated_kinding in Hk.
-  eauto using subtype_validated_refl.
-Qed.
-
-Lemma subtype_reflexive : forall E T1 T2 cs,
-    type_equal E T1 T2 (knd_row cs) ->
-    subtype E T1 T2 cs.
-Proof.
-  introv Hte.
-  apply validated_type_equal in Hte.
-  eauto using subtype_validated_reflexive.
-Qed.
-     
-Lemma subtype_transitive : forall E T1 T2 T3 cs,
-    subtype E T1 T2 cs ->
-    subtype E T2 T3 cs ->
-    subtype E T1 T3 cs.
-Proof.
-  introv Hs1 Hs2.
-  apply validated_subtype in Hs1.
-  apply validated_subtype in Hs2.
-  eauto using subtype_validated_transitive.
-Qed.
-
-Lemma subtype_antisymmetric : forall E T1 T2 cs,
-    subtype E T1 T2 cs ->
-    subtype E T2 T1 cs ->
-    type_equal E T1 T2 (knd_row cs).
-Proof.
-  introv Hs1 Hs2.
-  apply validated_subtype in Hs1.
-  apply validated_subtype in Hs2.
-  eauto using subtype_validated_antisymmetric.
-Qed.
-
-(* *************************************************************** *)
-(** Typing lattice is bounded *)
-
-Lemma subtype_top : forall E T cs,
-    kinding E T (knd_row cs) ->
-    subtype E T (typ_top cs) cs.
-Proof.
-  introv Hk.
-  apply validated_kinding in Hk.
-  apply subtype_c.
-  apply type_equal_step with (typ_meet T (typ_top cs));
-    auto with kinding_validated kinding_regular.
-Qed.
-
-Lemma subtype_bot : forall E T cs,
-    kinding E T (knd_row cs) ->
-    subtype E (typ_bot cs) T cs.
-Proof.
-  introv Hk.
-  apply validated_kinding in Hk.
-  apply subtype_c.
-  apply type_equal_step
-    with (typ_meet (typ_bot cs) (typ_join (typ_bot cs) T));
-    auto with kinding_validated kinding_regular.
-  apply type_equal_step
-    with (typ_meet (typ_bot cs) (typ_join T (typ_bot cs)));
-    auto 6 with kinding_validated kinding_regular.
-  apply type_equal_step with (typ_meet (typ_bot cs) T);
-    auto 6 with kinding_validated kinding_regular.
-Qed.  
-
-Lemma kinding_range_top_bot : forall E T1 T2 T3,
-    kinding E T1 (knd_range T2 T3) ->
-    kinding E T1
-      (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)).
-Proof.
-  introv Hk.
-  apply validated_kinding in Hk.
-  assert (valid_kind_validated E (knd_range T2 T3))
-    as Hknd by auto with kinding_validated.
-  inversion Hknd; subst.  
-  apply kinding_range_subsumption with (T1 := T2) (T2 := T3);
-    auto using subtype_top, subtype_bot.
-Qed.  
-
-(* *************************************************************** *)
-(** Kinding respects type equality *)
-(*
-Lemma kinding_type_equal_core_l : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal_core E T1 T2 K2 ->
-    kinding E T2 K1.
-Proof.
-  introv Hk Hte.
-  generalize dependent K2.
-  generalize dependent T2.
-  induction Hk; introv Hte;
-    eauto; inversion Hte; subst; auto; auto with csetdec;
-    inversion Hk2; subst; auto.
-Qed.
-
-Lemma kinding_type_equal_core_r : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal_core E T2 T1 K2 ->
-    kinding E T2 K1.
-Proof.
-  introv Hk Hte.
-  generalize dependent K1.
-  induction Hte; introv Hk.
-  - remember (typ_or cs2 T2 cs1 T1) as T.
-    induction Hk; inversion HeqT; subst; eauto with csetdec.
-  - remember (typ_or cs12 (typ_or cs1 T1 cs2 T2) cs3 T3) as T.
-    induction Hk; inversion HeqT; subst; eauto with csetdec.
-  - remember (typ_bot cs12) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_top cs12) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember
-      (typ_meet (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4)) as T.
-    induction Hk; inversion HeqT; subst; eauto;
-      inversion Hk1; inversion Hk2; subst; auto.
-  - remember
-      (typ_join (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4)) as T.
-    induction Hk; inversion HeqT; subst; eauto;
-      inversion Hk1; inversion Hk2; subst; auto.
-  - remember (typ_proj cs1 T cs23) as Tk.
-    induction Hk; inversion HeqTk; subst; eauto.
-  - induction Hk; eauto; inversion H; subst;
-      auto with csetdec kinding_regular.
-    + assert (bind_knd K = bind_knd (knd_row cs)) as Heq
-        by eauto using binds_func.
-      inversion Heq; subst.
-      auto with csetdec kinding_regular.
-    + apply IHHk1.
-
-  induction Hk; introv Hte.
-  - inversion Hte; subst.
-    + assert (kinding E (typ_fvar X) (knd_row cs)) as Hk2
-        by assumption.
-      inversion Hk2; subst.
-      assert (bind_knd K = bind_knd (knd_row cs)) as Heq
-        by eauto using binds_func.
-      inversion Heq; subst.
-      apply kinding_proj; auto with csetdec kinding_regular.
-    + 
-Qed.
-
-Lemma kinding_type_equal_cong : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal_cong E T1 T2 K2 ->
-    kinding E T2 K1.
-Proof.
-  introv Hk Hte.
-  generalize dependent K1.
-  induction Hte; introv Hk.
-  - remember (typ_constructor c T1) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_or cs1 T1 cs2 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_or cs1 T1 cs2 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_row T1) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-    apply kinding_range_subsumption
-      with (T1 := T1') (T2 := T1'); auto;
-      apply subtype_reflexive; eauto using type_equal_symmetric.
-  - remember (typ_variant T1) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_arrow T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_arrow T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_meet T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_meet T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_join T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_join T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - auto.
-  - eauto using kinding_type_equal_core.
-Qed.
-
-Lemma kinding_type_equal_symm : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal_symm E T1 T2 K2 ->
-    kinding E T2 K1.
-Proof.
-  introv Hk Hte.
-  destruct Hte;
-    eauto using kinding_type_equal_cong.
-
-
-Lemma kinding_type_equal : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal E T1 T2 K2 ->
-    kinding E T2 K1.
-Proof.
-  introv Hk Hte.
-  induction Hk.
-*)  
-
-(* *************************************************************** *)
 (** * "Validated" version of typing judgement *)
 
 Inductive typing_validated : env -> trm -> typ -> Prop :=
@@ -4842,7 +4665,9 @@ Lemma typing_validated_inv : forall E t T,
     valid_env E /\ kinding E T knd_type.
 Proof.
   introv Ht.
-  induction Ht; splits; eauto using kinding_range_top_bot.
+  induction Ht; splits;
+  eauto using unvalidated_kinding,
+    kinding_validated_range_top_bot, validated_kinding.
 Qed.
 
 Hint Constructors typing_validated : typing_validated.

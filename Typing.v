@@ -4,8 +4,8 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import LibLN Cofinite Definitions
-        Substitution Wellformedness Kinding.
+Require Import LibLN Cofinite Definitions Substitution
+        Wellformedness Kinding Subtyping.
 
 Hint Constructors typing.
 
@@ -402,35 +402,6 @@ Proof.
   eauto using typing_equal_binding.
 Qed.
 
-Lemma foo : forall E T1 T2 T3 T4 T5 T6,
-    kinding E T1 (knd_range T3 T4) ->
-    type_equal_cong E T1 T2 (knd_range T5 T6) ->
-    kinding E T2 (knd_range T3 T4).
-Proof.
-  introv Hk Hte.
-  remember (knd_range T5 T6) as K.
-  generalize dependent T5.
-  generalize dependent T6.
-  induction Hte; introv HeqK; inversion HeqK; subst.
-  - clear IHHte HeqK.
-    remember (typ_row T6) as T.
-    remember (knd_range T3 T4) as K.
-    generalize dependent T3.
-    generalize dependent T4.
-    induction Hk; introv HeqK; inversion HeqT; inversion HeqK;
-      subst; subst.
-    + apply kinding_range_subsumption
-        with (T1 := T1') (T2 := T1');
-        eauto using subtype_reflexive, type_equal_symmetric
-          with type_equal_cong_validated. 
-    + apply kinding_range_subsumption
-        with (T1 := T1) (T2 := T2); eauto.
-  - eauto.
-  - inversion H; subst.
-    + inversion H1.
-    + inversion H1.
-Qed.
-
 Lemma typing_equal_cong : forall E t T1 T2,
     type_equal_cong E T1 T2 knd_type ->
     typing E t T1 -> typing E t T2.
@@ -467,7 +438,7 @@ Proof.
       auto using type_equal_cong_weakening_l.
   - inversion He; subst.
     + apply typing_constructor with (T2 := T2) (T3 := T3); auto.
-      eauto using foo.
+      eauto using kinding_type_equal_cong_range.
     + { assert
           (type_equal_symm E (typ_variant T1) T0 knd_type) as Hes
           by assumption.

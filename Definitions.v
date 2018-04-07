@@ -666,6 +666,12 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
       type_equal_cong E T2 T2' (knd_row cs2) ->
       type_equal_cong E
         (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1 cs2 T2') (knd_row cs12)
+  | type_equal_cong_proj : forall E T1 T1' cs1 cs2,
+      CSet.Subset cs2 cs1 ->
+      CSet.Nonempty cs2 ->
+      type_equal_cong E T1 T1' (knd_row cs1) ->
+      type_equal_cong E
+        (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) (knd_row cs2)
   | type_equal_cong_row : forall E T1 T1',
       type_equal_cong E T1 T1' (knd_row CSet.universe) ->
       type_equal_cong E (typ_row T1) (typ_row T1') (knd_range T1 T1)
