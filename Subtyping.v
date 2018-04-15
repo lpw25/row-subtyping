@@ -46,6 +46,26 @@ Proof.
 Qed.
 
 (* *************************************************************** *)
+(** Convenient lemmas for single-step equality proofs *)
+
+Lemma type_equal_single : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K ->
+    type_equal E T1 T2 K.
+Proof.
+  introv Hte.
+  eauto with type_equal_cong_validated.
+Qed.
+
+Lemma type_equal_post_step : forall E T1 T2 T3 K,
+    type_equal E T1 T2 K ->
+    type_equal_cong E T2 T3 K ->
+    type_equal E T1 T3 K.
+Proof.
+  introv Hte1 Hte2.
+  eauto using type_equal_transitive, type_equal_single.
+Qed.
+
+(* *************************************************************** *)
 (** Idempotence of join and meet *)
 
 Lemma type_equal_join_idempotent : forall E T cs,
@@ -112,7 +132,7 @@ Proof.
 Qed.
 
 (* *************************************************************** *)
-(** Congruence *)
+(** Congruence of type equality *)
 
 Lemma type_equal_range_subsumption : forall E T1 T2 T3 T4 T3' T4',
     type_equal E T1 T2 (knd_range T3 T4) ->
@@ -228,6 +248,125 @@ Proof.
   apply type_equal_transitive with (typ_join T1' T2).
   - induction Hte1; subst; eauto with type_equal_validated.
   - induction Hte2; subst; eauto with type_equal_validated.
+Qed.
+
+(* *************************************************************** *)
+(** Congruence of subtyping *)
+
+Lemma subtype_proj : forall E T1 T1' cs1 cs2,
+    subtype E T1 T1' cs1 ->
+    CSet.Subset cs2 cs1 ->
+    CSet.Nonempty cs2 ->
+    subtype E (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) cs2.
+Proof.
+  introv Hs Hsb Hn.
+  remember Hs as Hs'.
+  destruct Hs.
+  apply subtype_c.
+  apply type_equal_post_step
+    with (T2 := typ_proj cs (typ_meet T1 T2) cs2);
+    auto using type_equal_proj with subtype_validated.
+Qed.
+
+Lemma subtype_or : forall E T1 T1' T2 T2' cs1 cs2 cs,
+    subtype E T1 T1' cs1 ->
+    subtype E T2 T2' cs2 ->
+    CSet.Disjoint cs1 cs2 ->
+    cs = CSet.union cs1 cs2 ->
+    subtype E (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1' cs2 T2') cs.
+Proof.
+  introv Hs1 Hs2 Hd Heq.
+  remember Hs1 as Hs1'.
+  destruct Hs1.
+  remember Hs2 as Hs2'.
+  destruct Hs2.
+  apply subtype_c.
+  apply type_equal_post_step
+    with (T2 := typ_or cs0 (typ_meet T1 T0) cs1 (typ_meet T2 T3));
+    auto using type_equal_or with subtype_validated.
+Qed.
+
+Lemma subtype_meet : forall E T1 T1' T2 T2' cs,
+    subtype E T1 T1' cs ->
+    subtype E T2 T2' cs ->
+    subtype E (typ_meet T1 T2) (typ_meet T1' T2') cs.
+Proof.
+  introv Hs1 Hs2.
+  remember Hs1 as Hs1'.
+  destruct Hs1.
+  remember Hs2 as Hs2'.
+  destruct Hs2.
+  apply subtype_c.
+  apply type_equal_transitive
+    with (T2 := typ_meet (typ_meet T1 T0) (typ_meet T2 T3));
+    auto using type_equal_meet.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_meet (typ_meet T1 T0) T2) T3);
+    auto with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_meet (typ_meet T0 T1) T2) T3);
+    auto 6 with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_meet T0 (typ_meet T1 T2)) T3);
+    auto with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_meet (typ_meet T1 T2) T0) T3);
+    auto 6 with subtype_validated.
+  apply type_equal_single; auto with subtype_validated.
+Qed.
+
+Lemma subtype_join : forall E T1 T1' T2 T2' cs,
+    subtype E T1 T1' cs ->
+    subtype E T2 T2' cs ->
+    subtype E (typ_join T1 T2) (typ_join T1' T2') cs.
+Proof.
+  introv Hs1 Hs2.
+  remember Hs1 as Hs1'.
+  destruct Hs1.
+  remember Hs2 as Hs2'.
+  destruct Hs2.
+  apply subtype_c.
+  apply type_equal_transitive
+    with (T2 := typ_join (typ_meet T1 T0) (typ_meet T2 T3));
+    auto using type_equal_join.
+  apply type_equal_step
+    with (T2 := typ_join (typ_meet T1 (typ_meet T0 (typ_join T0 T3)))
+                         (typ_meet T2 T3));
+    auto 6 with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
+                         (typ_meet T2 T3));
+    auto 6 with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
+                  (typ_meet T2 (typ_meet T3 (typ_join T3 T0))));
+    auto 6 with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
+                  (typ_meet (typ_meet T2 T3) (typ_join T3 T0)));
+    auto 6 with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
+                  (typ_meet (typ_meet T2 T3) (typ_join T0 T3)));
+    auto 6 with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_join (typ_meet (typ_join T0 T3) (typ_meet T1 T0))
+                  (typ_meet (typ_meet T2 T3) (typ_join T0 T3)));
+    auto 6 with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_join (typ_meet (typ_join T0 T3) (typ_meet T1 T0))
+                  (typ_meet (typ_join T0 T3) (typ_meet T2 T3)));
+    auto 6 with subtype_validated.
+  apply type_equal_transitive
+    with (T2 := typ_join (typ_meet (typ_join T0 T3) T1)
+                         (typ_meet (typ_join T0 T3) T2));
+    auto using type_equal_join, type_equal_meet, type_equal_symmetric
+      with subtype_validated.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_join T0 T3) (typ_join T1 T2));
+    auto 6 with subtype_validated.
+  apply type_equal_single;
+    auto with subtype_validated.
 Qed.
 
 (* *************************************************************** *)
@@ -410,3 +549,38 @@ Proof.
   introv Hk Hte.
   induction Hk.
 *)  
+
+(* *************************************************************** *)
+(** ??? *)
+
+Lemma foo : forall E T1 T2 T3 T4 T5,
+    kinding E T1 (knd_range T2 T3) ->
+    kinding E T1 (knd_range T4 T5) ->
+    subtype E T2 T5 CSet.universe.
+Proof.
+
+Qed.
+
+(* *************************************************************** *)
+(** ??? *)
+
+Lemma bar : forall E T1 T2 cs1 cs2 cs3,
+    subtype E (typ_proj cs1 T1 cs2) (typ_proj cs1 T2 cs2) cs2 ->
+    CSet.Subset cs3 cs2 ->
+    CSet.Nonempty cs3 ->
+    subtype E (typ_proj cs1 T1 cs3) (typ_proj cs1 T2 cs3) cs3.
+Proof.
+
+Qed.
+
+(* *************************************************************** *)
+(** ??? *)
+
+Lemma baz : forall E T1 T2 c,
+    subtype E
+      (typ_constructor c T1) (typ_constructor c T2)
+      (CSet.singleton c) ->
+    type_equal E T1 T2 knd_type.
+Proof.
+
+Qed.

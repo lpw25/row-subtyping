@@ -2108,8 +2108,8 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       term t ->
       kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
       subtype E
-        (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T3)
+        (typ_proj CSet.universe T2 (CSet.singleton c))
         (CSet.singleton c) ->
       typing_regular E t T3 ->
       typing_regular E (trm_constructor c t) (typ_variant T1)
@@ -2166,8 +2166,8 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
       term_body t2 ->
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       subtype E
-        (typ_constructor c T3)
         (typ_proj CSet.universe T2 (CSet.singleton c))
+        (typ_constructor c T3)
         (CSet.singleton c) ->
       typing_regular E t1 (typ_variant T1) ->
       (forall x, x \notin L ->

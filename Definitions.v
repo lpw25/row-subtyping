@@ -792,8 +792,8 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_constructor : forall c E T1 T2 T3 t,
       kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
       subtype E
-        (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T3)
+        (typ_proj CSet.universe T2 (CSet.singleton c))
         (CSet.singleton c) ->
       typing E t T3 ->
       typing E (trm_constructor c t) (typ_variant T1)
@@ -824,8 +824,8 @@ Inductive typing : env -> trm -> typ -> Prop :=
   | typing_destruct : forall c L E T1 T2 T3 T4 t1 t2,
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       subtype E
-        (typ_constructor c T3)
         (typ_proj CSet.universe T2 (CSet.singleton c))
+        (typ_constructor c T3)
         (CSet.singleton c) ->
       typing E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
