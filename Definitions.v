@@ -522,6 +522,15 @@ with type_equal_core : env -> typ -> typ -> knd -> Prop :=
   | type_equal_core_proj_id : forall E T cs,
       kinding E T (knd_row cs) ->
       type_equal_core E (typ_proj cs T cs) T (knd_row cs)
+  | type_equal_core_proj_compose : forall E T cs1 cs2 cs3,
+      kinding E T (knd_row cs1) ->
+      CSet.Subset cs2 cs1 ->
+      CSet.Subset cs3 cs2 ->
+      CSet.Nonempty cs3 ->
+      type_equal_core E
+        (typ_proj cs2 (typ_proj cs1 T cs2) cs3)
+        (typ_proj cs1 T cs3)
+        (knd_row cs3)
   | type_equal_core_proj_or_l : forall E T1 T2 cs1 cs1' cs2 cs12,
       kinding E T1 (knd_row cs1) ->
       kinding E T2 (knd_row cs2) ->

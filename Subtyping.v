@@ -556,9 +556,38 @@ Proof.
 Lemma foo : forall E T1 T2 T3 T4 T5,
     kinding E T1 (knd_range T2 T3) ->
     kinding E T1 (knd_range T4 T5) ->
-    subtype E T2 T5 CSet.universe.
+    subtype E T5 T2 CSet.universe.
 Proof.
-
+  introv Hk1 Hk2.
+  apply validated_kinding in Hk1.
+  remember (knd_range T2 T3) as K.
+  generalize dependent T2.
+  generalize dependent T3.
+  induction Hk1; introv HeqK; inversion HeqK; subst.
+  - remember (knd_range T4 T5) as K.
+    remember (typ_fvar X) as T.
+    generalize dependent T4.
+    generalize dependent T5.
+    induction Hk2; introv HeqK; inversion HeqK; inversion HeqT; subst.
+    + assert
+        (bind_knd (knd_range T2 T3) = bind_knd (knd_range T4 T5))
+        as Heq by eauto using binds_func.
+      inversion Heq; subst.
+      assert (valid_kind_validated E (knd_range T4 T5)) as Hv
+        by assumption.
+      inversion Hv; subst.
+      auto.
+    + eauto using subtype_transitive.
+  - clear -Hk2.
+    remember (knd_range T4 T5) as K.
+    remember (typ_row T3) as T.
+    generalize dependent T4.
+    generalize dependent T5.
+    induction Hk2; introv HeqK2;
+      inversion HeqK2; inversion HeqT; subst; subst.
+    + auto using subtype_reflexive.
+    + eauto using subtype_transitive.
+  - eauto using subtype_transitive.
 Qed.
 
 (* *************************************************************** *)
@@ -570,7 +599,30 @@ Lemma bar : forall E T1 T2 cs1 cs2 cs3,
     CSet.Nonempty cs3 ->
     subtype E (typ_proj cs1 T1 cs3) (typ_proj cs1 T2 cs3) cs3.
 Proof.
-
+  introv Hs Hsb Hn.
+  assert
+      (kinding E (typ_proj cs2 (typ_proj cs1 T1 cs2) cs3)
+               (knd_row cs3))
+      as Hk by auto with subtype_validated.
+  inversion Hk; subst.
+  assert (kinding E (typ_proj cs1 T1 cs2) (knd_row cs2)) as Hk2
+    by assumption.
+  inversion Hk2; subst.
+  assert
+      (kinding E (typ_proj cs2 (typ_proj cs1 T2 cs2) cs3)
+               (knd_row cs3))
+      as Hk3 by auto with subtype_validated.
+  inversion Hk3; subst.
+  assert (kinding E (typ_proj cs1 T2 cs2) (knd_row cs2)) as Hk4
+    by assumption.
+  inversion Hk4; subst.
+  apply subtype_proj with (cs2 := cs3) in Hs; auto.
+  apply subtype_transitive
+    with (T2 := typ_proj cs2 (typ_proj cs1 T1 cs2) cs3);
+    auto 6 using subtype_reflexive, type_equal_single.
+  apply subtype_transitive
+    with (T2 := typ_proj cs2 (typ_proj cs1 T2 cs2) cs3);
+    auto 6 using subtype_reflexive, type_equal_single.
 Qed.
 
 (* *************************************************************** *)

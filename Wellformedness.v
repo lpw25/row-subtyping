@@ -763,6 +763,19 @@ with type_equal_core_regular : env -> typ -> typ -> knd -> Prop :=
       type T ->
       CSet.Nonempty cs ->
       type_equal_core_regular E (typ_proj cs T cs) T (knd_row cs)
+  | type_equal_core_regular_proj_compose : forall E T cs1 cs2 cs3,
+      kinding_regular E T (knd_row cs1) ->
+      CSet.Subset cs2 cs1 ->
+      CSet.Subset cs3 cs2 ->
+      CSet.Nonempty cs3 ->
+      environment E ->
+      type T ->
+      CSet.Nonempty cs1 ->
+      CSet.Nonempty cs2 ->
+      type_equal_core_regular E
+        (typ_proj cs2 (typ_proj cs1 T cs2) cs3)
+        (typ_proj cs1 T cs3)
+        (knd_row cs3)
   | type_equal_core_regular_proj_or_l :
       forall E T1 T2 cs1 cs1' cs2 cs12,
       kinding_regular E T1 (knd_row cs1) ->
@@ -1505,6 +1518,8 @@ Proof.
     + exists L. intros.
       assert (valid_scheme_vars_regular E M Xs) by auto.
       auto with valid_scheme_vars_regular.
+  - apply type_equal_core_regular_proj_compose;
+      auto with kinding_regular csetdec.
   - assert (type (typ_meet T1 T2)) as Ht
       by auto with type_equal_regular.
     inversion Ht; subst.
