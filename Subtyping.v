@@ -4,7 +4,8 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import LibLN Cofinite Definitions Substitution Wellformedness Kinding.
+Require Import Arith LibLN.
+Require Import Cofinite Definitions Substitution Wellformedness Kinding.
 
 (* *************************************************************** *)
 (** Type equality in an equivalence *)
@@ -551,9 +552,9 @@ Proof.
 *)  
 
 (* *************************************************************** *)
-(** ??? *)
+(** Different ranges for the same type are subtypes *)
 
-Lemma foo : forall E T1 T2 T3 T4 T5,
+Lemma subtype_from_ranges : forall E T1 T2 T3 T4 T5,
     kinding E T1 (knd_range T2 T3) ->
     kinding E T1 (knd_range T4 T5) ->
     subtype E T5 T2 CSet.universe.
@@ -591,9 +592,9 @@ Proof.
 Qed.
 
 (* *************************************************************** *)
-(** ??? *)
+(** Subtyping of projections can be restricted to a subset *)
 
-Lemma bar : forall E T1 T2 cs1 cs2 cs3,
+Lemma subtype_proj_subset : forall E T1 T2 cs1 cs2 cs3,
     subtype E (typ_proj cs1 T1 cs2) (typ_proj cs1 T2 cs2) cs2 ->
     CSet.Subset cs3 cs2 ->
     CSet.Nonempty cs3 ->
@@ -626,13 +627,169 @@ Proof.
 Qed.
 
 (* *************************************************************** *)
-(** ??? *)
+(** Subtyping preserves the argument type of constructors *)
 
-Lemma baz : forall E T1 T2 c,
+Inductive preserves : env -> nat -> typ -> typ -> Prop :=
+  | preserves_top : forall E c T cs,
+      preserves E c T (typ_top cs)
+  | preserves_equal : forall E c T1 T2,
+      type_equal E T1 T2 knd_type ->
+      preserves E c T1 (typ_constructor c T2)
+  | preserves_other : forall E c1 c2 T1 T2,
+      c1 <> c2 ->
+      preserves E c1 T1 (typ_constructor c2 T2)
+  | preserves_or_l : forall E c T1 T2 T3 cs1 cs2,
+      CSet.In c cs1 ->
+      preserves E c T1 T2 ->
+      preserves E c T1 (typ_or cs1 T2 cs2 T3)
+  | preserves_or_r : forall E c T1 T2 T3 cs1 cs2,
+      CSet.In c cs2 ->
+      preserves E c T1 T3 ->
+      preserves E c T1 (typ_or cs1 T2 cs2 T3)
+  | preserves_proj : forall E c T1 T2 cs1 cs2,
+      preserves E c T1 T2 ->
+      preserves E c T1 (typ_proj cs1 T2 cs2)
+  | preserves_meet : forall E c T1 T2 T3,
+      preserves E c T1 T2 ->
+      preserves E c T1 T3 ->
+      preserves E c T1 (typ_meet T2 T3)
+  | preserves_join_l : forall E c T1 T2 T3,
+      preserves E c T1 T2 ->
+      preserves E c T1 (typ_join T2 T3)
+  | preserves_join_r : forall E c T1 T2 T3,
+      preserves E c T1 T3 ->
+      preserves E c T1 (typ_join T2 T3).
+
+Hint Constructors preserves.
+
+Lemma type_equal_core_preserves_l : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal_core E T2 T3 (knd_row cs) ->
+    CSet.In c cs ->
+    preserves E c T1 T3.
+Proof.
+  introv Hp Hte Hin.
+  remember (knd_row cs) as K.
+  induction Hte;
+    inversion HeqK; inversion Hp; subst; clear Hp;
+      repeat match goal with
+      | [ H : preserves _ _ _ (typ_or _ _ _ _) |- _] =>
+        inversion H; clear H
+      | [ H : preserves _ _ _ (typ_meet _ _) |- _] =>
+        inversion H; clear H
+      | [ H : preserves _ _ _ (typ_join _ _) |- _] =>
+        inversion H; clear H
+      | [ H : preserves _ _ _ (typ_proj _ _ _) |- _] =>
+        inversion H; clear H
+      | [ H : preserves _ _ _ (typ_bot _) |- _] =>
+        inversion H; clear H
+      end; subst; auto with csetdec.
+  - assert (not (CSet.In c cs2)) by csetdec.
+    contradiction.
+  - assert (not (CSet.In c cs1)) by csetdec.
+    contradiction.
+Qed.
+
+Lemma type_equal_core_preserves_r : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal_core E T3 T2 (knd_row cs) ->
+    CSet.In c cs ->
+    preserves E c T1 T3.
+Proof.
+  introv Hp Hte Hin.
+  remember (knd_row cs) as K.
+  induction Hte;
+    inversion HeqK; inversion Hp; subst; clear Hp;
+      repeat match goal with
+      | [ H : preserves _ _ _ (typ_or _ _ _ _) |- _] =>
+        inversion H; clear H
+      | [ H : preserves _ _ _ (typ_meet _ _) |- _] =>
+        inversion H; clear H
+      | [ H : preserves _ _ _ (typ_join _ _) |- _] =>
+        inversion H; clear H
+      | [ H : preserves _ _ _ (typ_proj _ _ _) |- _] =>
+        inversion H; clear H
+      | [ H : preserves _ _ _ (typ_bot _) |- _] =>
+        inversion H; clear H
+      end; subst; auto with csetdec.
+  - destruct (CSet.In_dec c cs1); auto.
+    assert (CSet.In c cs2) by csetdec.
+    auto.
+  - assert (not (CSet.In c cs2)) by csetdec.
+    contradiction.
+  - assert (not (CSet.In c cs2)) by csetdec.
+    contradiction.
+  - destruct (CSet.In_dec c cs2); auto.
+    assert (CSet.In c cs3) by csetdec.
+    auto.
+Qed.
+
+Lemma type_equal_symm_preserves : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal_symm E T2 T3 (knd_row cs) ->
+    CSet.In c cs ->
+    preserves E c T1 T3.
+Proof.
+  introv Hp Hte Hin.
+  remember (knd_row cs) as K.
+  destruct Hte; subst.
+  - eauto using type_equal_core_preserves_l.
+  - eauto using type_equal_core_preserves_r.
+Qed.    
+
+Lemma type_equal_cong_preserves : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal_cong E T2 T3 (knd_row cs) ->
+    CSet.In c cs ->
+    preserves E c T1 T3.
+Proof.
+  introv Hp Hte Hin.
+  remember (knd_row cs) as K.
+  generalize dependent cs.
+  induction Hte; introv HeqK Hin; inversion HeqK; subst;
+    try solve [inversion Hp; subst; eauto].
+  - destruct (Nat.eq_dec c c0); subst;
+      inversion Hp; subst; eauto using type_equal_post_step.
+  - eauto using type_equal_symm_preserves.
+Qed.
+
+Lemma type_equal_preserves : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal E T2 T3 (knd_row cs) ->
+    CSet.In c cs ->
+    preserves E c T1 T3.
+Proof.
+  introv Hp Hte Hin.
+  remember (knd_row cs) as K.
+  induction Hte; subst;
+    eauto using type_equal_cong_preserves.
+Qed.
+
+Lemma subtype_preserves : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    subtype E T2 T3 cs ->
+    CSet.In c cs ->
+    preserves E c T1 T3.
+Proof.
+  introv Hp Hs Hin.
+  destruct Hs.
+  apply type_equal_preserves with (c := c) (T1 := T1) in H; auto.
+  inversion H; subst; auto.
+Qed.
+
+Lemma subtype_preserves_constructor : forall E T1 T2 c,
     subtype E
       (typ_constructor c T1) (typ_constructor c T2)
       (CSet.singleton c) ->
     type_equal E T1 T2 knd_type.
 Proof.
-
+  introv Hs.
+  assert
+    (kinding E (typ_constructor c T1) (knd_row (CSet.singleton c)))
+    as Hk by auto with subtype_validated.
+  inversion Hk; subst.
+  assert (preserves E c T1 (typ_constructor c T1)) by auto.
+  assert (preserves E c T1 (typ_constructor c T2))
+    as Hp by eauto using subtype_preserves with csetdec.
+  inversion Hp; subst; try solve [exfalso; auto]; auto.
 Qed.

@@ -1814,6 +1814,7 @@ Ltac csetdec :=
     csetdec_body
   end.
 
+Hint Extern 1 (CSet.In _ _) => csetdec : csetdec.
 Hint Extern 1 (CSet.Equal _ _) => csetdec : csetdec.
 Hint Extern 1 (CSet.Subset _ _) => csetdec : csetdec.
 Hint Extern 1 (CSet.Empty _) => csetdec : csetdec.
