@@ -544,3 +544,40 @@ Proof.
     auto using concat_assoc.
 Qed.
 
+Lemma typing_trm_subst_l : forall L E x M s t T,
+    typing (E & x ~: M) t T ->
+    (forall Xs,
+      fresh L (sch_arity M) Xs ->
+      typing (E & Xs ~::* M) s (instance_vars M Xs)) ->
+    typing E (trm_subst x s t) T.
+Proof.
+  introv Ht Hts.
+  rewrite <- concat_empty_r with (E := E).
+  rewrite <- concat_empty_r with (E := E & x ~: M) in Ht.
+  eauto using typing_trm_subst.
+Qed.
+
+Lemma typing_trm_subst_empty : forall E F x s t T1 T2,
+    typing (E & x ~: sch_empty T2 & F) t T1 ->
+    typing E s T2 ->
+    typing (E & F) (trm_subst x s t) T1.
+Proof.
+  introv Ht1 Ht2.
+  apply typing_trm_subst with (L := \{}) (M := sch_empty T2); auto.
+  introv Hf.
+  fresh_length Hf as Hl.
+  destruct Xs; try discriminate; unfold instance_vars; simpl.
+  rewrite concat_empty_r.
+  assumption.
+Qed.
+
+Lemma typing_trm_subst_empty_l : forall E x s t T1 T2,
+    typing (E & x ~: sch_empty T2) t T1 ->
+    typing E s T2 ->
+    typing E (trm_subst x s t) T1.
+Proof.
+  introv Ht Hts.
+  rewrite <- concat_empty_r with (E := E).
+  rewrite <- concat_empty_r with (E := E & x ~: sch_empty T2) in Ht.
+  eauto using typing_trm_subst_empty.
+Qed.
