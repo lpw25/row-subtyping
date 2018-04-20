@@ -336,9 +336,6 @@ Inductive environment : env -> Prop :=
       x # E ->
       environment (E & x ~: M).
 
-Definition no_term_bindings E :=
-  forall x M, not (binds x (bind_typ M) E).
-
 (* ************************************************************* *)
 (** ** Description of kinding and equality *)
 
@@ -936,14 +933,13 @@ Inductive red : trm -> trm -> Prop :=
 
 (** Goal is to prove preservation and progress *)
 
-Definition preservation := forall E t t' T,
-  typing E t T ->
+Definition preservation := forall E t t' M,
+  typing_scheme E t M ->
   red t t' ->
-  typing E t' T.
+  typing_scheme E t' M.
 
 
-Definition progress := forall E t T,
-  no_term_bindings E ->
-  typing E t T ->
+Definition progress := forall t M,
+  typing_scheme empty t M ->
      value t 
   \/ exists t', red t t'.

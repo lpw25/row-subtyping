@@ -1098,6 +1098,9 @@ Proof.
   assumption.
 Qed.
 
+Definition no_term_bindings E :=
+  forall x M, not (binds x (bind_typ M) E).
+
 Lemma no_term_bindings_empty :
     no_term_bindings empty.
 Proof.

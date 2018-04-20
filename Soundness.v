@@ -18,8 +18,15 @@ Lemma preservation : preservation.
 Proof.
   unfold preservation.
   introv Ht Hr.
+  destruct Ht as [Hv [L Ht]].
+  split; auto.
+  exists L; introv Hf.
+  specialize (Ht Xs Hf).
+  remember (instance_vars M Xs) as T.
+  remember (E & Xs ~::* M) as F.
+  clear - Ht Hr.
   generalize dependent T.
-  generalize dependent E.
+  generalize dependent F.
   induction Hr; introv Ht.
   - apply validated_typing in Ht.
     inversion Ht; subst.
@@ -34,7 +41,7 @@ Proof.
     eauto.
   - apply validated_typing in Ht.
     inversion Ht; subst.
-    assert (typing_validated E (trm_abs t1) (typ_arrow S T)) as Ht2
+    assert (typing_validated F (trm_abs t1) (typ_arrow S T)) as Ht2
       by assumption.
     inversion Ht2; subst.
     pick_fresh x.
@@ -47,7 +54,7 @@ Proof.
   - apply validated_typing in Ht.
     inversion Ht; subst.
     assert
-      (typing_validated E (trm_constructor c2 t1) (typ_variant T1))
+      (typing_validated F (trm_constructor c2 t1) (typ_variant T1))
       as Ht2 by assumption.
     inversion Ht2; subst.
     pick_fresh x.
@@ -64,7 +71,7 @@ Proof.
   - apply validated_typing in Ht.
     inversion Ht; subst.
     assert
-      (typing_validated E (trm_constructor c1 t1) (typ_variant T1))
+      (typing_validated F (trm_constructor c1 t1) (typ_variant T1))
       as Ht2 by assumption.
     inversion Ht2; subst.
     pick_fresh x.
@@ -83,7 +90,7 @@ Proof.
   - apply validated_typing in Ht.
     inversion Ht; subst.
     assert
-      (typing_validated E (trm_constructor c2 t1) (typ_variant T1))
+      (typing_validated F (trm_constructor c2 t1) (typ_variant T1))
       as Ht2 by assumption.
     inversion Ht2; subst.
     pick_fresh x.
@@ -109,7 +116,15 @@ Qed.
 Lemma progress : progress.
 Proof.
   unfold progress.
-  introv Hb Ht.
+  introv Ht.
+  destruct Ht as [Hv [L Ht]].
+  pick_freshes_gen L (sch_arity M) Xs.
+  specialize (Ht Xs Fr).
+  assert (no_term_bindings (empty & Xs ~::* M)) as Hb
+    by auto with no_term_bindings.
+  remember (empty & Xs ~::* M) as F.
+  remember (instance_vars M Xs) as T.
+  clear - Ht Hb.
   apply validated_typing in Ht.
   induction Ht; auto.
   - exfalso; eapply Hb; eauto.
