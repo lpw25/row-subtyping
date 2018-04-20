@@ -336,6 +336,9 @@ Inductive environment : env -> Prop :=
       x # E ->
       environment (E & x ~: M).
 
+Definition no_term_bindings E :=
+  forall x M, not (binds x (bind_typ M) E).
+
 (* ************************************************************* *)
 (** ** Description of kinding and equality *)
 
@@ -836,6 +839,10 @@ Inductive typing : env -> trm -> typ -> Prop :=
         (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T3)
         (CSet.singleton c) ->
+      subtype E
+        (typ_proj CSet.universe T2 (CSet.cosingleton c))
+        (typ_bot (CSet.cosingleton c))
+        (CSet.cosingleton c) ->
       typing E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
          typing (E & x ~: (sch_empty T3))
@@ -935,7 +942,8 @@ Definition preservation := forall E t t' T,
   typing E t' T.
 
 
-Definition progress := forall t T, 
-  typing empty t T ->
+Definition progress := forall E t T,
+  no_term_bindings E ->
+  typing E t T ->
      value t 
   \/ exists t', red t t'.

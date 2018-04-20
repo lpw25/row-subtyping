@@ -1097,3 +1097,48 @@ Proof.
   apply env_subst_binds.
   assumption.
 Qed.
+
+Lemma no_term_bindings_empty :
+    no_term_bindings empty.
+Proof.
+  unfold no_term_bindings.
+  introv Hb.
+  apply (binds_empty_inv Hb).
+Qed.
+
+Lemma no_term_bindings_concat : forall E F,
+    no_term_bindings E ->
+    no_term_bindings F ->
+    no_term_bindings (E & F).
+Proof.
+  unfold no_term_bindings.
+  introv Hn1 Hn2 Hb.
+  specialize (Hn1 x M).
+  specialize (Hn2 x M).
+  destruct (binds_concat_inv Hb) as [Hb1 | [? Hb2]]; auto.
+Qed.
+
+Lemma no_term_bindings_kind : forall X K,
+    no_term_bindings (X ~:: K).
+Proof.
+  unfold no_term_bindings.
+  introv Hb.
+  destruct (binds_single_inv Hb).
+  discriminate.
+Qed.
+
+Lemma no_term_bindings_kinds : forall Xs M,
+    no_term_bindings (Xs ~::* M).
+Proof.
+  intro Xs.
+  induction Xs; intro M; simpl.
+  - apply no_term_bindings_empty.
+  - destruct M.
+    + apply no_term_bindings_empty.
+    + apply no_term_bindings_concat; auto.
+      apply no_term_bindings_kind.
+Qed.
+
+Hint Resolve no_term_bindings_empty no_term_bindings_concat
+     no_term_bindings_kind no_term_bindings_kinds
+  : no_term_bindings.

@@ -2184,6 +2184,10 @@ Inductive typing_regular : env -> trm -> typ -> Prop :=
         (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T3)
         (CSet.singleton c) ->
+      subtype E
+        (typ_proj CSet.universe T2 (CSet.cosingleton c))
+        (typ_bot (CSet.cosingleton c))
+        (CSet.cosingleton c) ->
       typing_regular E t1 (typ_variant T1) ->
       (forall x, x \notin L ->
          typing_regular (E & x ~: (sch_empty T3))

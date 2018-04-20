@@ -5,8 +5,11 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import LibLN Cofinite Definitions Substitution
+Require Import Arith LibLN.
+Require Import Cofinite Definitions Substitution
         Wellformedness Kinding Subtyping Typing.
+
+Hint Constructors value red.
 
 (* *************************************************************** *)
 (** * Preservation *)
@@ -105,5 +108,54 @@ Qed.
 
 Lemma progress : progress.
 Proof.
-
+  unfold progress.
+  introv Hb Ht.
+  apply validated_typing in Ht.
+  induction Ht; auto.
+  - exfalso; eapply Hb; eauto.
+  - assert (value t1 \/ (exists t1', red t1 t1')) as IH1 by auto.
+    assert (value t2 \/ (exists t2', red t2 t2')) as IH2 by auto.
+    destruct IH1 as [Hv1|[t1' He1]]; destruct IH2 as [Hv2|[t2' He2]];
+      eauto.
+    destruct Hv1; inversion Ht1; subst; eauto.
+  - pick_freshes_gen L (sch_arity M) Xs.
+    assert (no_term_bindings (E & Xs ~::* M))
+      by auto with no_term_bindings.
+    assert (value t1 \/ (exists t1', red t1 t1')) as IH1 by eauto.
+    destruct IH1 as [Hv1|[t1' He1]]; eauto.
+  - assert (value t \/ (exists t', red t t')) as IH by eauto.
+    destruct IH as [Hv1|[t1' He1]]; eauto.
+  - assert (value t1 \/ (exists t1', red t1 t1')) as IH1 by eauto.
+    destruct IH1 as [Hv1|[t1' He1]]; eauto.
+    destruct Hv1; inversion Ht; subst.
+    destruct (Nat.eq_dec c c0); subst; eauto.
+  - assert (value t1 \/ (exists t1', red t1 t1')) as IH1 by eauto.
+    destruct IH1 as [Hv1|[t1' He1]]; eauto.
+    destruct Hv1; inversion Ht; subst.
+    destruct (Nat.eq_dec c c0); subst; eauto.
+    exfalso.
+    apply no_subtype_constructor_bot
+      with (E := E) (T := T6) (c := c0).
+    apply subtype_transitive
+      with (T2 := typ_proj CSet.universe T5 (CSet.singleton c0));
+      auto.
+    apply subtype_transitive
+      with (T2 := typ_proj CSet.universe T2 (CSet.singleton c0));
+      eauto using subtype_proj, subtype_from_ranges with csetdec.
+    eauto using subtype_proj_subset_bottom with csetdec.
+  - assert (value t1 \/ (exists t1', red t1 t1')) as IH1 by eauto.
+    destruct IH1 as [Hv1|[t1' He1]]; eauto.
+    destruct Hv1; inversion Ht; subst.
+    exfalso.
+    apply no_subtype_constructor_bot
+      with (E := E) (T := T4) (c := c).
+    apply subtype_transitive
+      with (T2 := typ_proj CSet.universe T3 (CSet.singleton c));
+      auto.
+    apply subtype_transitive
+      with (T2 :=
+              typ_proj CSet.universe
+                (typ_bot CSet.universe) (CSet.singleton c));
+      eauto using subtype_proj, subtype_from_ranges with csetdec.
+    auto using subtype_reflexive, type_equal_proj_bot with csetdec.
 Qed.

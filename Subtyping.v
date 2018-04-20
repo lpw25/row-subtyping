@@ -90,6 +90,69 @@ Proof.
 Qed.
 
 (* *************************************************************** *)
+(** Projection on top and bottom *)
+
+Lemma type_equal_proj_bot : forall E cs1 cs2,
+    valid_env E ->
+    CSet.Subset cs2 cs1 ->
+    CSet.Nonempty cs2 ->
+    type_equal E
+      (typ_proj cs1 (typ_bot cs1) cs2) (typ_bot cs2) (knd_row cs2).
+Proof.
+  introv Hv Hs Hn.
+  remember (CSet.is_empty (CSet.diff cs1 cs2)) as emp.
+  destruct emp.
+  - symmetry in Heqemp.
+    rewrite CSet.is_empty_spec1 in Heqemp.
+    assert (CSet.Equal cs1 cs2) as Heq by csetdec.
+    apply CSet.eq_leibniz in Heq; subst.
+    apply type_equal_single; auto.
+  - symmetry in Heqemp.
+    rewrite CSet.is_empty_spec2 in Heqemp.
+    apply type_equal_step
+      with (T2 :=
+              typ_proj
+                cs1 (typ_or cs2 (typ_bot cs2)
+                (CSet.diff cs1 cs2) (typ_bot (CSet.diff cs1 cs2)))
+                cs2);
+      auto with csetdec.
+    apply type_equal_step
+      with (T2 := typ_proj cs2 (typ_bot cs2) cs2);
+      auto with csetdec.
+    apply type_equal_single; auto.
+Qed.
+
+Lemma type_equal_proj_top : forall E cs1 cs2,
+    valid_env E ->
+    CSet.Subset cs2 cs1 ->
+    CSet.Nonempty cs2 ->
+    type_equal E
+      (typ_proj cs1 (typ_top cs1) cs2) (typ_top cs2) (knd_row cs2).
+Proof.
+  introv Hv Hs Hn.
+  remember (CSet.is_empty (CSet.diff cs1 cs2)) as emp.
+  destruct emp.
+  - symmetry in Heqemp.
+    rewrite CSet.is_empty_spec1 in Heqemp.
+    assert (CSet.Equal cs1 cs2) as Heq by csetdec.
+    apply CSet.eq_leibniz in Heq; subst.
+    apply type_equal_single; auto.
+  - symmetry in Heqemp.
+    rewrite CSet.is_empty_spec2 in Heqemp.
+    apply type_equal_step
+      with (T2 :=
+              typ_proj
+                cs1 (typ_or cs2 (typ_top cs2)
+                (CSet.diff cs1 cs2) (typ_top (CSet.diff cs1 cs2)))
+                cs2);
+      auto with csetdec.
+    apply type_equal_step
+      with (T2 := typ_proj cs2 (typ_top cs2) cs2);
+      auto with csetdec.
+    apply type_equal_single; auto.
+Qed.
+
+(* *************************************************************** *)
 (** Subtyping is a partial order *)
 
 Lemma subtype_refl : forall E T cs,
@@ -626,6 +689,31 @@ Proof.
     auto 6 using subtype_reflexive, type_equal_single.
 Qed.
 
+Lemma subtype_proj_subset_bottom : forall E T cs1 cs2 cs3,
+    subtype E (typ_proj cs1 T cs2) (typ_bot cs2) cs2 ->
+    CSet.Subset cs3 cs2 ->
+    CSet.Nonempty cs3 ->
+    subtype E (typ_proj cs1 T cs3) (typ_bot cs3) cs3.
+Proof.
+  introv Hs Hsb Hn.
+  assert
+      (kinding E (typ_proj cs2 (typ_proj cs1 T cs2) cs3)
+               (knd_row cs3))
+      as Hk by auto with subtype_validated.
+  inversion Hk; subst.
+  assert (kinding E (typ_proj cs1 T cs2) (knd_row cs2)) as Hk2
+    by assumption.
+  inversion Hk2; subst.
+  apply subtype_proj with (cs2 := cs3) in Hs; auto.
+  apply subtype_transitive
+    with (T2 := typ_proj cs2 (typ_proj cs1 T cs2) cs3);
+    auto 6 using subtype_reflexive, type_equal_single.
+  apply subtype_transitive
+    with (T2 := typ_proj cs2 (typ_bot cs2) cs3); auto.
+  apply subtype_reflexive.
+  apply type_equal_proj_bot; auto with kinding_validated.
+Qed.  
+
 (* *************************************************************** *)
 (** Subtyping preserves the argument type of constructors *)
 
@@ -792,4 +880,21 @@ Proof.
   assert (preserves E c T1 (typ_constructor c T2))
     as Hp by eauto using subtype_preserves with csetdec.
   inversion Hp; subst; try solve [exfalso; auto]; auto.
+Qed.
+
+Lemma no_subtype_constructor_bot : forall E T c,
+    subtype E
+      (typ_constructor c T) (typ_bot (CSet.singleton c))
+      (CSet.singleton c) ->
+    False.
+Proof.
+  introv Hs.
+  assert
+    (kinding E (typ_constructor c T) (knd_row (CSet.singleton c)))
+    as Hk by auto with subtype_validated.
+  inversion Hk; subst.
+  assert (preserves E c T (typ_constructor c T)) by auto.
+  assert (preserves E c T (typ_bot (CSet.singleton c)))
+    as Hp by eauto using subtype_preserves with csetdec.
+  inversion Hp.
 Qed.

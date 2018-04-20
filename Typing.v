@@ -236,6 +236,16 @@ Proof.
       replace (typ_constructor c (typ_subst X S T3))
         with (typ_subst X S (typ_constructor c T3)) by reflexivity.
       eauto using subtype_typ_subst.
+    + replace
+        (typ_proj
+           CSet.universe (typ_subst X S T2) (CSet.cosingleton c))
+        with (typ_subst X S
+                (typ_proj CSet.universe T2 (CSet.cosingleton c)))
+        by reflexivity.
+      replace (typ_bot (CSet.cosingleton c))
+        with (typ_subst X S (typ_bot (CSet.cosingleton c)))
+        by reflexivity.
+      eauto using subtype_typ_subst.
     + replace (sch_empty (typ_subst X S T3))
         with (sch_subst X S (sch_empty T3)) by reflexivity.
       introv Hn.
