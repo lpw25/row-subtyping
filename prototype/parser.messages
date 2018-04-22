@@ -1,0 +1,399 @@
+phrase: FUN UNDERSCORE ARROW WITH 
+##
+## Ends in an error in state: 15.
+##
+## expr -> FUN parameters ARROW . expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## FUN parameters ARROW 
+##
+
+Expected an expression
+
+phrase: FUN UNDERSCORE WITH 
+##
+## Ends in an error in state: 14.
+##
+## expr -> FUN parameters . ARROW expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## FUN parameters 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 21, spurious reduction of production nonempty_list(binding) -> binding 
+## In state 10, spurious reduction of production parameters -> nonempty_list(binding) 
+##
+
+Expected a parameter or "->"
+
+phrase: FUN WITH 
+##
+## Ends in an error in state: 13.
+##
+## expr -> FUN . parameters ARROW expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## FUN 
+##
+
+Expected a parameter
+
+phrase: HASH LIDENT WITH 
+##
+## Ends in an error in state: 46.
+##
+## phrase -> HASH LIDENT . SEMISEMI [ # ]
+##
+## The known suffix of the stack is as follows:
+## HASH LIDENT 
+##
+
+Expected ";;"
+
+phrase: HASH WITH 
+##
+## Ends in an error in state: 45.
+##
+## phrase -> HASH . LIDENT SEMISEMI [ # ]
+##
+## The known suffix of the stack is as follows:
+## HASH 
+##
+
+Expected a directive name
+
+phrase: LET UNDERSCORE EQUALS LIDENT IN WITH 
+##
+## Ends in an error in state: 24.
+##
+## expr -> LET binding loption(parameters) EQUALS expr IN . expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binding loption(parameters) EQUALS expr IN 
+##
+
+Expected an expression
+
+phrase: LET UNDERSCORE EQUALS LIDENT WITH 
+##
+## Ends in an error in state: 23.
+##
+## expr -> LET binding loption(parameters) EQUALS expr . IN expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binding loption(parameters) EQUALS expr 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 16, spurious reduction of production expr -> simple_expr 
+##
+
+Expected an argument or "in"
+
+phrase: LET UNDERSCORE EQUALS WITH 
+##
+## Ends in an error in state: 12.
+##
+## expr -> LET binding loption(parameters) EQUALS . expr IN expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binding loption(parameters) EQUALS 
+##
+
+Expected an expression
+
+phrase: LET UNDERSCORE UNDERSCORE END 
+##
+## Ends in an error in state: 11.
+##
+## expr -> LET binding loption(parameters) . EQUALS expr IN expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binding loption(parameters) 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 21, spurious reduction of production nonempty_list(binding) -> binding 
+## In state 10, spurious reduction of production parameters -> nonempty_list(binding) 
+## In state 9, spurious reduction of production loption(parameters) -> parameters 
+##
+
+Expected a parameter or "="
+
+phrase: LET UNDERSCORE WITH 
+##
+## Ends in an error in state: 8.
+##
+## expr -> LET binding . loption(parameters) EQUALS expr IN expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET binding 
+##
+
+Expected a parameter or "="
+
+phrase: LET WITH 
+##
+## Ends in an error in state: 5.
+##
+## expr -> LET . binding loption(parameters) EQUALS expr IN expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## LET 
+##
+
+Expected a variable name or "_"
+
+phrase: LIDENT LIDENT UNDERSCORE 
+##
+## Ends in an error in state: 17.
+##
+## nonempty_list(simple_expr) -> simple_expr . [ WITH SEMISEMI RPAREN IN END BAR ]
+## nonempty_list(simple_expr) -> simple_expr . nonempty_list(simple_expr) [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## simple_expr 
+##
+
+Not a valid function argument
+
+phrase: LIDENT UNDERSCORE 
+##
+## Ends in an error in state: 16.
+##
+## expr -> simple_expr . [ WITH SEMISEMI RPAREN IN END BAR ]
+## expr -> simple_expr . nonempty_list(simple_expr) [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## simple_expr 
+##
+
+Not a valid function argument
+
+phrase: LIDENT WITH 
+##
+## Ends in an error in state: 49.
+##
+## phrase -> expr . SEMISEMI [ # ]
+##
+## The known suffix of the stack is as follows:
+## expr 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 16, spurious reduction of production expr -> simple_expr 
+##
+
+Expected an argument or ";;"
+
+phrase: LPAREN LIDENT WITH 
+##
+## Ends in an error in state: 42.
+##
+## simple_expr -> LPAREN expr . RPAREN [ WITH SEMISEMI RPAREN LPAREN LIDENT IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN expr 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 16, spurious reduction of production expr -> simple_expr 
+##
+
+Expected an argument or ")" 
+
+phrase: LPAREN WITH 
+##
+## Ends in an error in state: 2.
+##
+## simple_expr -> LPAREN . expr RPAREN [ WITH SEMISEMI RPAREN LPAREN LIDENT IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN 
+##
+
+Expected an expression
+
+phrase: MATCH LIDENT SEMISEMI 
+##
+## Ends in an error in state: 26.
+##
+## expr -> MATCH expr . WITH list(case) END [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## MATCH expr 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 16, spurious reduction of production expr -> simple_expr 
+##
+
+Expected an argument or "with"
+
+phrase: MATCH LIDENT WITH BAR UIDENT LIDENT ARROW LIDENT WITH 
+##
+## Ends in an error in state: 40.
+##
+## list(case) -> case . list(case) [ END ]
+##
+## The known suffix of the stack is as follows:
+## case 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 16, spurious reduction of production expr -> simple_expr 
+## In state 34, spurious reduction of production case -> BAR UIDENT binding ARROW expr 
+##
+
+Expected an argument, another match case, or "end"
+
+phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE ARROW WITH 
+##
+## Ends in an error in state: 33.
+##
+## case -> BAR UIDENT binding ARROW . expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR UIDENT binding ARROW 
+##
+
+Expected an expression
+
+phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS UNDERSCORE ARROW WITH 
+##
+## Ends in an error in state: 36.
+##
+## case -> BAR UIDENT binding as_binding ARROW . expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR UIDENT binding as_binding ARROW 
+##
+
+Expected an expression
+
+phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS UNDERSCORE WITH 
+##
+## Ends in an error in state: 35.
+##
+## case -> BAR UIDENT binding as_binding . ARROW expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR UIDENT binding as_binding 
+##
+
+Expected "->"
+
+phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS WITH 
+##
+## Ends in an error in state: 31.
+##
+## as_binding -> AS . binding [ ARROW ]
+##
+## The known suffix of the stack is as follows:
+## AS 
+##
+
+Expected a variable name or "_"
+
+phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE WITH 
+##
+## Ends in an error in state: 30.
+##
+## case -> BAR UIDENT binding . ARROW expr [ END BAR ]
+## case -> BAR UIDENT binding . as_binding ARROW expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR UIDENT binding 
+##
+
+Expected "as" or "->"
+
+phrase: MATCH LIDENT WITH BAR UIDENT WITH 
+##
+## Ends in an error in state: 29.
+##
+## case -> BAR UIDENT . binding ARROW expr [ END BAR ]
+## case -> BAR UIDENT . binding as_binding ARROW expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR UIDENT 
+##
+
+Expected a variable name or "_"
+
+phrase: MATCH LIDENT WITH BAR WITH 
+##
+## Ends in an error in state: 28.
+##
+## case -> BAR . UIDENT binding ARROW expr [ END BAR ]
+## case -> BAR . UIDENT binding as_binding ARROW expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR 
+##
+
+Expected a constructor label
+
+phrase: MATCH LIDENT WITH WITH 
+##
+## Ends in an error in state: 27.
+##
+## expr -> MATCH expr WITH . list(case) END [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## MATCH expr WITH 
+##
+
+Expected "|"
+
+phrase: MATCH WITH 
+##
+## Ends in an error in state: 3.
+##
+## expr -> MATCH . expr WITH list(case) END [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## MATCH 
+##
+
+Expected an expression
+
+phrase: UIDENT WITH 
+##
+## Ends in an error in state: 1.
+##
+## expr -> UIDENT . simple_expr [ WITH SEMISEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## UIDENT 
+##
+
+Expected a variable or "("
+
+phrase: WITH 
+##
+## Ends in an error in state: 0.
+##
+## phrase' -> . phrase [ # ]
+##
+## The known suffix of the stack is as follows:
+## 
+##
+
+Expected an expression or a directive
+
