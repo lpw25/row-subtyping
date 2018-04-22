@@ -3,7 +3,8 @@
 
 open Ast
 
-let location start_pos end_pos = ()
+let location start_pos end_pos =
+  { start_pos; end_pos }
 
 let mkexpr desc start_pos end_pos =
   let location = location start_pos end_pos in

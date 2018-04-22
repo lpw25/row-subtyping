@@ -1,0 +1,2 @@
+
+val message : int -> string

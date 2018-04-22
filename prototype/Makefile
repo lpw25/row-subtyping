@@ -1,37 +1,57 @@
-OCAMLOPT=ocamlopt
+OCAMLOPT=ocamlfind ocamlopt
 OCAMLLEX=ocamllex
 MENHIR=menhir
 
-MODULES=ast.cmx parser.cmx lexer.cmx main.cmx
+CFLAGS=-package menhirLib
+LFLAGS=-linkpkg -package menhirLib
+
+MODULES=ast.cmx parser.cmx parserMessages.cmx lexer.cmx main.cmx
 
 all: prototype
 
 ast.cmi: ast.mli
-	${OCAMLOPT} -c ast.mli
+	${OCAMLOPT} ${CFLAGS} -c ast.mli
 
 ast.cmx: ast.ml ast.cmi
-	${OCAMLOPT} -c ast.ml
+	${OCAMLOPT} ${CFLAGS} -c ast.ml
 
 lexer.ml: lexer.mll
 	${OCAMLLEX} lexer.mll
 
 lexer.cmi: lexer.mli parser.cmi
-	${OCAMLOPT} -c lexer.mli
+	${OCAMLOPT} ${CFLAGS} -c lexer.mli
 
 lexer.cmx lexer.o: lexer.ml lexer.cmi parser.cmi
-	${OCAMLOPT} -c lexer.ml
+	${OCAMLOPT} ${CFLAGS} -c lexer.ml
 
 parser.ml parser.mli: parser.mly
-	${MENHIR} parser.mly
+	${MENHIR} --table parser.mly
 
 parser.cmi: parser.mli ast.cmi
-	${OCAMLOPT} -c parser.mli
+	${OCAMLOPT} ${CFLAGS} -c parser.mli
 
 parser.cmx parser.o: parser.ml parser.cmi ast.cmi
-	${OCAMLOPT} -c parser.ml
+	${OCAMLOPT} ${CFLAGS} -c parser.ml
 
-main.cmx: main.ml ast.cmx lexer.cmx parser.cmx
-	${OCAMLOPT} -c main.ml
+parserMessages.ml: parser.mly parser.messages
+	${MENHIR} --compile-errors parser.messages parser.mly > parserMessages.ml
+
+parserMessages.cmi: parserMessages.mli
+	${OCAMLOPT} ${CFLAGS} -c parserMessages.mli
+
+parserMessages.cmx parserMessages.o: parserMessages.ml parserMessages.cmi
+	${OCAMLOPT} ${CFLAGS} -c parserMessages.ml
+
+main.cmx: main.ml ast.cmi lexer.cmi parser.cmi parserMessages.cmi
+	${OCAMLOPT} ${CFLAGS} -c main.ml
 
 prototype: ${MODULES}
-	${OCAMLOPT} -o prototype ${MODULES}
+	${OCAMLOPT} ${LFLAGS} -o prototype ${MODULES}
+
+clean:
+	-rm *.cmx
+	-rm *.cmi
+	-rm *.o
+	-rm parser.ml
+	-rm parser.mli
+	-rm lexer.ml

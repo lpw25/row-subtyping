@@ -1,5 +1,7 @@
 
-type location = unit
+type location =
+  { start_pos : Lexing.position;
+    end_pos : Lexing.position; }
 
 type var = string
 

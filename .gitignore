@@ -29,3 +29,21 @@ lia.cache
 nia.cache
 nlia.cache
 nra.cache
+
+### OCaml ###
+*.annot
+*.cmo
+*.cma
+*.cmi
+*.a
+*.o
+*.cmx
+*.cmxs
+*.cmxa
+
+### Prototype ###
+prototype/parser.ml
+prototype/parser.mli
+prototype/lexer.ml
+prototype/parserMessages.ml
+prototype/prototype
