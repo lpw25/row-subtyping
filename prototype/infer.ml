@@ -84,7 +84,6 @@ let rec infer_expr env ast =
           (Subst.empty, expr_t) cases
       in
       let result_t = Type.subst cases_subst result_t in
-      (*
       let empty_t =
         let lower_bound = Type.bot Constructor.CSet.universe in
         let upper_bound = Type.bot Constructor.CSet.universe in
@@ -96,8 +95,7 @@ let rec infer_expr env ast =
       let subst =
         Subst.compose expr_subst
           (Subst.compose cases_subst empty_subst)
-      in*)
-      let subst = Subst.compose expr_subst cases_subst in
+      in
       subst, result_t
 
 and infer_case env result_t incoming_t case =

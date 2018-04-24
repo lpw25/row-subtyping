@@ -1,4 +1,3 @@
-
 module Constructor : sig
 
   type t
@@ -185,6 +184,8 @@ and KindT : sig
     | Range of TypeT.t * TypeT.t
 
 end = KindT
+
+let print_raw = ref (fun _ -> ())
 
 module Error = struct
 
@@ -410,6 +411,7 @@ end = struct
     | Proj(cs1, t, cs2) ->
         let desc = Proj(cs1, subst_row_covariant s t, cs2) in
         { kind; desc }
+    | Top _ -> t
     | Bot _ -> t
     | Join(t1, t2) ->
         let desc = Join(subst_row_covariant s t1, subst_row_covariant s t2) in
@@ -418,7 +420,6 @@ end = struct
     | Variant _ -> assert false
     | Arrow _ -> assert false
     | Meet _ -> assert false
-    | Top _ -> assert false
 
   and subst_row_contravariant s t =
     let kind = Kind.subst s t.kind in
@@ -441,6 +442,7 @@ end = struct
         let desc = Proj(cs1, subst_row_contravariant s t, cs2) in
         { kind; desc }
     | Top _ -> t
+    | Bot _ -> t
     | Meet(t1, t2) ->
         let desc =
           Meet(subst_row_contravariant s t1, subst_row_contravariant s t2)
@@ -450,7 +452,6 @@ end = struct
     | Variant _ -> assert false
     | Arrow _ -> assert false
     | Join _ -> assert false
-    | Bot _ -> assert false
 
   and subst_row_invariant s t =
     let kind = Kind.subst s t.kind in
@@ -703,14 +704,14 @@ end = struct
         unify_types t1 t2
     | Or(cs1, t1, cs1', t1'), Or(cs2, t2, cs2', t2') ->
         let pairs = or_pairs cs1 t1 cs1' t1' cs2 t2 cs2' t2' in
-        let rec loop sub pairs =
+        let rec loop subst pairs =
           match pairs with
-          | [] -> return sub
+          | [] -> return subst
           | (t1, t2) :: rest ->
-              let t1 = Type.subst_row_invariant sub t1 in
-              let t2 = Type.subst_row_invariant sub t2 in
-              unify_row t1 t2 >>= fun sub' ->
-              loop (Subst.compose sub sub') rest
+              let t1 = Type.subst_row_invariant subst t1 in
+              let t2 = Type.subst_row_invariant subst t2 in
+              unify_row t1 t2 >>= fun subst' ->
+              loop (Subst.compose subst subst') rest
         in
         loop Subst.empty pairs
     | Top _, Top _ -> return Subst.empty
@@ -756,18 +757,28 @@ end = struct
         unify_types t1 t2
     | Or(cs1, t1, cs1', t1'), Or(cs2, t2, cs2', t2') ->
         let pairs = or_pairs cs1 t1 cs1' t1' cs2 t2 cs2' t2' in
-        let rec loop sub pairs =
+        let rec loop subst pairs =
           match pairs with
-          | [] -> return sub
+          | [] -> return subst
           | (t1, t2) :: rest ->
-              let t1 = Type.subst_row_covariant sub t1 in
-              let t2 = Type.subst_row_contravariant sub t2 in
-              biunify_row t1 t2 >>= fun sub' ->
-              loop (Subst.compose sub sub') rest
+              let t1 = Type.subst_row_covariant subst t1 in
+              let t2 = Type.subst_row_contravariant subst t2 in
+              biunify_row t1 t2 >>= fun subst' ->
+              loop (Subst.compose subst subst') rest
         in
         loop Subst.empty pairs
     | _, Top _ -> return Subst.empty
     | Bot _, _ -> return Subst.empty
+    | Or(cs1, t1, cs1', t1'), Bot _ ->
+        biunify_row t1 (bot cs1) >>= fun subst ->
+        let t1' = Type.subst_row_covariant subst t1' in
+        biunify_row t1' (bot cs1') >>| fun subst' ->
+        Subst.compose subst subst'
+    | Top _, Or(cs1, t1, cs1', t1') ->
+        biunify_row (top cs1) t1 >>= fun subst ->
+        let t1' = Type.subst_row_covariant subst t1' in
+        biunify_row (top cs1') t1' >>| fun subst' ->
+        Subst.compose subst subst'
     | Join(t1, t1'), _ ->
         biunify_row t1 t2 >>= fun subst ->
         let t1' = subst_row_covariant subst t1' in
@@ -784,7 +795,40 @@ end = struct
         assert false
     | _, (Row _ | Variant _ | Arrow _ | Join _) ->
         assert false
-    | _, _ -> error ()
+    | _, _ ->
+        begin
+        match t1.desc with
+        | Var _ -> print_endline "Var"
+        | Constructor _ -> print_endline "Constructor"
+        | Or _ -> print_endline "Or"
+        | Proj _ -> print_endline "Proj"
+        | Row _ -> print_endline "Row"
+        | Variant _ -> print_endline "Variant"
+        | Arrow _ -> print_endline "Arrow"
+        | Top _ -> print_endline "Top"
+        | Bot _ -> print_endline "Bot"
+        | Meet _ -> print_endline "Meet"
+        | Join _ -> print_endline "Join"
+        end;
+        begin
+        match t2.desc with
+        | Var _ -> print_endline "Var"
+        | Constructor _ -> print_endline "Constructor"
+        | Or _ -> print_endline "Or"
+        | Proj _ -> print_endline "Proj"
+        | Row _ -> print_endline "Row"
+        | Variant _ -> print_endline "Variant"
+        | Arrow _ -> print_endline "Arrow"
+        | Top _ -> print_endline "Top"
+        | Bot _ -> print_endline "Bot"
+        | Meet _ -> print_endline "Meet"
+        | Join _ -> print_endline "Join"
+        end;
+        !print_raw t1;
+        Format.printf "\n";
+        !print_raw t2;
+        Format.printf "\n%!";
+        error ()
 
   let unify = unify_types
 
@@ -1169,6 +1213,7 @@ module Printing = struct
           (analyse_type_vars_row_covariant t1)
           (analyse_type_vars_row_covariant t2)
     | Proj(_, t, _) -> analyse_type_vars_row_covariant t
+    | Top _ -> Uses.empty
     | Bot _ -> Uses.empty
     | _ -> assert false
 
@@ -1188,6 +1233,7 @@ module Printing = struct
           (analyse_type_vars_row_contravariant t2)
     | Proj(_, t, _) -> analyse_type_vars_row_contravariant t
     | Top _ -> Uses.empty
+    | Bot _ -> Uses.empty
     | _ -> assert false
 
   and analyse_type_desc_vars_row_invariant =
@@ -1482,3 +1528,5 @@ module Printing = struct
     printf "@]"
 
 end
+
+;; print_raw := Printing.print_raw
