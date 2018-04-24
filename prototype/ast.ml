@@ -28,10 +28,16 @@ and expr =
     location : location; }
 
 and case =
-  { constructor : constructor;
-    arg_binding : binding;
-    as_binding : binding option;
-    body : expr; }
+  | Destruct of
+      { constructor : constructor;
+        arg_binding : binding;
+        as_binding : binding option;
+        body : expr;
+        location : location; }
+  | Default of
+      { binding : binding;
+        body : expr;
+        location : location; }
 
 type phrase =
   | Expr of expr
@@ -93,8 +99,13 @@ let rec dump_expr_desc ppf = function
 and dump_expr ppf expr =
   dump_expr_desc ppf expr.desc
 
-and dump_case ppf { constructor; arg_binding; as_binding; body } =
-  Format.fprintf ppf
-    "@[<v 2>Case@ Constructor %a@ Arg_binding %a@ As_binding %a@ @[<v 2>Body@ %a@]@]"
-    dump_constructor constructor dump_binding arg_binding
-    (dump_option dump_binding) as_binding dump_expr body
+and dump_case ppf = function
+  | Destruct { constructor; arg_binding; as_binding; body } ->
+      Format.fprintf ppf
+        "@[<v 2>Destruct@ Constructor %a@ Arg_binding %a@ As_binding %a@ @[<v 2>Body@ %a@]@]"
+        dump_constructor constructor dump_binding arg_binding
+        (dump_option dump_binding) as_binding dump_expr body
+  | Default { binding; body } ->
+      Format.fprintf ppf
+        "@[<v 2>Default@ Binding %a@ @[<v 2>Body@ %a@]@]"
+        dump_binding binding dump_expr body

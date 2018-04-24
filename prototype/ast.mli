@@ -28,10 +28,16 @@ and expr =
     location : location; }
 
 and case =
-  { constructor : constructor;
-    arg_binding : binding;
-    as_binding : binding option;
-    body : expr; }
+  | Destruct of
+      { constructor : constructor;
+        arg_binding : binding;
+        as_binding : binding option;
+        body : expr;
+        location : location; }
+  | Default of
+      { binding : binding;
+        body : expr;
+        location : location; }
 
 type phrase =
   | Expr of expr

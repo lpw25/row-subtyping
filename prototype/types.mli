@@ -15,7 +15,11 @@ module Constructor : sig
 
     val empty : t
 
+    val universe : t
+
     val singleton : constructor -> t
+
+    val cosingleton : constructor -> t
 
     val union : t -> t -> t
 
@@ -24,6 +28,8 @@ module Constructor : sig
     val diff : t -> t -> t
 
     val is_empty : t -> bool
+
+    val is_universe : t -> bool
 
   end
 
@@ -39,21 +45,13 @@ module Var : sig
 
 end
 
-module Ident : sig
-
-  type t
-
-  val fresh : string -> t
-
-  module Set : Set.S with type elt = t
-
-end
-
 module rec Type : sig
 
   type t
 
   val var : Var.t -> Kind.t -> t
+
+  val fresh_var : Kind.t -> t
 
   val constructor : Constructor.t -> t -> t
 
@@ -105,6 +103,10 @@ and Subst : sig
 
   type t
 
+  val empty : t
+
+  val compose : t -> t -> t
+
 end
 
 and Error : sig
@@ -139,9 +141,11 @@ and Env : sig
 
   type t
 
-  val add : Ident.t -> Scheme.t -> t -> t
+  val empty : t
 
-  val lookup : t -> Ident.t -> Scheme.t
+  val add : string -> Scheme.t -> t -> t
+
+  val lookup : t -> string -> Scheme.t
 
   val free_variables : t -> Var.Set.t
 
@@ -152,5 +156,15 @@ end
 module Printing : sig
 
   val print : Type.t -> unit
+
+  val print_unification_error : Type.t -> Type.t -> Error.t -> unit
+
+  val print_raw : Type.t -> unit
+
+  val print_raw_scheme : Scheme.t -> unit
+
+  val print_raw_env : Env.t -> unit
+
+  val print_raw_subst : Subst.t -> unit
 
 end

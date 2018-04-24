@@ -100,5 +100,9 @@ as_binding:
 case:
   | BAR constructor = UIDENT arg_binding = binding
       as_binding = ioption(as_binding) ARROW body = expr
-        { { constructor; arg_binding; as_binding; body } }
+        { let location = location $startpos $endpos in
+          Destruct { constructor; arg_binding; as_binding; body; location } }
+  | BAR binding = binding ARROW body = expr
+        { let location = location $startpos $endpos in
+          Default { binding; body; location } }
 ;

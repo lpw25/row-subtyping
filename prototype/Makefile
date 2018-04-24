@@ -1,11 +1,11 @@
-OCAMLOPT=ocamlfind ocamlopt
+OCAMLOPT=ocamlfind ocamlopt -g
 OCAMLLEX=ocamllex
 MENHIR=menhir
 
 CFLAGS=-package menhirLib
 LFLAGS=-linkpkg -package menhirLib
 
-MODULES=ast.cmx parser.cmx parserMessages.cmx lexer.cmx types.cmx main.cmx
+MODULES=ast.cmx parser.cmx parserMessages.cmx lexer.cmx types.cmx infer.cmx main.cmx
 
 all: prototype
 
@@ -21,7 +21,7 @@ lexer.ml: lexer.mll
 lexer.cmi: lexer.mli parser.cmi
 	${OCAMLOPT} ${CFLAGS} -c lexer.mli
 
-lexer.cmx lexer.o: lexer.ml lexer.cmi parser.cmi
+lexer.cmx lexer.o: lexer.ml lexer.cmi parser.cmi parser.cmx
 	${OCAMLOPT} ${CFLAGS} -c lexer.ml
 
 parser.ml parser.mli: parser.mly
@@ -48,7 +48,14 @@ types.cmi: types.mli
 types.cmx types.o: types.ml types.cmi
 	${OCAMLOPT} ${CFLAGS} -c types.ml
 
-main.cmx: main.ml ast.cmi lexer.cmi parser.cmi parserMessages.cmi
+infer.cmi: infer.mli ast.cmi types.cmi
+	${OCAMLOPT} ${CFLAGS} -c infer.mli
+
+infer.cmx infer.o: infer.ml infer.cmi ast.cmi types.cmi ast.cmx types.cmx
+	${OCAMLOPT} ${CFLAGS} -c infer.ml
+
+main.cmx: main.ml ast.cmi lexer.cmi parser.cmi parserMessages.cmi infer.cmi types.cmi \
+          ast.cmx lexer.cmx parser.cmx parserMessages.cmx infer.cmx types.cmx
 	${OCAMLOPT} ${CFLAGS} -c main.ml
 
 prototype: ${MODULES}

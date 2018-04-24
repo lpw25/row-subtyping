@@ -152,15 +152,26 @@ let loop () =
           supplier start
       in
       match phrase with
-      | Ok (Expr expr) ->
-          Format.printf "@[<v 2>Parsed:@ %a@]@." Ast.dump_expr expr
+      | Ok (Expr expr) -> begin
+          match Infer.infer Types.Env.empty expr with
+          | type_ ->
+              Types.Printing.print type_;
+              Format.printf "\n%!"
+          | exception Infer.Error(loc, Typing(t1, t2, err)) ->
+              Types.Printing.print_unification_error t1 t2 err;
+              Format.printf "\n\n%!";
+              highlight_location lb loc.start_pos loc.end_pos
+          | exception Infer.Error(loc, Binding name) ->
+              Format.printf "Error: unbound variable %s\n\n%!" name;
+              highlight_location lb loc.start_pos loc.end_pos
+        end
       | Ok (Directive dir) ->
           run_directive dir
       | Error env ->
           let start_pos, end_pos = Parser.MenhirInterpreter.positions env in
           let state = Parser.MenhirInterpreter.current_state_number env in
           let msg = ParserMessages.message state in
-          Format.printf "Error: %s%!" msg;
+          Format.printf "Syntax error: %s%!" msg;
           highlight_location lb start_pos end_pos
     with
     | End_of_file -> exit 0

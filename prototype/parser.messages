@@ -397,3 +397,26 @@ phrase: WITH
 
 Expected an expression or a directive
 
+phrase: MATCH LIDENT WITH BAR UNDERSCORE WITH 
+##
+## Ends in an error in state: 38.
+##
+## case -> BAR binding . ARROW expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR binding 
+##
+
+Expected "->"
+
+phrase: MATCH LIDENT WITH BAR UNDERSCORE ARROW WITH 
+##
+## Ends in an error in state: 39.
+##
+## case -> BAR binding ARROW . expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR binding ARROW 
+##
+
+Expected an expression
