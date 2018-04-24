@@ -5,7 +5,7 @@ MENHIR=menhir
 CFLAGS=-package menhirLib
 LFLAGS=-linkpkg -package menhirLib
 
-MODULES=ast.cmx parser.cmx parserMessages.cmx lexer.cmx main.cmx
+MODULES=ast.cmx parser.cmx parserMessages.cmx lexer.cmx types.cmx main.cmx
 
 all: prototype
 
@@ -41,6 +41,12 @@ parserMessages.cmi: parserMessages.mli
 
 parserMessages.cmx parserMessages.o: parserMessages.ml parserMessages.cmi
 	${OCAMLOPT} ${CFLAGS} -c parserMessages.ml
+
+types.cmi: types.mli
+	${OCAMLOPT} ${CFLAGS} -c types.mli
+
+types.cmx types.o: types.ml types.cmi
+	${OCAMLOPT} ${CFLAGS} -c types.ml
 
 main.cmx: main.ml ast.cmi lexer.cmi parser.cmi parserMessages.cmi
 	${OCAMLOPT} ${CFLAGS} -c main.ml
