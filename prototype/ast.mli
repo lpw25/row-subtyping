@@ -22,6 +22,7 @@ type expr_desc =
   | App of { fn : expr; args : expr list; }
   | Constructor of { constructor : constructor; arg : expr; }
   | Match of { expr: expr; cases : case list; }
+  | Unit
 
 and expr =
   { desc : expr_desc;
@@ -39,8 +40,14 @@ and case =
         body : expr;
         location : location; }
 
+type definition =
+  { binding : binding;
+    params : binding list;
+    def : expr;
+    location : location; }
+
 type phrase =
-  | Expr of expr
+  | Definition of definition
   | Directive of string
 
 (** Debug printing functions *)
@@ -59,3 +66,5 @@ val dump_expr_desc : expr_desc dump
 val dump_expr : expr dump
 
 val dump_case : case dump
+
+val dump_definition : definition dump

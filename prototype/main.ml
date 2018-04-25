@@ -1,8 +1,21 @@
 
 module StringMap = Map.Make(String)
 
+let last_type = ref None
+
+let quit () =
+  exit 0
+
+let raw () =
+  match !last_type with
+  | None -> ()
+  | Some type_ ->
+      Types.Printing.print_raw type_;
+      Format.printf "\n%!"
+
 let directives_list =
-  ["quit", fun () -> exit 0]
+  [ "quit", quit;
+    "raw", raw ]
 
 let directives =
   List.fold_left
@@ -123,13 +136,21 @@ let highlight_location lb start_pos end_pos =
   done;
   Format.printf "@]%!"
 
+let rec skip_phrase lexbuf =
+  try
+    match Lexer.token lexbuf with
+    | Parser.SEMISEMI -> ()
+    | _ -> skip_phrase lexbuf
+  with
+  | Lexer.Error _ -> skip_phrase lexbuf
+
 let start_pos =
   { Lexing.pos_fname = "*REPL*";
     pos_lnum = 1;
     pos_bol = 0;
     pos_cnum = 0; }
 
-let loop () =
+let main () =
   Format.printf "        Row Subtyping@.";
   let lb = Lexing.from_function refill_lexbuf in
   lb.lex_curr_p <- start_pos;
@@ -138,8 +159,8 @@ let loop () =
   in
   let start = Parser.Incremental.phrase start_pos in
   Sys.catch_break true;
-  while true do
-    try
+  let rec loop env =
+    match
       Lexing.flush_input lb;
       first_line := true;
       let phrase =
@@ -152,31 +173,53 @@ let loop () =
           supplier start
       in
       match phrase with
-      | Ok (Expr expr) -> begin
-          match Infer.infer Types.Env.empty expr with
-          | type_ ->
+      | Ok (Definition def) -> begin
+          let name =
+            match def.binding with
+            | Unnamed -> "_"
+            | Named { name; location } -> name
+          in
+          match Infer.infer env def with
+          | env, type_ ->
+              Format.printf "%s : " name;
               Types.Printing.print type_;
-              Format.printf "\n%!"
+              Format.printf "\n%!";
+              last_type := Some type_;
+              env
           | exception Infer.Error(loc, Typing(t1, t2, err)) ->
               Types.Printing.print_unification_error t1 t2 err;
               Format.printf "\n\n%!";
-              highlight_location lb loc.start_pos loc.end_pos
+              highlight_location lb loc.start_pos loc.end_pos;
+              env
           | exception Infer.Error(loc, Binding name) ->
               Format.printf "Error: unbound variable %s\n\n%!" name;
-              highlight_location lb loc.start_pos loc.end_pos
+              highlight_location lb loc.start_pos loc.end_pos;
+              env
         end
       | Ok (Directive dir) ->
-          run_directive dir
-      | Error env ->
-          let start_pos, end_pos = Parser.MenhirInterpreter.positions env in
-          let state = Parser.MenhirInterpreter.current_state_number env in
+          run_directive dir;
+          env
+      | Error menv ->
+          let start_pos, end_pos = Parser.MenhirInterpreter.positions menv in
+          let state = Parser.MenhirInterpreter.current_state_number menv in
           let msg = ParserMessages.message state in
-          Format.printf "Syntax error: %s%!" msg;
-          highlight_location lb start_pos end_pos
+          Format.printf "Error: %s\n%!" msg;
+          highlight_location lb start_pos end_pos;
+          skip_phrase lb;
+          env
     with
-    | End_of_file -> exit 0
-    | Sys.Break -> Format.printf "Interrupted.@."
-  done
+    | exception End_of_file -> exit 0
+    | exception Sys.Break ->
+        Format.printf "Interrupted.@.";
+        loop env
+    | exception Lexer.Error (Lexer.Illegal_character c, pos) ->
+        Format.printf "Error: illegal character %c\n\n%!" c;
+        highlight_location lb pos pos;
+        skip_phrase lb;
+        loop env
+    | env -> loop env
+  in
+  loop Types.Env.empty
 
 let () =
-  loop ()
+  main ()

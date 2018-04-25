@@ -22,6 +22,7 @@ type expr_desc =
   | App of { fn : expr; args : expr list; }
   | Constructor of { constructor : constructor; arg : expr; }
   | Match of { expr: expr; cases : case list; }
+  | Unit
 
 and expr =
   { desc : expr_desc;
@@ -39,8 +40,14 @@ and case =
         body : expr;
         location : location; }
 
+type definition =
+  { binding : binding;
+    params : binding list;
+    def : expr;
+    location : location; }
+
 type phrase =
-  | Expr of expr
+  | Definition of definition
   | Directive of string
 
 type 'a dump =
@@ -95,6 +102,8 @@ let rec dump_expr_desc ppf = function
       Format.fprintf ppf
         "@[<v 2>Match@ @[<v 2>Expr@ %a@]@ @[<v 2>Cases@ %a@]@]"
         dump_expr expr (dump_list dump_case) cases
+  | Unit ->
+      Format.fprintf ppf "Unit"
 
 and dump_expr ppf expr =
   dump_expr_desc ppf expr.desc
@@ -109,3 +118,9 @@ and dump_case ppf = function
       Format.fprintf ppf
         "@[<v 2>Default@ Binding %a@ @[<v 2>Body@ %a@]@]"
         dump_binding binding dump_expr body
+
+let dump_definition ppf { binding; params; def; } =
+  Format.fprintf ppf
+    "@[<v 2>Definition@ Binding %a@ Params @[<h>%a@]@ \
+     @[<v 2>Def@ %a@]@]"
+    dump_binding binding (dump_list dump_binding) params dump_expr def

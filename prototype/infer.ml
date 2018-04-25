@@ -97,6 +97,8 @@ let rec infer_expr env ast =
           (Subst.compose cases_subst empty_subst)
       in
       subst, result_t
+  | Unit ->
+      Subst.empty, Type.unit ()
 
 and infer_case env result_t incoming_t case =
   match case with
@@ -210,7 +212,13 @@ and infer_abs env loc params body =
   let subst = Subst.compose subst (unify loc s body_t) in
   subst, Type.subst subst t
 
-
-let infer env ast =
-  let _, type_ = infer_expr env ast in
-  type_
+let infer env { binding; params; def; location} =
+  let def_subst, def_t = infer_abs env location params def in
+  let env = Env.subst def_subst env in
+  let scheme = Type.generalize env def_t in
+  let env =
+    match binding with
+    | Unnamed -> env
+    | Named { name; location } -> Env.add name scheme env
+  in
+  env, def_t

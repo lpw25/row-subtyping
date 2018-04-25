@@ -65,6 +65,8 @@ module rec Type : sig
 
   val arrow : t -> t -> t
 
+  val unit : unit -> t
+
   val top : Constructor.CSet.t -> t
 
   val bot : Constructor.CSet.t -> t

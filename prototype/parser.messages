@@ -1,4 +1,4 @@
-phrase: FUN UNDERSCORE ARROW WITH 
+phrase: LET UNDERSCORE EQUALS FUN UNDERSCORE ARROW WITH 
 ##
 ## Ends in an error in state: 15.
 ##
@@ -10,7 +10,7 @@ phrase: FUN UNDERSCORE ARROW WITH
 
 Expected an expression
 
-phrase: FUN UNDERSCORE WITH 
+phrase: LET UNDERSCORE EQUALS FUN UNDERSCORE WITH 
 ##
 ## Ends in an error in state: 14.
 ##
@@ -29,7 +29,7 @@ phrase: FUN UNDERSCORE WITH
 
 Expected a parameter or "->"
 
-phrase: FUN WITH 
+phrase: LET UNDERSCORE EQUALS FUN WITH 
 ##
 ## Ends in an error in state: 13.
 ##
@@ -65,7 +65,7 @@ phrase: HASH WITH
 
 Expected a directive name
 
-phrase: LET UNDERSCORE EQUALS LIDENT IN WITH 
+phrase: LET UNDERSCORE EQUALS LET UNDERSCORE EQUALS LIDENT IN WITH 
 ##
 ## Ends in an error in state: 24.
 ##
@@ -77,7 +77,7 @@ phrase: LET UNDERSCORE EQUALS LIDENT IN WITH
 
 Expected an expression
 
-phrase: LET UNDERSCORE EQUALS LIDENT WITH 
+phrase: LET UNDERSCORE EQUALS LET UNDERSCORE EQUALS LIDENT WITH 
 ##
 ## Ends in an error in state: 23.
 ##
@@ -95,7 +95,7 @@ phrase: LET UNDERSCORE EQUALS LIDENT WITH
 
 Expected an argument or "in"
 
-phrase: LET UNDERSCORE EQUALS WITH 
+phrase: LET UNDERSCORE EQUALS LET UNDERSCORE EQUALS WITH 
 ##
 ## Ends in an error in state: 12.
 ##
@@ -107,7 +107,7 @@ phrase: LET UNDERSCORE EQUALS WITH
 
 Expected an expression
 
-phrase: LET UNDERSCORE UNDERSCORE END 
+phrase: LET UNDERSCORE EQUALS LET UNDERSCORE UNDERSCORE END 
 ##
 ## Ends in an error in state: 11.
 ##
@@ -127,7 +127,7 @@ phrase: LET UNDERSCORE UNDERSCORE END
 
 Expected a parameter or "="
 
-phrase: LET UNDERSCORE WITH 
+phrase: LET UNDERSCORE EQUALS LET UNDERSCORE WITH 
 ##
 ## Ends in an error in state: 8.
 ##
@@ -139,7 +139,7 @@ phrase: LET UNDERSCORE WITH
 
 Expected a parameter or "="
 
-phrase: LET WITH 
+phrase: LET UNDERSCORE EQUALS LET WITH 
 ##
 ## Ends in an error in state: 5.
 ##
@@ -151,7 +151,7 @@ phrase: LET WITH
 
 Expected a variable name or "_"
 
-phrase: LIDENT LIDENT UNDERSCORE 
+phrase: LET UNDERSCORE EQUALS LIDENT LIDENT UNDERSCORE 
 ##
 ## Ends in an error in state: 17.
 ##
@@ -164,7 +164,7 @@ phrase: LIDENT LIDENT UNDERSCORE
 
 Not a valid function argument
 
-phrase: LIDENT UNDERSCORE 
+phrase: LET UNDERSCORE EQUALS LIDENT UNDERSCORE 
 ##
 ## Ends in an error in state: 16.
 ##
@@ -177,7 +177,7 @@ phrase: LIDENT UNDERSCORE
 
 Not a valid function argument
 
-phrase: LIDENT WITH 
+phrase: LET UNDERSCORE EQUALS LIDENT WITH 
 ##
 ## Ends in an error in state: 49.
 ##
@@ -195,7 +195,7 @@ phrase: LIDENT WITH
 
 Expected an argument or ";;"
 
-phrase: LPAREN LIDENT WITH 
+phrase: LET UNDERSCORE EQUALS LPAREN LIDENT WITH 
 ##
 ## Ends in an error in state: 42.
 ##
@@ -213,7 +213,7 @@ phrase: LPAREN LIDENT WITH
 
 Expected an argument or ")" 
 
-phrase: LPAREN WITH 
+phrase: LET UNDERSCORE EQUALS LPAREN WITH 
 ##
 ## Ends in an error in state: 2.
 ##
@@ -225,7 +225,7 @@ phrase: LPAREN WITH
 
 Expected an expression
 
-phrase: MATCH LIDENT SEMISEMI 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT SEMISEMI 
 ##
 ## Ends in an error in state: 26.
 ##
@@ -243,7 +243,7 @@ phrase: MATCH LIDENT SEMISEMI
 
 Expected an argument or "with"
 
-phrase: MATCH LIDENT WITH BAR UIDENT LIDENT ARROW LIDENT WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UIDENT LIDENT ARROW LIDENT WITH 
 ##
 ## Ends in an error in state: 40.
 ##
@@ -262,7 +262,7 @@ phrase: MATCH LIDENT WITH BAR UIDENT LIDENT ARROW LIDENT WITH
 
 Expected an argument, another match case, or "end"
 
-phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE ARROW WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UIDENT UNDERSCORE ARROW WITH 
 ##
 ## Ends in an error in state: 33.
 ##
@@ -274,7 +274,7 @@ phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE ARROW WITH
 
 Expected an expression
 
-phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS UNDERSCORE ARROW WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS UNDERSCORE ARROW WITH 
 ##
 ## Ends in an error in state: 36.
 ##
@@ -286,7 +286,7 @@ phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS UNDERSCORE ARROW WITH
 
 Expected an expression
 
-phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS UNDERSCORE WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS UNDERSCORE WITH 
 ##
 ## Ends in an error in state: 35.
 ##
@@ -298,7 +298,7 @@ phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS UNDERSCORE WITH
 
 Expected "->"
 
-phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS WITH 
 ##
 ## Ends in an error in state: 31.
 ##
@@ -310,7 +310,7 @@ phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE AS WITH
 
 Expected a variable name or "_"
 
-phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UIDENT UNDERSCORE WITH 
 ##
 ## Ends in an error in state: 30.
 ##
@@ -323,7 +323,7 @@ phrase: MATCH LIDENT WITH BAR UIDENT UNDERSCORE WITH
 
 Expected "as" or "->"
 
-phrase: MATCH LIDENT WITH BAR UIDENT WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UIDENT WITH 
 ##
 ## Ends in an error in state: 29.
 ##
@@ -336,7 +336,7 @@ phrase: MATCH LIDENT WITH BAR UIDENT WITH
 
 Expected a variable name or "_"
 
-phrase: MATCH LIDENT WITH BAR WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR WITH 
 ##
 ## Ends in an error in state: 28.
 ##
@@ -349,7 +349,7 @@ phrase: MATCH LIDENT WITH BAR WITH
 
 Expected a constructor label
 
-phrase: MATCH LIDENT WITH WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH WITH 
 ##
 ## Ends in an error in state: 27.
 ##
@@ -361,7 +361,7 @@ phrase: MATCH LIDENT WITH WITH
 
 Expected "|"
 
-phrase: MATCH WITH 
+phrase: LET UNDERSCORE EQUALS MATCH WITH 
 ##
 ## Ends in an error in state: 3.
 ##
@@ -373,7 +373,7 @@ phrase: MATCH WITH
 
 Expected an expression
 
-phrase: UIDENT WITH 
+phrase: LET UNDERSCORE EQUALS UIDENT WITH 
 ##
 ## Ends in an error in state: 1.
 ##
@@ -395,9 +395,9 @@ phrase: WITH
 ## 
 ##
 
-Expected an expression or a directive
+Expected a definition or a directive
 
-phrase: MATCH LIDENT WITH BAR UNDERSCORE WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UNDERSCORE WITH 
 ##
 ## Ends in an error in state: 38.
 ##
@@ -409,7 +409,7 @@ phrase: MATCH LIDENT WITH BAR UNDERSCORE WITH
 
 Expected "->"
 
-phrase: MATCH LIDENT WITH BAR UNDERSCORE ARROW WITH 
+phrase: LET UNDERSCORE EQUALS MATCH LIDENT WITH BAR UNDERSCORE ARROW WITH 
 ##
 ## Ends in an error in state: 39.
 ##
@@ -420,3 +420,59 @@ phrase: MATCH LIDENT WITH BAR UNDERSCORE ARROW WITH
 ##
 
 Expected an expression
+
+phrase: LET UNDERSCORE EQUALS WITH 
+##
+## Ends in an error in state: 8.
+##
+## definition -> LET binding loption(parameters) EQUALS . expr [ SEMISEMI ]
+##
+## The known suffix of the stack is as follows:
+## LET binding loption(parameters) EQUALS 
+##
+
+Expected an expression
+
+phrase: LET UNDERSCORE UNDERSCORE END 
+##
+## Ends in an error in state: 7.
+##
+## definition -> LET binding loption(parameters) . EQUALS expr [ SEMISEMI ]
+##
+## The known suffix of the stack is as follows:
+## LET binding loption(parameters) 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 26, spurious reduction of production nonempty_list(binding) -> binding 
+## In state 6, spurious reduction of production parameters -> nonempty_list(binding) 
+## In state 5, spurious reduction of production loption(parameters) -> parameters 
+##
+
+Expected a parameter or "="
+
+phrase: LET UNDERSCORE WITH 
+##
+## Ends in an error in state: 4.
+##
+## definition -> LET binding . loption(parameters) EQUALS expr [ SEMISEMI ]
+##
+## The known suffix of the stack is as follows:
+## LET binding 
+##
+
+Expected a parameter or "="
+
+phrase: LET WITH 
+##
+## Ends in an error in state: 1.
+##
+## definition -> LET . binding loption(parameters) EQUALS expr [ SEMISEMI ]
+##
+## The known suffix of the stack is as follows:
+## LET 
+##
+
+Expected a variable name or "_"

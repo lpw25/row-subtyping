@@ -45,8 +45,8 @@ let mkexpr desc start_pos end_pos =
 %%
 
 phrase:
-  | e = expr SEMISEMI
-      { Expr e }
+  | d = definition SEMISEMI
+      { Definition d }
   | HASH dir = LIDENT SEMISEMI
       { Directive dir }
 ;
@@ -57,6 +57,9 @@ simple_expr:
         mkexpr desc $startpos $endpos }
   | LPAREN expr = expr RPAREN
       { expr }
+  | LPAREN RPAREN
+      { let desc = Unit in
+        mkexpr desc $startpos $endpos }
 ;
 
 expr:
@@ -105,4 +108,10 @@ case:
   | BAR binding = binding ARROW body = expr
         { let location = location $startpos $endpos in
           Default { binding; body; location } }
+;
+
+definition:
+  | LET binding = binding params = loption(parameters) EQUALS def = expr
+      { let location = location $startpos $endpos in
+        { binding; params; def; location } }
 ;
