@@ -150,6 +150,8 @@ module Var : sig
 
   val to_string : t -> string
 
+  val equal : t -> t -> bool
+
   module Set : Set.S with type elt = t
 
   module Map : Map.S with type key = t
@@ -165,6 +167,9 @@ end = struct
       !counter
 
   let to_string = string_of_int
+
+  let equal (x : t) (y : t) =
+    x = y
 
   module Ord = struct
     type t = int
@@ -614,16 +619,34 @@ end = struct
         | Top _, desc2 -> desc2
         | desc1, Top _ -> desc1
         | Or(cs1', t1', cs1'', t1''), Or(cs2', t2', cs2'', t2'') -> begin
-            let pairs = or_pairs cs1' t1' cs1'' t1'' cs2' t2' cs2'' t2'' in
-            match pairs with
-            | [] -> assert false
-            | (t1, t2) :: rest ->
-                let t =
-                  List.fold_left
-                    (fun acc (t1, t2) -> or_ (meet t1 t2) acc)
-                    (meet t1 t2) rest
-                in
-                t.desc
+            let desc1' = normalize t1'.desc in
+            let desc1'' = normalize t1''.desc in
+            let desc2' = normalize t2'.desc in
+            let desc2'' = normalize t2''.desc in
+            match desc1', desc1'', desc2', desc2'' with
+            | Bot _, _, _, _
+            | _, Bot _, _, _
+            | _, _, Bot _, _
+            | _, _, _, Bot _ ->
+                let t1' = { t1' with desc = desc1' } in
+                let t1'' = { t1'' with desc = desc1'' } in
+                let t2' = { t2' with desc = desc2' } in
+                let t2'' = { t2'' with desc = desc2'' } in
+                let t1 = { t1 with desc = Or(cs1', t1', cs1'', t1'') } in
+                let t2 = { t2 with desc = Or(cs2', t2', cs2'', t2'') } in
+                Meet(t1, t2)
+            | _, _, _, _ -> begin
+              let pairs = or_pairs cs1' t1' cs1'' t1'' cs2' t2' cs2'' t2'' in
+              match pairs with
+              | [] -> assert false
+              | (t1, t2) :: rest ->
+                  let t =
+                    List.fold_left
+                      (fun acc (t1, t2) -> or_ (meet t1 t2) acc)
+                      (meet t1 t2) rest
+                  in
+                  t.desc
+              end
           end
         | desc1, desc2 ->
             let t1 = { t1 with desc = desc1 } in
@@ -635,16 +658,34 @@ end = struct
         | Bot _, desc2 -> desc2
         | desc1, Bot _ -> desc1
         | Or(cs1', t1', cs1'', t1''), Or(cs2', t2', cs2'', t2'') -> begin
-            let pairs = or_pairs cs1' t1' cs1'' t1'' cs2' t2' cs2'' t2'' in
-            match pairs with
-            | [] -> assert false
-            | (t1, t2) :: rest ->
-                let t =
-                  List.fold_left
-                    (fun acc (t1, t2) -> or_ (join t1 t2) acc)
-                    (join t1 t2) rest
-                in
-                t.desc
+            let desc1' = normalize t1'.desc in
+            let desc1'' = normalize t1''.desc in
+            let desc2' = normalize t2'.desc in
+            let desc2'' = normalize t2''.desc in
+            match desc1', desc1'', desc2', desc2'' with
+            | Bot _, _, _, _
+            | _, Bot _, _, _
+            | _, _, Bot _, _
+            | _, _, _, Bot _ ->
+                let t1' = { t1' with desc = desc1' } in
+                let t1'' = { t1'' with desc = desc1'' } in
+                let t2' = { t2' with desc = desc2' } in
+                let t2'' = { t2'' with desc = desc2'' } in
+                let t1 = { t1 with desc = Or(cs1', t1', cs1'', t1'') } in
+                let t2 = { t2 with desc = Or(cs2', t2', cs2'', t2'') } in
+                Join(t1, t2)
+            | _, _, _, _ -> begin
+              let pairs = or_pairs cs1' t1' cs1'' t1'' cs2' t2' cs2'' t2'' in
+              match pairs with
+              | [] -> assert false
+              | (t1, t2) :: rest ->
+                  let t =
+                    List.fold_left
+                      (fun acc (t1, t2) -> or_ (join t1 t2) acc)
+                      (join t1 t2) rest
+                  in
+                  t.desc
+              end
           end
         | desc1, desc2 ->
             let t1 = { t1 with desc = desc1 } in
@@ -665,6 +706,8 @@ end = struct
   let rec unify_types t1 t2 =
     let open Result in
     match t1.desc, t2.desc with
+    | Var v1, Var v2 when Var.equal v1 v2 ->
+        return Subst.empty
     | Var v1, _ ->
         return (Subst.add_type Subst.empty v1 t2)
     | _, Var v2 ->
@@ -689,6 +732,8 @@ end = struct
   and unify_ranges t1 t2 =
     let open Result in
     match t1.desc, t2.desc with
+    | Var v1, Var v2 when Var.equal v1 v2 ->
+        return Subst.empty
     | Var v1, Var v2 -> begin
         match t1.kind, t2.kind with
         | (Type | Row _), _ -> assert false
@@ -769,6 +814,8 @@ end = struct
   and biunify_row t1 (* pos *) t2 (* neg *) =
     let open Result in
     match normalize t1.desc, normalize t2.desc with
+    | Var v1, Var v2 when Var.equal v1 v2 ->
+        return Subst.empty
     | Proj(cs, t, cs'), desc -> begin
         match t.desc with
         | Var _ ->
@@ -1330,7 +1377,7 @@ module Printing = struct
     | Constructor _, _ -> false
     | Or(_, t1, _, t2), (In_meet | In_join | In_proj) -> begin
         match normal raw t1.desc, normal raw t2.desc with
-        | Bot _, _ | _, Bot _ -> false
+        | Bot _, _ | _, Bot _ -> raw
         | _ -> true
       end
     | Or _, _ -> false
@@ -1364,8 +1411,8 @@ module Printing = struct
           print_type In_constructor raw aliased names t
       | Or(cs1, t1, cs2, t2) -> begin
           match normal raw t1.desc, normal raw t2.desc with
-          | Bot _, _ -> print_type ctx raw aliased names t2
-          | _, Bot _ -> print_type ctx raw aliased names t1
+          | Bot _, _ when not raw-> print_type ctx raw aliased names t2
+          | _, Bot _ when not raw -> print_type ctx raw aliased names t1
           | _ ->
               let left, right =
                 if Constructor.CSet.is_finite cs2
