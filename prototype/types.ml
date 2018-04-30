@@ -619,11 +619,27 @@ end = struct
         | Top _, desc2 -> desc2
         | desc1, Top _ -> desc1
         | Or(cs1', t1', cs1'', t1''), Or(cs2', t2', cs2'', t2'') -> begin
+            let distribute () =
+              let pairs = or_pairs cs1' t1' cs1'' t1'' cs2' t2' cs2'' t2'' in
+              match pairs with
+              | [] -> assert false
+              | (t1, t2) :: rest ->
+                  let t =
+                    List.fold_left
+                      (fun acc (t1, t2) -> or_ (meet t1 t2) acc)
+                      (meet t1 t2) rest
+                  in
+                  t.desc
+            in
             let desc1' = normalize t1'.desc in
             let desc1'' = normalize t1''.desc in
             let desc2' = normalize t2'.desc in
             let desc2'' = normalize t2''.desc in
             match desc1', desc1'', desc2', desc2'' with
+            | Top _, _, _, _
+            | _, Top _, _, _
+            | _, _, Top _, _
+            | _, _, _, Top _ -> distribute ()
             | Bot _, _, _, _
             | _, Bot _, _, _
             | _, _, Bot _, _
@@ -635,18 +651,7 @@ end = struct
                 let t1 = { t1 with desc = Or(cs1', t1', cs1'', t1'') } in
                 let t2 = { t2 with desc = Or(cs2', t2', cs2'', t2'') } in
                 Meet(t1, t2)
-            | _, _, _, _ -> begin
-              let pairs = or_pairs cs1' t1' cs1'' t1'' cs2' t2' cs2'' t2'' in
-              match pairs with
-              | [] -> assert false
-              | (t1, t2) :: rest ->
-                  let t =
-                    List.fold_left
-                      (fun acc (t1, t2) -> or_ (meet t1 t2) acc)
-                      (meet t1 t2) rest
-                  in
-                  t.desc
-              end
+            | _, _, _, _ -> distribute ()
           end
         | desc1, desc2 ->
             let t1 = { t1 with desc = desc1 } in
