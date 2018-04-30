@@ -1,4 +1,4 @@
-OCAMLOPT=ocamlfind ocamlopt -g
+OCAMLOPT=ocamlfind ocamlopt -g -w -40
 OCAMLLEX=ocamllex
 MENHIR=menhir
 
