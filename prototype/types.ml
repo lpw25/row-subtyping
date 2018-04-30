@@ -130,13 +130,13 @@ end = struct
     let print_raw cs =
       match cs with
       | Finite s ->
-          Format.printf "Finite { ";
+          Format.printf "[ ";
           StringSet.iter (fun c -> Format.printf "%s; " c) s;
-          Format.printf "}\n%!"
+          Format.printf "]"
       | Cofinite s ->
-          Format.printf "Cofinite { ";
+          Format.printf "[<> ";
           StringSet.iter (fun c -> Format.printf "%s; " c) s;
-          Format.printf "}\n%!"
+          Format.printf "]"
 
   end
 
@@ -1473,11 +1473,15 @@ module Printing = struct
       | Unit ->
           printf "unit";
           aliased
-      | Top _ ->
+      | Top cs ->
           printf "top";
+          if raw then
+            Constructor.CSet.print_raw cs;
           aliased
-      | Bot _ ->
+      | Bot cs ->
           printf "bot";
+          if raw then
+            Constructor.CSet.print_raw cs;
           aliased
       | Meet(t1, t2) ->
           let aliased = print_type In_meet raw aliased names t1 in
