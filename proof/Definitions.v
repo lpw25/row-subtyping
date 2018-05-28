@@ -22,6 +22,8 @@ Inductive typ : Type :=
   | typ_row : typ -> typ
   | typ_variant : typ -> typ
   | typ_arrow : typ -> typ -> typ
+  | typ_ref   : typ -> typ
+  | typ_unit : typ
   | typ_top : cset -> typ
   | typ_bot : cset -> typ
   | typ_meet : typ -> typ -> typ
@@ -71,6 +73,8 @@ Fixpoint typ_open_k (k : nat) (U : typ) (T : typ) {struct T}: typ :=
   | typ_variant T => typ_variant (typ_open_k k U T)
   | typ_arrow T1 T2 =>
     typ_arrow (typ_open_k k U T1) (typ_open_k k U T2)
+  | typ_ref T => typ_ref (typ_open_k k U T)
+  | typ_unit => typ_unit
   | typ_top cs => typ_top cs
   | typ_bot cs => typ_bot cs
   | typ_meet T1 T2 =>
@@ -156,6 +160,11 @@ Inductive type : typ -> Prop :=
       type T1 -> 
       type T2 -> 
       type (typ_arrow T1 T2)
+  | type_ref : forall T,
+      type T ->
+      type (typ_ref T)
+  | type_unit :
+      type typ_unit
   | type_top : forall cs,
       type (typ_top cs)
   | type_bot : forall cs,
@@ -204,6 +213,8 @@ Definition scheme M :=
 (* ************************************************************** *)
 (** ** Description of terms *)
 
+Definition loc := var.
+
 (** Representation of pre-terms *)
 
 Inductive trm : Type :=
@@ -215,7 +226,12 @@ Inductive trm : Type :=
   | trm_constructor : nat -> trm -> trm
   | trm_match : trm -> nat -> trm -> trm -> trm
   | trm_destruct : trm -> nat -> trm -> trm
-  | trm_absurd : trm -> trm.
+  | trm_absurd : trm -> trm
+  | trm_unit : trm
+  | trm_loc : loc -> trm
+  | trm_ref : trm -> trm
+  | trm_get : trm -> trm
+  | trm_set : trm -> trm -> trm.
 
 Fixpoint trm_open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
   match t with
@@ -236,6 +252,11 @@ Fixpoint trm_open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
       trm_destruct (trm_open_rec k u t1) c
                    (trm_open_rec (S k) u t2)
   | trm_absurd t1 => trm_absurd (trm_open_rec k u t1)
+  | trm_unit => trm_unit
+  | trm_loc l => trm_loc l
+  | trm_ref t1 => trm_ref (trm_open_rec k u t1)
+  | trm_get t1 => trm_get (trm_open_rec k u t1)
+  | trm_set t1 t2 => trm_set (trm_open_rec k u t1) (trm_open_rec k u t2)
   end.
 
 Definition trm_open t u := trm_open_rec 0 u t.
@@ -279,8 +300,21 @@ Inductive term : trm -> Prop :=
       term (trm_destruct t1 c t2)
   | term_absurd : forall t,
       term t ->
-      term (trm_absurd t).
-
+      term (trm_absurd t)
+  | term_unit :
+      term trm_unit
+  | term_loc : forall l,
+      term (trm_loc l)
+  | term_ref : forall t,
+      term t ->
+      term (trm_ref t)
+  | term_get : forall t,
+      term t ->
+      term (trm_get t)
+  | term_set : forall t1 t2,
+      term t1 ->
+      term t2 ->
+      term (trm_set t1 t2).
 
 (** Definition of the body of an abstraction *)
 
@@ -336,6 +370,9 @@ Inductive environment : env -> Prop :=
       x # E ->
       environment (E & x ~: M).
 
+Definition no_term_bindings E :=
+  forall x M, not (binds x (bind_typ M) E).
+
 (* ************************************************************* *)
 (** ** Description of kinding and equality *)
 
@@ -386,6 +423,12 @@ with kinding : env -> typ -> knd -> Prop :=
       kinding E T1 knd_type -> 
       kinding E T2 knd_type -> 
       kinding E (typ_arrow T1 T2) knd_type
+  | kinding_ref : forall E T,
+      kinding E T knd_type ->
+      kinding E (typ_ref T) knd_type
+  | kinding_unit : forall E,
+      valid_env E ->
+      kinding E typ_unit knd_type
   | kinding_top : forall E cs,
       valid_env E ->
       CSet.Nonempty cs ->
@@ -697,6 +740,9 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
       kinding E T1 knd_type ->
       type_equal_cong E T2 T2' knd_type ->
       type_equal_cong E (typ_arrow T1 T2) (typ_arrow T1 T2') knd_type
+  | type_equal_cong_ref : forall E T1 T1',
+      type_equal_cong E T1 T1' knd_type ->
+      type_equal_cong E (typ_ref T1) (typ_ref T1') knd_type
   | type_equal_cong_meet_l : forall E T1 T1' T2 cs,
       kinding E T2 (knd_row cs) ->
       type_equal_cong E T1 T1' (knd_row cs) ->
@@ -773,40 +819,101 @@ Inductive valid_instance : env -> list typ -> sch -> Prop :=
       valid_instance E (T :: Ts) (sch_bind K M).
 
 (* ************************************************************* *)
+(** ** Description of stores *)
+
+(** Grammar of values *)
+
+Inductive value : trm -> Prop :=
+  | value_constructor : forall c t,
+      value t -> value (trm_constructor c t)
+  | value_abs : forall t,
+      term (trm_abs t) -> value (trm_abs t)
+  | value_unit :
+      value trm_unit
+  | value_loc : forall l,
+      value (trm_loc l).
+
+(** (pre-)store maps locations to values *)
+
+Definition sto := LibEnv.env trm.
+
+(** Store is a pre-store with value terms *)
+
+Inductive store : sto -> Prop :=
+  | store_empty : store empty
+  | store_push : forall V l t,
+      store V ->
+      value t ->
+      store (V & l ~ t).
+
+(** (pre-)store typing maps locations to type. *)
+
+Definition styp := LibEnv.env typ.
+
+(** Store typing is a pre-store typing with unique bindings
+    and well-formed types *)
+
+Inductive store_type : styp -> Prop :=
+  | store_type_empty : store_type empty
+  | store_type_push : forall P l T,
+      store_type P ->
+      type T ->
+      l # P ->
+      store_type (P & l ~ T).
+
+(** Validity of store typings *)
+
+Inductive valid_store_type : env -> styp -> Prop :=
+  | valid_store_type_empty : forall E,
+      valid_env E ->
+      valid_store_type E empty
+  | valid_store_type_push : forall E P l T,
+      valid_store_type E P ->
+      kinding E T knd_type ->
+      l # P ->
+      valid_store_type E (P & l ~ T).
+
+(* ************************************************************* *)
 (** ** Description of typing *)
 
-Inductive typing : env -> trm -> typ -> Prop :=
-  | typing_var : forall E x M T Us, 
-      valid_env E -> 
+Inductive typing : env -> styp -> trm -> typ -> Prop :=
+  | typing_var : forall E P x M T Us,
+      valid_env E ->
+      valid_store_type E P ->
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
       type_equal E T (instance M Us) knd_type ->
-      typing E (trm_fvar x) T
-  | typing_abs : forall L E T1 T2 t1,
+      typing E P (trm_fvar x) T
+  | typing_abs : forall L E P T1 T2 t1,
       kinding E T1 knd_type ->
       (forall x, x \notin L -> 
-        typing (E & x ~: sch_empty T1) (t1 ^ x) T2) -> 
-      typing E (trm_abs t1) (typ_arrow T1 T2)
-  | typing_app : forall E S T t1 t2, 
-      typing E t1 (typ_arrow S T) ->
-      typing E t2 S ->   
-      typing E (trm_app t1 t2) T
-  | typing_let : forall M L E T2 t1 t2, 
+        typing (E & x ~: sch_empty T1) P (t1 ^ x) T2) -> 
+      typing E P (trm_abs t1) (typ_arrow T1 T2)
+  | typing_app : forall E P S T t1 t2, 
+      typing E P t1 (typ_arrow S T) ->
+      typing E P t2 S ->   
+      typing E P (trm_app t1 t2) T
+  | typing_let_val : forall M L E P T2 t1 t2,
+      value t1 ->
       (forall Xs, fresh L (sch_arity M) Xs ->
          typing
-           (E & Xs ~::* M)
+           (E & Xs ~::* M) P
            t1 (instance_vars M Xs)) ->
-      (forall x, x \notin L -> typing (E & x ~: M) (t2 ^ x) T2) -> 
-      typing E (trm_let t1 t2) T2
-  | typing_constructor : forall c E T1 T2 T3 t,
+      (forall x, x \notin L -> typing (E & x ~: M) P (t2 ^ x) T2) -> 
+      typing E P (trm_let t1 t2) T2
+  | typing_let : forall L E P T1 T2 t1 t2, 
+      typing E P t1 T1 ->
+      (forall x, x \notin L -> typing (E & x ~: sch_empty T1) P (t2 ^ x) T2) ->
+      typing E P (trm_let t1 t2) T2
+  | typing_constructor : forall c E P T1 T2 T3 t,
       kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
       subtype E
         (typ_constructor c T3)
         (typ_proj CSet.universe T2 (CSet.singleton c))
         (CSet.singleton c) ->
-      typing E t T3 ->
-      typing E (trm_constructor c t) (typ_variant T1)
-  | typing_match : forall c L E T1 T2 T3 T4 T5 T6 T7 T8 t1 t2 t3,
+      typing E P t T3 ->
+      typing E P (trm_constructor c t) (typ_variant T1)
+  | typing_match : forall c L E P T1 T2 T3 T4 T5 T6 T7 T8 t1 t2 t3,
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       kinding E T3 (knd_range (typ_top CSet.universe) T4) ->
       kinding E T5 (knd_range (typ_top CSet.universe) T6) ->
@@ -822,15 +929,15 @@ Inductive typing : env -> trm -> typ -> Prop :=
         (typ_proj CSet.universe T2 (CSet.cosingleton c))
         (typ_proj CSet.universe T6 (CSet.cosingleton c))
         (CSet.cosingleton c) ->
-      typing E t1 (typ_variant T1) ->
+      typing E P t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing (E & x ~: (sch_empty (typ_variant T3)))
+         typing (E & x ~: (sch_empty (typ_variant T3))) P
                 (t2 ^ x) T8) ->
       (forall y, y \notin L -> 
-         typing (E & y ~: (sch_empty (typ_variant T5)))
+         typing (E & y ~: (sch_empty (typ_variant T5))) P
                 (t3 ^ y) T8) ->
-      typing E (trm_match t1 c t2 t3) T8
-  | typing_destruct : forall c L E T1 T2 T3 T4 t1 t2,
+      typing E P (trm_match t1 c t2 t3) T8
+  | typing_destruct : forall c L E P T1 T2 T3 T4 t1 t2,
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       subtype E
         (typ_proj CSet.universe T2 (CSet.singleton c))
@@ -840,106 +947,159 @@ Inductive typing : env -> trm -> typ -> Prop :=
         (typ_proj CSet.universe T2 (CSet.cosingleton c))
         (typ_bot (CSet.cosingleton c))
         (CSet.cosingleton c) ->
-      typing E t1 (typ_variant T1) ->
+      typing E P t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing (E & x ~: (sch_empty T3))
+         typing (E & x ~: (sch_empty T3)) P
                 (t2 ^ x) T4) ->
-      typing E (trm_destruct t1 c t2) T4
-  | typing_absurd : forall E T1 T2 t1,
+      typing E P (trm_destruct t1 c t2) T4
+  | typing_absurd : forall E P T1 T2 t1,
       kinding E T1 (knd_range (typ_bot CSet.universe)
                               (typ_bot CSet.universe)) ->
       kinding E T2 knd_type ->
-      typing E t1 (typ_variant T1) ->
-      typing E (trm_absurd t1) T2.
+      typing E P t1 (typ_variant T1) ->
+      typing E P (trm_absurd t1) T2
+  | typing_unit : forall E P,
+      valid_env E ->
+      valid_store_type E P ->
+      typing E P trm_unit typ_unit
+  | typing_loc : forall E P l T1 T2,
+      valid_env E ->
+      valid_store_type E P ->
+      binds l T1 P ->
+      type_equal E T1 T2 knd_type ->
+      typing E P (trm_loc l) (typ_ref T2)
+  | typing_ref : forall E P t1 T,
+      typing E P t1 T ->
+      typing E P (trm_ref t1) (typ_ref T)
+  | typing_get : forall E P t1 T,
+      typing E P t1 (typ_ref T) ->
+      typing E P (trm_get t1) T
+  | typing_set : forall E P t1 t2 T,
+      typing E P t1 (typ_ref T) ->
+      typing E P t2 T ->
+      typing E P (trm_set t1 t2) typ_unit.
 
-Definition typing_scheme E t M :=
-  valid_scheme E M /\
-  exists L, forall Xs,
-    fresh L (sch_arity M) Xs ->
-    typing (E & Xs ~::* M) t (instance_vars M Xs).
+
+Definition typing_store E V P :=
+     store V
+  /\ valid_store_type E P
+  /\ (forall l, l # V -> l # P)
+  /\ (forall l T, binds l T P -> 
+        exists t, binds l t V
+               /\ typing E P t T).
 
 (* ************************************************************* *)
 (** ** Description of the semantics *)
 
-(** Grammar of values *)
-
-Inductive value : trm -> Prop :=
-  | value_constructor : forall c t,
-      value t -> value (trm_constructor c t)
-  | value_abs : forall t,
-      term (trm_abs t) -> value (trm_abs t).
-
 (** Reduction rules *)
 
-Inductive red : trm -> trm -> Prop :=
-  | red_let : forall t1 t2, 
+Inductive red : trm -> sto -> trm -> sto -> Prop :=
+  | red_let_1 : forall V t1 t2,
+      store V ->
       term (trm_let t1 t2) ->
       value t1 -> 
-      red (trm_let t1 t2) (t2 ^^ t1)
-  | red_let_1 : forall t1 t1' t2, 
+      red (trm_let t1 t2) V (t2 ^^ t1) V
+  | red_let_2 : forall V V' t1 t1' t2,
       term_body t2 ->
-      red t1 t1' -> 
-      red (trm_let t1 t2) (trm_let t1' t2)
-  | red_app_1 : forall t1 t1' t2,
+      red t1 V t1' V' -> 
+      red (trm_let t1 t2) V (trm_let t1' t2) V'
+  | red_app_1 : forall V V' t1 t1' t2,
       term t2 ->
-      red t1 t1' -> 
-      red (trm_app t1 t2) (trm_app t1' t2)
-  | red_app_2 : forall t1 t2 t2', 
+      red t1 V t1' V' -> 
+      red (trm_app t1 t2) V (trm_app t1' t2) V'
+  | red_app_2 : forall V V' t1 t2 t2', 
       value t1 ->
-      red t2 t2' ->
-      red (trm_app t1 t2) (trm_app t1 t2')
-  | red_app_3 : forall t1 t2, 
+      red t2 V t2' V' ->
+      red (trm_app t1 t2) V (trm_app t1 t2') V'
+  | red_app_3 : forall V t1 t2, 
+      store V ->
       term_body t1 -> 
       value t2 ->  
-      red (trm_app (trm_abs t1) t2) (t1 ^^ t2)
-  | red_constructor : forall c t t',
-      red t t' ->
-      red (trm_constructor c t) (trm_constructor c t')
-  | red_match_1 : forall c t1 t1' t2 t3,
+      red (trm_app (trm_abs t1) t2) V (t1 ^^ t2) V
+  | red_constructor : forall V V' c t t',
+      red t V t' V' ->
+      red (trm_constructor c t) V (trm_constructor c t') V'
+  | red_match_1 : forall V V' c t1 t1' t2 t3,
       term_body t2 ->
       term_body t3 ->
-      red t1 t1' ->
-      red (trm_match t1 c t2 t3) (trm_match t1' c t2 t3)
-  | red_match_2 : forall c1 c2 t1 t2 t3,
+      red t1 V t1' V' ->
+      red (trm_match t1 c t2 t3) V (trm_match t1' c t2 t3) V'
+  | red_match_2 : forall V c1 c2 t1 t2 t3,
+      store V ->
       c1 = c2 ->
       value (trm_constructor c1 t1) ->
       term_body t2 ->
       term_body t3 ->
-      red (trm_match (trm_constructor c1 t1) c2 t2 t3)
-          (t2 ^^ (trm_constructor c1 t1))
-  | red_match_3 : forall c1 c2 t1 t2 t3,
+      red (trm_match (trm_constructor c1 t1) c2 t2 t3) V
+          (t2 ^^ (trm_constructor c1 t1)) V
+  | red_match_3 : forall V c1 c2 t1 t2 t3,
+      store V ->
       c1 <> c2 ->
       value (trm_constructor c1 t1) ->
       term_body t2 ->
       term_body t3 ->
-      red (trm_match (trm_constructor c1 t1) c2 t2 t3)
-          (t3 ^^ (trm_constructor c1 t1))
-  | red_destruct_1 : forall c t1 t1' t2,
+      red (trm_match (trm_constructor c1 t1) c2 t2 t3) V
+          (t3 ^^ (trm_constructor c1 t1)) V
+  | red_destruct_1 : forall V V' c t1 t1' t2,
       term_body t2 ->
-      red t1 t1' ->
-      red (trm_destruct t1 c t2) (trm_destruct t1' c t2)
-  | red_destruct_2 : forall c1 c2 t1 t2,
+      red t1 V t1' V' ->
+      red (trm_destruct t1 c t2) V (trm_destruct t1' c t2) V'
+  | red_destruct_2 : forall V c1 c2 t1 t2,
+      store V ->
       c1 = c2 ->
       value (trm_constructor c1 t1) ->
       term_body t2 ->
-      red (trm_destruct (trm_constructor c1 t1) c2 t2)
-          (t2 ^^ t1)
-  | red_absurd : forall t t',
-      red t t' ->
-      red (trm_absurd t) (trm_absurd t').
+      red (trm_destruct (trm_constructor c1 t1) c2 t2) V
+          (t2 ^^ t1) V
+  | red_absurd : forall V V' t t',
+      red t V t' V' ->
+      red (trm_absurd t) V (trm_absurd t') V'
+  | red_ref_1 : forall V V' t t',
+      red t V t' V' ->
+      red (trm_ref t) V (trm_ref t') V'
+  | red_ref_2 : forall V t l,
+      store V ->
+      value t ->
+      l # V ->
+      red (trm_ref t) V (trm_loc l) (V & l ~ t)
+  | red_get_1 : forall V V' t t',
+      red t V t' V' ->
+      red (trm_get t) V (trm_get t') V'
+  | red_get_2 : forall V t l,
+      store V ->
+      binds l t V ->
+      red (trm_get (trm_loc l)) V t V
+  | red_set_1 : forall V V' t1 t1' t2,
+      term t2 ->
+      red t1 V t1' V' ->
+      red (trm_set t1 t2) V (trm_set t1' t2) V'
+  | red_set_2 : forall V V' t1 t2 t2',
+      value t1 ->
+      red t2 V t2' V' ->
+      red (trm_set t1 t2) V (trm_set t1 t2') V'
+  | red_set_3 : forall V l t2,
+      store V ->
+      value t2 ->
+      red (trm_set (trm_loc l) t2) V trm_unit (V & l ~ t2).
 
 (* ************************************************************** *)
 (** ** Description of the results *)
 
 (** Goal is to prove preservation and progress *)
 
-Definition preservation := forall E t t' M,
-  typing_scheme E t M ->
-  red t t' ->
-  typing_scheme E t' M.
+Definition preservation := forall E P t t' V V' T,
+  typing E P t T ->
+  typing_store E V P ->
+  red t V t' V' ->
+  exists P',
+    extends P P'
+    /\ typing E P' t' T
+    /\ typing_store E V' P'.
 
 
-Definition progress := forall t M,
-  typing_scheme empty t M ->
+Definition progress := forall E P V t T,
+  no_term_bindings E ->
+  typing E P t T ->
+  typing_store E V P ->
      value t 
-  \/ exists t', red t t'.
+  \/ exists t' V', red t V t' V'.

@@ -12,6 +12,7 @@ let keyword_list =
     "in", IN;
     "let", LET;
     "match", MATCH;
+    "ref", REF;
     "with", WITH; ]
 
 let keywords =
@@ -46,11 +47,14 @@ rule token = parse
   | newline { newline lexbuf; token lexbuf }
   | blank + { token lexbuf }
   | "->" { ARROW }
+  | '!' { BANG }
   | '|' { BAR }
+  | ":=" { COLONEQUALS }
   | '=' { EQUALS }
   | '#' { HASH }
   | '(' { LPAREN }
   | ')' { RPAREN }
+  | ";" { SEMI }
   | ";;" { SEMISEMI }
   | "_" { UNDERSCORE }
   | lowercase identchar *

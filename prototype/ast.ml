@@ -3,6 +3,10 @@ type location =
   { start_pos : Lexing.position;
     end_pos : Lexing.position; }
 
+type 'a with_location =
+  { desc : 'a;
+    location : location; }
+
 type var = string
 
 type binding =
@@ -23,10 +27,12 @@ type expr_desc =
   | Constructor of { constructor : constructor; arg : expr; }
   | Match of { expr: expr; cases : case list; }
   | Unit
+  | Ref of { value: expr; }
+  | Deref of { reference: expr; }
+  | Set of { reference: expr; value: expr; }
+  | Sequence of { left : expr; right: expr; }
 
-and expr =
-  { desc : expr_desc;
-    location : location; }
+and expr = expr_desc with_location
 
 and case =
   | Destruct of
@@ -40,15 +46,23 @@ and case =
         body : expr;
         location : location; }
 
-type definition =
-  { binding : binding;
-    params : binding list;
-    def : expr;
-    location : location; }
+type statement_desc =
+  | Definition of
+      { binding : binding;
+        params : binding list;
+        def : expr; }
+  | Expr of
+      { expr : expr; }
 
-type phrase =
-  | Definition of definition
-  | Directive of string
+type statement = statement_desc with_location
+
+type phrase_desc =
+  | Statement of
+      { statement: statement }
+  | Directive of
+      { directive : string }
+
+type phrase = phrase_desc with_location
 
 type 'a dump =
   Format.formatter -> 'a -> unit
@@ -104,6 +118,22 @@ let rec dump_expr_desc ppf = function
         dump_expr expr (dump_list dump_case) cases
   | Unit ->
       Format.fprintf ppf "Unit"
+  | Ref { value; } ->
+      Format.fprintf ppf
+        "@[<v 2>Ref@ @[<v 2>Value@ %a@]@]"
+        dump_expr value
+  | Deref { reference; } ->
+      Format.fprintf ppf
+        "@[<v 2>Deref@ @[<v 2>Reference@ %a@]@]"
+        dump_expr reference
+  | Set { reference; value } ->
+      Format.fprintf ppf
+        "@[<v 2>Set@ @[<v 2>Reference@ %a@]@ @[<v 2>Value@ %a@]@]"
+        dump_expr reference dump_expr value
+  | Sequence { left; right } ->
+      Format.fprintf ppf
+        "@[<v 2>Sequence@ @[<v 2>Left@ %a@]@ @[<v 2>Right@ %a@]@]"
+        dump_expr left dump_expr right
 
 and dump_expr ppf expr =
   dump_expr_desc ppf expr.desc
@@ -119,8 +149,16 @@ and dump_case ppf = function
         "@[<v 2>Default@ Binding %a@ @[<v 2>Body@ %a@]@]"
         dump_binding binding dump_expr body
 
-let dump_definition ppf { binding; params; def; } =
-  Format.fprintf ppf
-    "@[<v 2>Definition@ Binding %a@ Params @[<h>%a@]@ \
-     @[<v 2>Def@ %a@]@]"
-    dump_binding binding (dump_list dump_binding) params dump_expr def
+let dump_statement_desc ppf = function
+  | Definition { binding; params; def } ->
+      Format.fprintf ppf
+        "@[<v 2>Definition@ Binding %a@ Params @[<h>%a@]@ \
+         @[<v 2>Def@ %a@]@]"
+        dump_binding binding (dump_list dump_binding) params dump_expr def
+  | Expr { expr } ->
+      Format.fprintf ppf
+        "@[<v 2>Expr@ %a@]"
+        dump_expr expr
+
+let dump_statement ppf x =
+  dump_statement_desc ppf x.desc

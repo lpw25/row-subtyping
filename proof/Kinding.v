@@ -8,7 +8,8 @@ Require Import LibLN Cofinite Definitions Substitution Wellformedness.
 
 Hint Constructors
      valid_kind kinding valid_scheme_vars valid_instance valid_env
-     type_equal_core type_equal_symm type_equal_cong type_equal.
+     type_equal_core type_equal_symm type_equal_cong type_equal
+     valid_store_type.
 
 (* *************************************************************** *)
 (** * Retraction of valid environments *)
@@ -355,6 +356,27 @@ Proof.
   apply valid_instance_weakening; rewrite concat_empty_r; assumption.
 Qed.
 
+Lemma valid_store_type_weakening : forall E F G P,
+  valid_store_type (E & G) P ->
+  valid_env (E & F & G) ->
+  valid_store_type (E & F & G) P.
+Proof.
+  introv Hs He.
+  remember (E & G) as EG.
+  induction Hs; subst; auto using kinding_weakening.
+Qed.
+
+Lemma valid_store_type_weakening_l : forall E F P,
+  valid_store_type E P ->
+  valid_env (E & F) ->
+  valid_store_type (E & F) P.
+Proof.
+  introv Hs He.
+  rewrite <- concat_empty_r with (E := E & F).
+  apply valid_store_type_weakening;
+    rewrite concat_empty_r; assumption.
+Qed.
+
 Lemma valid_env_kind_weakening : forall E F G X K,
     X # F ->
     valid_env (E & G & X ~:: K) ->
@@ -481,6 +503,18 @@ Proof.
     rewrite <- concat_empty_r with (E := E & x ~: M).
     apply valid_kind_weakening; rewrite concat_empty_r; auto.
 Qed.
+
+Lemma kinding_from_store_type : forall E l T P,
+    valid_store_type E P ->
+    binds l T P ->
+    kinding E T knd_type.
+Proof.
+  introv Hs Hb.
+  induction Hs.
+  - apply binds_empty_inv in Hb; contradiction.
+  - destruct (binds_push_inv Hb) as [[Hx Hbnd]|[Hx Hbnd]];
+      subst; auto.
+Qed.    
 
 (* *************************************************************** *)
 (** Judegments are closed *)
@@ -799,6 +833,17 @@ Proof.
     assert (X \notin typ_fv_list Ts \u sch_fv (sch_open M T)) as Hn2
       by auto.
     eauto using sch_open_fv_inv.
+Qed.
+
+Lemma valid_store_type_closed : forall E P X,
+  valid_store_type E P ->
+  X # E ->
+  X \notin (styp_fv P).
+Proof.
+  introv Hs Hn.
+  induction Hs; autorewrite with rew_styp_fv; auto.
+  assert (kinding E T knd_type) as Hk by assumption.
+  apply kinding_closed with (X := X) in Hk; auto.
 Qed.
 
 (* *************************************************************** *)
@@ -1239,6 +1284,35 @@ Proof.
     inversion Hi; subst; auto.
 Qed.
 
+Lemma valid_store_type_typ_subst : forall E F X J S P,
+  valid_store_type (E & X ~:: J & F) P ->
+  kinding E S J ->
+  valid_store_type (E & env_subst X S F) (styp_subst X S P).
+Proof.
+  introv Hs He.
+  remember (E & X ~:: J & F) as EXF.
+  induction Hs; autorewrite with rew_styp_subst in *; subst.
+  - apply valid_store_type_empty.
+    eauto using valid_env_typ_subst.
+  - apply valid_store_type_push; auto.
+    + fold (knd_subst X S knd_type).
+      eauto using kinding_typ_subst.
+    + autorewrite with rew_styp_dom.
+      auto.
+Qed.
+
+Lemma valid_store_type_typ_subst_l : forall E X J S P,
+  valid_store_type (E & X ~:: J) P ->
+  kinding E S J ->
+  valid_store_type E (styp_subst X S P).
+Proof.
+  introv Hs Hk.
+  rewrite <- concat_empty_r with (E := E & X ~:: J) in Hs.
+  rewrite <- concat_empty_r with (E := E).
+  rewrite <- env_subst_empty with (X := X) (U := S).
+  eauto using valid_store_type_typ_subst.
+Qed.
+
 (* *************************************************************** *)
 (** * Convenient inversions of valid schemes *)
 
@@ -1616,6 +1690,27 @@ Proof.
   eauto using valid_instance_remove_typ_bind.
 Qed.
 
+Lemma valid_store_type_remove_typ_bind : forall E F x M P,
+    valid_store_type (E & x ~: M & F) P ->
+    valid_store_type (E & F) P.
+Proof.
+  introv Hs.
+  remember (E & x ~: M & F) as ExF.
+  remember (E & F) as EF.
+  induction Hs; subst;
+    eauto using valid_env_remove_typ_bind, kinding_remove_typ_bind.
+Qed.
+
+Lemma valid_store_type_remove_typ_bind_l : forall E x M P,
+    valid_store_type (E & x ~: M) P ->
+    valid_store_type E P.
+Proof.
+  introv Hv.
+  rewrite <- concat_empty_r with (E := E & x ~: M) in Hv.
+  rewrite <- concat_empty_r with (E := E).
+  eauto using valid_store_type_remove_typ_bind.
+Qed.
+    
 (* *************************************************************** *)
 (** Can add type bindings *)
 
@@ -1982,6 +2077,31 @@ Proof.
   eauto using valid_instance_add_typ_bind.
 Qed.
 
+Lemma valid_store_type_add_typ_bind : forall E F x M P,
+    valid_store_type (E & F) P ->
+    valid_scheme E M ->
+    x # E & F ->
+    valid_store_type (E & x ~: M & F) P.
+Proof.
+  introv Hv Hs Hn.
+  remember (E & x ~: M & F) as ExF.
+  remember (E & F) as EF.
+  induction Hv; subst;
+    eauto using valid_env_add_typ_bind, kinding_add_typ_bind.
+Qed.
+
+Lemma valid_store_type_add_typ_bind_l : forall E x M P,
+    valid_store_type E P ->
+    valid_scheme E M ->
+    x # E ->
+    valid_store_type (E & x ~: M) P.
+Proof.
+  introv Hv Hs Hn.
+  rewrite <- concat_empty_r with (E := E & x ~: M).
+  rewrite <- concat_empty_r with (E := E) in Hv.
+  eauto using valid_store_type_add_typ_bind.
+Qed.
+
 (* *************************************************************** *)
 (** Can swap type bindings *)
 
@@ -2078,6 +2198,18 @@ Proof.
     eauto
       using valid_instance_remove_typ_bind, environment_middle_inv
       with valid_instance_regular.
+Qed.
+
+Lemma valid_store_type_swap_typ_bind : forall E F x M1 M2 P,
+    valid_store_type (E & x ~: M1 & F) P ->
+    valid_scheme E M2 ->
+    valid_store_type (E & x ~: M2 & F) P.
+Proof.
+  introv Hs Hsc.
+  apply valid_store_type_add_typ_bind;
+    eauto
+      using valid_store_type_remove_typ_bind, environment_middle_inv
+      with valid_store_type_regular.
 Qed.
 
 (* *************************************************************** *)
@@ -2184,17 +2316,25 @@ with kinding_validated : env -> typ -> knd -> Prop :=
       type T2 ->
       valid_env_validated E ->
       kinding_validated E (typ_arrow T1 T2) knd_type
+  | kinding_validated_ref : forall E T,
+      kinding_validated E T knd_type ->
+      environment E ->
+      type T ->
+      valid_env_validated E ->
+      kinding_validated E (typ_ref T) knd_type
+  | kinding_validated_unit : forall E,
+      valid_env_validated E ->
+      environment E ->
+      kinding_validated E typ_unit knd_type
   | kinding_validated_top : forall E cs,
       valid_env_validated E ->
       CSet.Nonempty cs ->
       environment E ->
-      valid_env_validated E ->
       kinding_validated E (typ_top cs) (knd_row cs)
   | kinding_validated_bot : forall E cs,
       valid_env_validated E ->
       CSet.Nonempty cs ->
       environment E ->
-      valid_env_validated E ->
       kinding_validated E (typ_bot cs) (knd_row cs)
   | kinding_validated_meet : forall E T1 T2 cs,
       kinding_validated E T1 (knd_row cs) ->
@@ -2751,6 +2891,15 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding_validated E T2' knd_type ->
       type_equal_cong_validated E
         (typ_arrow T1 T2) (typ_arrow T1 T2') knd_type
+  | type_equal_cong_validated_ref : forall E T1 T1',
+      type_equal_cong_validated E T1 T1' knd_type ->
+      environment E ->
+      type T1 ->
+      type T1' ->
+      valid_env_validated E ->
+      kinding_validated E T1 knd_type ->
+      kinding_validated E T1' knd_type ->
+      type_equal_cong_validated E (typ_ref T1) (typ_ref T1') knd_type
   | type_equal_cong_validated_meet_l : forall E T1 T1' T2 cs,
       kinding_validated E T2 (knd_row cs) ->
       type_equal_cong_validated E T1 T1' (knd_row cs) ->
@@ -4474,65 +4623,151 @@ Hint Extern 1 (valid_env ?E) =>
                (validated_valid_instance H))
   end : valid_instance_validated.
 
+Inductive valid_store_type_validated : env -> styp -> Prop :=
+  | valid_store_type_validated_empty : forall E,
+      valid_env E ->
+      environment E ->
+      valid_store_type_validated E empty
+  | valid_store_type_validated_push : forall E P l T,
+      valid_store_type_validated E P ->
+      kinding E T knd_type ->
+      l # P ->
+      environment E ->
+      type T ->
+      valid_env E ->
+      valid_store_type_validated E (P & l ~ T).
+
+Lemma unvalidated_valid_store_type : forall E P,
+    valid_store_type_validated E P -> valid_store_type E P.
+Proof.
+  introv Hv.
+  induction Hv; auto.
+Qed.
+
+Hint Constructors valid_store_type_validated
+  : valid_store_type_validated.
+
+Hint Extern 1 (environment ?E) =>
+  match goal with
+  | H : valid_store_type_validated E _ |- _ =>
+      apply (proj1 (valid_store_type_regular_inv
+               (regular_valid_store_type
+                  (unvalidated_valid_store_type H))))
+  end : valid_store_type_regular.
+
+Hint Extern 1 (store_type ?P) =>
+  match goal with
+  | H : valid_store_type_validated _ P |- _ =>
+      apply (proj2 (valid_store_type_regular_inv
+               (regular_valid_store_type
+                  (unvalidated_valid_store_type H))))
+  end : valid_store_type_regular.
+
+Lemma valid_store_type_validated_inv : forall E P,
+    valid_store_type_validated E P ->
+    valid_env E.
+Proof.
+  introv Hv.
+  destruct Hv; auto.
+Qed.    
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : valid_store_type_validated E _ |- _ =>
+      apply (valid_store_type_validated_inv H)
+  end : valid_store_type_validated.
+
+Lemma validated_valid_store_type_regular : forall E P,
+    valid_store_type_regular E P ->
+    valid_store_type_validated E P.
+Proof.
+  introv Hv.
+  induction Hv;
+    auto with valid_store_type_validated kinding_validated.
+Qed.
+
+Lemma validated_valid_store_type : forall E P,
+    valid_store_type E P -> valid_store_type_validated E P.
+Proof.
+  introv Hv.
+  auto using
+    regular_valid_store_type, validated_valid_store_type_regular.
+Qed.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : valid_store_type E _ |- _ =>
+      apply (valid_store_type_validated_inv
+               (validated_valid_store_type H))
+  end : valid_store_type_validated.
+
 (* *************************************************************** *)
 (** * "Validated" version of typing judgement *)
 
-Inductive typing_validated : env -> trm -> typ -> Prop :=
-  | typing_validated_var : forall E x M T Us,
-      valid_env E -> 
+Inductive typing_validated : env -> styp -> trm -> typ -> Prop :=
+  | typing_validated_var : forall E P x M T Us,
+      valid_env E ->
+      valid_store_type E P ->
       binds x (bind_typ M) E -> 
       valid_instance E Us M ->
       type_equal E T (instance M Us) knd_type ->
       environment E ->
+      store_type P ->
       scheme M ->
       types (sch_arity M) Us ->
       type T ->
       valid_scheme E M ->
       kinding E T knd_type ->
-      typing_validated E (trm_fvar x) T
-  | typing_validated_abs : forall L E T1 T2 t1,
+      typing_validated E P (trm_fvar x) T
+  | typing_validated_abs : forall L E P T1 T2 t1,
       kinding E T1 knd_type ->
       (forall x, x \notin L -> 
         typing_validated
-          (E & x ~ bind_typ (sch_empty T1)) (t1 ^ x) T2) ->
+          (E & x ~ bind_typ (sch_empty T1)) P (t1 ^ x) T2) ->
       environment E ->
       (forall x, x \notin L ->
          environment (E & x ~ bind_typ (sch_empty T1))) ->
+      store_type P ->
       type T1 ->
       type T2 ->
       term_body t1 ->
       valid_env E ->
       (forall x, x \notin L -> 
         valid_env (E & x ~ bind_typ (sch_empty T1))) ->
+      valid_store_type E P ->
       kinding E T2 knd_type ->
       (forall x, x \notin L -> 
         kinding
           (E & x ~ bind_typ (sch_empty T1)) T2 knd_type) ->
-      typing_validated E (trm_abs t1) (typ_arrow T1 T2)
-  | typing_validated_app : forall E S T t1 t2, 
-      typing_validated E t1 (typ_arrow S T) ->
-      typing_validated E t2 S ->
+      typing_validated E P (trm_abs t1) (typ_arrow T1 T2)
+  | typing_validated_app : forall E P S T t1 t2, 
+      typing_validated E P t1 (typ_arrow S T) ->
+      typing_validated E P t2 S ->
       environment E ->
+      store_type P ->
       type S ->
       type T ->
       term t1 ->
       term t2 ->
       valid_env E ->
+      valid_store_type E P ->
       kinding E S knd_type ->
       kinding E T knd_type ->
-      typing_validated E (trm_app t1 t2) T
-  | typing_validated_let : forall M L E T2 t1 t2,
+      typing_validated E P (trm_app t1 t2) T
+  | typing_validated_let_val : forall M L E P T2 t1 t2,
+      value t1 ->
       (forall Xs, fresh L (sch_arity M) Xs ->
          typing_validated
-           (E & Xs ~::* M)
+           (E & Xs ~::* M) P
            t1 (instance_vars M Xs)) ->
       (forall x, x \notin L ->
-         typing_validated (E & x ~ (bind_typ M)) (t2 ^ x) T2) ->
+         typing_validated (E & x ~ (bind_typ M)) P (t2 ^ x) T2) ->
       environment E ->
       (forall Xs, fresh L (sch_arity M) Xs ->
          environment (E & Xs ~::* M)) ->
       (forall x, x \notin L ->
-         environment (E & x ~ (bind_typ M))) -> 
+         environment (E & x ~ (bind_typ M))) ->
+      store_type P ->
       type T2 ->
       (forall Xs, fresh L (sch_arity M) Xs ->
          type (instance_vars M Xs)) ->
@@ -4544,30 +4779,52 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
          valid_env (E & Xs ~::* M)) ->
       (forall x, x \notin L ->
          valid_env (E & x ~ (bind_typ M))) ->
+      valid_store_type E P ->
       (forall Xs, fresh L (sch_arity M) Xs ->
          kinding (E & Xs ~::* M) (instance_vars M Xs) knd_type) ->
       valid_scheme E M ->
       kinding E T2 knd_type ->
       (forall x, x \notin L ->
          kinding (E & x ~ (bind_typ M)) T2 knd_type) ->
-      typing_validated E (trm_let t1 t2) T2
-  | typing_validated_constructor : forall c E T1 T2 T3 t,
+      typing_validated E P (trm_let t1 t2) T2
+  | typing_validated_let : forall L E P T1 T2 t1 t2, 
+      typing_validated E P t1 T1 ->
+      (forall x, x \notin L ->
+         typing_validated (E & x ~: sch_empty T1) P (t2 ^ x) T2) ->
+      environment E ->
+      (forall x, x \notin L ->
+         environment (E & x ~: sch_empty T1)) ->
+      store_type P ->
+      type T1 ->
+      type T2 ->
+      term t1 ->
+      term_body t2 ->
+      valid_env E ->
+      (forall x, x \notin L ->
+         valid_env (E & x ~: sch_empty T1)) ->
+      valid_store_type E P ->
+      kinding E T1 knd_type ->
+      kinding E T2 knd_type ->
+      typing_validated E P (trm_let t1 t2) T2
+  | typing_validated_constructor : forall c E P T1 T2 T3 t,
       kinding E T1 (knd_range (typ_top CSet.universe) T2) ->
       subtype E
         (typ_constructor c T3)
         (typ_proj CSet.universe T2 (CSet.singleton c))
         (CSet.singleton c) ->
-      typing_validated E t T3 ->
+      typing_validated E P t T3 ->
       environment E ->
+      store_type P ->
       type T1 ->
       type T2 ->
       type T3 ->
       term t ->
       valid_env E ->
+      valid_store_type E P ->
       kinding E T2 (knd_row CSet.universe) ->
       kinding E T3 knd_type ->
-      typing_validated E (trm_constructor c t) (typ_variant T1)
-  | typing_validated_match : forall c L E T1 T2 T3 T4 T5
+      typing_validated E P (trm_constructor c t) (typ_variant T1)
+  | typing_validated_match : forall c L E P T1 T2 T3 T4 T5
                           T6 T7 T8 t1 t2 t3,
       subtype E
         (typ_proj CSet.universe T2 (CSet.singleton c))
@@ -4584,18 +4841,19 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       kinding E T3 (knd_range (typ_top CSet.universe) T4) ->
       kinding E T5 (knd_range (typ_top CSet.universe) T6) ->
-      typing_validated E t1 (typ_variant T1) ->
+      typing_validated E P t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing_validated (E & x ~: (sch_empty (typ_variant T3)))
+         typing_validated (E & x ~: (sch_empty (typ_variant T3))) P
                 (t2 ^ x) T8) ->
       (forall y, y \notin L -> 
-         typing_validated (E & y ~: (sch_empty (typ_variant T5)))
+         typing_validated (E & y ~: (sch_empty (typ_variant T5))) P
                 (t3 ^ y) T8) ->
       environment E ->
       (forall x, x \notin L ->
          environment (E & x ~: (sch_empty (typ_variant T3)))) ->
       (forall y, y \notin L -> 
          environment (E & y ~: (sch_empty (typ_variant T5)))) ->
+      store_type P ->
       type T1 ->
       type T2 ->
       type T3 ->
@@ -4612,6 +4870,7 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
          valid_env (E & x ~: (sch_empty (typ_variant T3)))) ->
       (forall y, y \notin L -> 
          valid_env (E & y ~: (sch_empty (typ_variant T5)))) ->
+      valid_store_type E P ->
       kinding E T2 (knd_row CSet.universe) ->
       kinding E T4 (knd_row CSet.universe) ->
       kinding E T6 (knd_row CSet.universe) ->
@@ -4623,8 +4882,8 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       (forall y, y \notin L -> 
          kinding (E & y ~: (sch_empty (typ_variant T5)))
                  T8 knd_type) ->
-      typing_validated E (trm_match t1 c t2 t3) T8
-  | typing_validated_destruct : forall c L E T1 T2 T3 T4 t1 t2,
+      typing_validated E P (trm_match t1 c t2 t3) T8
+  | typing_validated_destruct : forall c L E P T1 T2 T3 T4 t1 t2,
       kinding E T1 (knd_range T2 (typ_bot CSet.universe)) ->
       subtype E
         (typ_proj CSet.universe T2 (CSet.singleton c))
@@ -4634,13 +4893,14 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
         (typ_proj CSet.universe T2 (CSet.cosingleton c))
         (typ_bot (CSet.cosingleton c))
         (CSet.cosingleton c) ->
-      typing_validated E t1 (typ_variant T1) ->
+      typing_validated E P t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing_validated (E & x ~: (sch_empty T3))
+         typing_validated (E & x ~: (sch_empty T3)) P
                 (t2 ^ x) T4) ->
       environment E ->
       (forall x, x \notin L ->
          environment (E & x ~: (sch_empty T3))) ->
+      store_type P ->
       type T1 ->
       type T2 ->
       type T3 ->
@@ -4650,27 +4910,80 @@ Inductive typing_validated : env -> trm -> typ -> Prop :=
       valid_env E ->
       (forall x, x \notin L ->
          valid_env (E & x ~: (sch_empty T3))) ->
+      valid_store_type E P ->
       kinding E T2 (knd_row CSet.universe) ->
       kinding E T3 knd_type ->
       kinding E T4 knd_type ->
       (forall x, x \notin L ->
           kinding (E & x ~: (sch_empty T3))
                   T4 knd_type) ->
-      typing_validated E (trm_destruct t1 c t2) T4
-  | typing_validated_absurd : forall E T1 T2 t1,
+      typing_validated E P (trm_destruct t1 c t2) T4
+  | typing_validated_absurd : forall E P T1 T2 t1,
       kinding E T1 (knd_range (typ_bot CSet.universe)
                               (typ_bot CSet.universe)) ->
       kinding E T2 knd_type ->
-      typing_validated E t1 (typ_variant T1) ->
+      typing_validated E P t1 (typ_variant T1) ->
       environment E ->
+      store_type P ->
       type T1 ->
       type T2 ->
       term t1 ->
       valid_env E ->
-      typing_validated E (trm_absurd t1) T2.
+      valid_store_type E P ->
+      typing_validated E P (trm_absurd t1) T2
+  | typing_validated_unit : forall E P,
+      valid_env E ->
+      valid_store_type E P ->
+      environment E ->
+      store_type P ->
+      typing_validated E P trm_unit typ_unit
+  | typing_validated_loc : forall E P l T1 T2,
+      valid_env E ->
+      valid_store_type E P ->
+      binds l T1 P ->
+      type_equal E T1 T2 knd_type ->
+      environment E ->
+      store_type P ->
+      type T1 ->
+      type T2 ->
+      kinding E T1 knd_type ->
+      kinding E T2 knd_type ->
+      typing_validated E P (trm_loc l) (typ_ref T2)
+  | typing_validated_ref : forall E P t1 T,
+      typing_validated E P t1 T ->
+      environment E ->
+      store_type P ->
+      type T ->
+      term t1 ->
+      valid_env E ->
+      valid_store_type E P ->
+      kinding E T knd_type ->
+      typing_validated E P (trm_ref t1) (typ_ref T)
+  | typing_validated_get : forall E P t1 T,
+      typing_validated E P t1 (typ_ref T) ->
+      environment E ->
+      store_type P ->
+      type T ->
+      term t1 ->
+      valid_env E ->
+      valid_store_type E P ->
+      kinding E T knd_type ->
+      typing_validated E P (trm_get t1) T
+  | typing_validated_set : forall E P t1 t2 T,
+      typing_validated E P t1 (typ_ref T) ->
+      typing_validated E P t2 T ->
+      environment E ->
+      store_type P ->
+      type T ->
+      term t1 ->
+      term t2 ->
+      valid_env E ->
+      valid_store_type E P ->
+      kinding E T knd_type ->
+      typing_validated E P (trm_set t1 t2) typ_unit.
 
-Lemma unvalidated_typing : forall E t T,
-    typing_validated E t T -> typing E t T.
+Lemma unvalidated_typing : forall E P t T,
+    typing_validated E P t T -> typing E P t T.
 Proof.
   introv Ht.
   induction Ht; eauto using typing.
@@ -4678,9 +4991,9 @@ Qed.
 
 Hint Resolve unvalidated_typing.
 
-Lemma typing_validated_inv : forall E t T,
-    typing_validated E t T ->
-    valid_env E /\ kinding E T knd_type.
+Lemma typing_validated_inv : forall E P t T,
+    typing_validated E P t T ->
+    valid_env E /\ valid_store_type E P /\ kinding E T knd_type.
 Proof.
   introv Ht.
   induction Ht; splits;
@@ -4692,39 +5005,52 @@ Hint Constructors typing_validated : typing_validated.
 
 Hint Extern 1 (environment ?E) =>
   match goal with
-  | H : typing_validated E _ _ |- _ =>
-      apply (proj31 (typing_regular_inv
+  | H : typing_validated E _ _ _ |- _ =>
+      apply (proj41 (typing_regular_inv
+                       (regular_typing (unvalidated_typing H))))
+  end : typing_validated.
+
+Hint Extern 1 (store_type ?P) =>
+  match goal with
+  | H : typing_validated _ P _ _ |- _ =>
+      apply (proj42 (typing_regular_inv
                        (regular_typing (unvalidated_typing H))))
   end : typing_validated.
 
 Hint Extern 1 (term ?t) =>
   match goal with
-  | H : typing_validated _ t _ |- _ =>
-      apply (proj32 (typing_regular_inv
+  | H : typing_validated _ _ t _ |- _ =>
+      apply (proj43 (typing_regular_inv
                        (regular_typing (unvalidated_typing H))))
   end : typing_validated.
 
 Hint Extern 1 (type ?T) =>
   match goal with
-  | H : typing_validated _ _ T |- _ =>
-      apply (proj33 (typing_regular_inv 
+  | H : typing_validated _ _ _ T |- _ =>
+      apply (proj44 (typing_regular_inv 
                        (regular_typing (unvalidated_typing H))))
   end : typing_validated.
 
 Hint Extern 1 (valid_env ?E) =>
   match goal with
-  | H : typing_validated E _ _ |- _ =>
-      apply (proj1 (typing_validated_inv H))
+  | H : typing_validated E _ _ _ |- _ =>
+      apply (proj31 (typing_validated_inv H))
+  end : typing_validated.
+
+Hint Extern 1 (valid_store_type ?E ?P) =>
+  match goal with
+  | H : typing_validated E P _ _ |- _ =>
+      apply (proj32 (typing_validated_inv H))
   end : typing_validated.
 
 Hint Extern 1 (kinding ?E ?T knd_type) =>
   match goal with
-  | H : typing_validated E _ T |- _ =>
-      apply (proj2 (typing_validated_inv H))
+  | H : typing_validated E _ _ T |- _ =>
+      apply (proj33 (typing_validated_inv H))
   end : typing_validated.
 
-Lemma validated_typing_regular : forall E t T,
-    typing_regular E t T -> typing_validated E t T.
+Lemma validated_typing_regular : forall E P t T,
+    typing_regular E P t T -> typing_validated E P t T.
 Proof.
   introv Ht.
   induction Ht.
@@ -4732,15 +5058,18 @@ Proof.
     + apply valid_scheme_from_env with (x := x); assumption.
     + auto with type_equal_validated.
   - pick_fresh x.
-    assert (typing_validated (E & x ~: sch_empty T1) (t1 ^ x) T2)
+    assert (typing_validated (E & x ~: sch_empty T1) P (t1 ^ x) T2)
       by auto.
     assert (valid_env E)
       by eauto using valid_env_retract with typing_validated.
+    assert (valid_store_type E P)
+      by eauto using valid_store_type_remove_typ_bind_l
+           with typing_validated.
     assert (kinding E T2 knd_type)
       by eauto using kinding_remove_typ_bind_l with typing_validated.
     econstructor; eauto with typing_validated;
       intros y Hn;
-      assert (typing_validated (E & y ~: sch_empty T1) (t1 ^ y) T2)
+      assert (typing_validated (E & y ~: sch_empty T1) P (t1 ^ y) T2) 
         by auto;
       auto with typing_validated.
   - assert (kinding E (typ_arrow S T) knd_type)
@@ -4748,7 +5077,10 @@ Proof.
     inversion Hk; subst.
     econstr auto with typing_validated.
   - pick_fresh x.
-    assert (typing_validated (E & x ~: M) (t2 ^ x) T2) by auto.
+    assert (typing_validated (E & x ~: M) P (t2 ^ x) T2) by auto.
+    assert (valid_store_type E P)
+      by eauto using valid_store_type_remove_typ_bind_l
+           with typing_validated.
     assert (kinding E T2 knd_type)
       by eauto using kinding_remove_typ_bind_l with typing_validated.
     assert (valid_env (E & x ~: M)) by auto with typing_validated.
@@ -4760,14 +5092,25 @@ Proof.
       try
         (intros Ys Hf;
          assert
-           (typing_validated (E & Ys ~::* M) t1 (instance_vars M Ys))
+           (typing_validated (E & Ys ~::* M) P
+              t1 (instance_vars M Ys))
            by auto;
          auto with typing_validated);
       try
         (intros y Hn;
-         assert (typing_validated (E & y ~: M) (t2 ^ y) T2)
+         assert (typing_validated (E & y ~: M) P (t2 ^ y) T2)
            by auto;
          auto with typing_validated).
+  - pick_fresh x.
+    assert (typing_validated (E & x ~: sch_empty T1) P (t2 ^ x) T2)
+      by auto.
+    assert (kinding E T2 knd_type)
+      by eauto using kinding_remove_typ_bind_l with typing_validated.
+    eapply typing_validated_let; eauto with typing_validated.
+    intros y Hn.
+    assert (typing_validated (E & y ~: sch_empty T1) P (t2 ^ y) T2)
+      by auto.
+    auto with typing_validated.
   - assert (valid_kind E (knd_range (typ_top CSet.universe) T2))
       as Hk by auto with kinding_validated.
     inversion Hk; subst.
@@ -4794,7 +5137,7 @@ Proof.
       as Hk4 by auto with subtype_validated.
     inversion Hk4; subst.
     pick_fresh x.
-    assert (typing_validated (E & x ~: sch_empty (typ_variant T5))
+    assert (typing_validated (E & x ~: sch_empty (typ_variant T5)) P
                              (t3 ^ x) T8)
       by auto.
     assert (kinding E T8 knd_type)
@@ -4803,10 +5146,10 @@ Proof.
       intros y Hn;
       assert
         (typing_validated
-           (E & y ~: sch_empty (typ_variant T3)) (t2 ^ y) T8)
+           (E & y ~: sch_empty (typ_variant T3)) P (t2 ^ y) T8)
         by auto;
       assert (typing_validated
-                (E & y ~: sch_empty (typ_variant T5)) (t3 ^ y) T8)
+                (E & y ~: sch_empty (typ_variant T5)) P (t3 ^ y) T8)
         by auto;
       auto with typing_validated.
   - assert (valid_kind E (knd_range T2 (typ_bot CSet.universe)))
@@ -4819,7 +5162,7 @@ Proof.
       as Hk2 by auto with subtype_validated.
     inversion Hk2; subst.
     pick_fresh x.
-    assert (typing_validated (E & x ~: sch_empty T3)
+    assert (typing_validated (E & x ~: sch_empty T3) P
                              (t2 ^ x) T4)
       by auto.
     assert (kinding E T4 knd_type)
@@ -4827,14 +5170,24 @@ Proof.
     econstructor; eauto with typing_validated;
       intros y Hn;
       assert (typing_validated
-                (E & y ~: sch_empty T3) (t2 ^ y) T4)
+                (E & y ~: sch_empty T3) P (t2 ^ y) T4)
         by auto;
       auto with typing_validated.   
   - econstr auto with typing_validated.
+  - econstr auto with typing_validated.
+  - econstr
+      eauto using kinding_from_store_type
+        with typing_validated type_equal_validated.  
+  - econstr auto with typing_validated.
+  - assert (kinding E (typ_ref T) knd_type)
+      as Hknd by auto with typing_validated.
+    inversion Hknd; subst.
+    econstr auto with typing_validated.
+  - econstr auto with typing_validated.
 Qed.
 
-Lemma validated_typing : forall E t T,
-    typing E t T -> typing_validated E t T.
+Lemma validated_typing : forall E P t T,
+    typing E P t T -> typing_validated E P t T.
 Proof.
   intros.
   apply validated_typing_regular.
@@ -4844,12 +5197,40 @@ Qed.
 
 Hint Extern 1 (valid_env ?E) =>
   match goal with
-  | H : typing E _ _ |- _ =>
-      apply (proj1 (typing_validated_inv (validated_typing H)))
+  | H : typing E _ _ _ |- _ =>
+      apply (proj31 (typing_validated_inv (validated_typing H)))
+  end : typing_validated.
+
+Hint Extern 1 (valid_store_type ?E ?P) =>
+  match goal with
+  | H : typing E P _ _ |- _ =>
+      apply (proj32 (typing_validated_inv (validated_typing H)))
   end : typing_validated.
 
 Hint Extern 1 (kinding ?E ?T knd_type) =>
   match goal with
-  | H : typing E _ T |- _ =>
-      apply (proj2 (typing_validated_inv (validated_typing H)))
+  | H : typing E _ _ T |- _ =>
+      apply (proj33 (typing_validated_inv (validated_typing H)))
   end : typing_validated.
+
+Lemma typing_store_validated_inv : forall E V P,
+    typing_store E V P ->
+    valid_env E /\ valid_store_type E P.
+Proof.
+  introv Ht.
+  destruct Ht as [_ [Hv _]].
+  splits; auto with valid_store_type_validated.
+Qed.
+
+Hint Extern 1 (valid_env ?E) =>
+  match goal with
+  | H : typing_store E _ _ |- _ =>
+      apply (proj1 (typing_store_validated_inv H))
+  end : typing_store_validated.
+
+Hint Extern 1 (valid_store_type ?E ?P) =>
+  match goal with
+  | H : typing_store E _ P |- _ =>
+      apply (proj2 (typing_store_validated_inv H))
+  end : typing_store_validated.
+

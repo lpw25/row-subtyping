@@ -67,6 +67,8 @@ module rec Type : sig
 
   val unit : unit -> t
 
+  val ref : t -> t
+
   val top : Constructor.CSet.t -> t
 
   val bot : Constructor.CSet.t -> t
@@ -158,6 +160,8 @@ end
 module Printing : sig
 
   val print : Type.t -> unit
+
+  val print_scheme : Scheme.t -> unit
 
   val print_unification_error : Type.t -> Type.t -> Error.t -> unit
 

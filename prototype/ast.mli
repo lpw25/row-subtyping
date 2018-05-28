@@ -3,6 +3,10 @@ type location =
   { start_pos : Lexing.position;
     end_pos : Lexing.position; }
 
+type 'a with_location =
+  { desc : 'a;
+    location : location; }
+
 type var = string
 
 type binding =
@@ -23,10 +27,12 @@ type expr_desc =
   | Constructor of { constructor : constructor; arg : expr; }
   | Match of { expr: expr; cases : case list; }
   | Unit
+  | Ref of { value: expr; }
+  | Deref of { reference: expr; }
+  | Set of { reference: expr; value: expr; }
+  | Sequence of { left : expr; right: expr; }
 
-and expr =
-  { desc : expr_desc;
-    location : location; }
+and expr = expr_desc with_location
 
 and case =
   | Destruct of
@@ -40,15 +46,23 @@ and case =
         body : expr;
         location : location; }
 
-type definition =
-  { binding : binding;
-    params : binding list;
-    def : expr;
-    location : location; }
+type statement_desc =
+  | Definition of
+      { binding : binding;
+        params : binding list;
+        def : expr; }
+  | Expr of
+      { expr : expr; }
 
-type phrase =
-  | Definition of definition
-  | Directive of string
+type statement = statement_desc with_location
+
+type phrase_desc =
+  | Statement of
+      { statement: statement }
+  | Directive of
+      { directive : string }
+
+type phrase = phrase_desc with_location
 
 (** Debug printing functions *)
 
@@ -67,4 +81,4 @@ val dump_expr : expr dump
 
 val dump_case : case dump
 
-val dump_definition : definition dump
+val dump_statement : statement dump

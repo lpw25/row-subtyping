@@ -162,7 +162,7 @@ phrase: LET UNDERSCORE EQUALS LIDENT LIDENT UNDERSCORE
 ## simple_expr 
 ##
 
-Not a valid function argument
+Expected an argument
 
 phrase: LET UNDERSCORE EQUALS LIDENT UNDERSCORE 
 ##
@@ -175,7 +175,7 @@ phrase: LET UNDERSCORE EQUALS LIDENT UNDERSCORE
 ## simple_expr 
 ##
 
-Not a valid function argument
+Expected an argument
 
 phrase: LET UNDERSCORE EQUALS LIDENT WITH 
 ##
@@ -476,3 +476,73 @@ phrase: LET WITH
 ##
 
 Expected a variable name or "_"
+
+phrase: BANG WITH 
+##
+## Ends in an error in state: 6.
+##
+## simple_expr -> BANG . simple_expr [ WITH SEMISEMI SEMI RPAREN LPAREN LIDENT IN END COLONEQUALS BAR BANG ]
+##
+## The known suffix of the stack is as follows:
+## BANG 
+##
+
+Expected an argument
+
+phrase: LIDENT COLONEQUALS WITH 
+##
+## Ends in an error in state: 19.
+##
+## expr -> simple_expr COLONEQUALS . expr [ WITH SEMISEMI SEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## simple_expr COLONEQUALS 
+##
+
+Expected an expression
+
+phrase: MATCH LIDENT IN 
+##
+## Ends in an error in state: 30.
+##
+## sequence_expr -> expr . [ WITH SEMISEMI RPAREN END BAR ]
+## sequence_expr -> expr . SEMI sequence_expr [ WITH SEMISEMI RPAREN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## expr 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 18, spurious reduction of production expr -> simple_expr 
+##
+
+Expected an argument or ';'
+
+phrase: MATCH LIDENT SEMI WITH 
+##
+## Ends in an error in state: 31.
+##
+## sequence_expr -> expr SEMI . sequence_expr [ WITH SEMISEMI RPAREN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## expr SEMI 
+##
+
+Expected an expression sequence
+
+phrase: REF WITH 
+##
+## Ends in an error in state: 4.
+##
+## expr -> REF . simple_expr [ WITH SEMISEMI SEMI RPAREN IN END BAR ]
+##
+## The known suffix of the stack is as follows:
+## REF 
+##
+
+Expected an argument
+
+
+

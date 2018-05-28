@@ -193,6 +193,7 @@ module rec TypeT : sig
     | Variant of t
     | Arrow of t * t
     | Unit
+    | Ref of t
     | Top of Constructor.CSet.t
     | Bot of Constructor.CSet.t
     | Meet of t * t
@@ -264,6 +265,8 @@ module rec Type : sig
   val arrow : t -> t -> t
 
   val unit : unit -> t
+
+  val ref : t -> t
 
   val top : Constructor.CSet.t -> t
 
@@ -357,6 +360,11 @@ end = struct
     let kind = Kind.Type in
     { desc; kind }
 
+  let ref t =
+    let desc = Ref t in
+    let kind = Kind.Type in
+    { desc; kind }
+
   let top cs =
     let desc = Top cs in
     let kind = Kind.Row cs in
@@ -382,7 +390,7 @@ end = struct
         Var.Set.empty
     | Var v ->
         Var.Set.singleton v
-    | Constructor(_, t) | Proj(_, t, _) | Row t | Variant t ->
+    | Constructor(_, t) | Proj(_, t, _) | Row t | Variant t | Ref t ->
         free_variables t
     | Or(_, t1, _, t2) | Arrow(t1, t2) | Meet(t1, t2) | Join(t1, t2) ->
         Var.Set.union (free_variables t1) (free_variables t2)
@@ -407,6 +415,9 @@ end = struct
         let desc = Arrow (subst_types s t1, subst_types s t2) in
         { kind; desc }
     | Unit -> { kind; desc }
+    | Ref t ->
+        let desc = Ref (subst_types s t) in
+        { kind; desc }
     | (Constructor _ | Or _ | Proj _ | Row _
        | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
@@ -424,7 +435,7 @@ end = struct
         let desc = Row (subst_row_invariant s t) in
         { kind; desc }
     | (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
-       | Unit | Top _ | Bot _ | Meet _ | Join _) ->
+       | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
 
   and subst_row_covariant s t =
@@ -456,6 +467,7 @@ end = struct
     | Variant _ -> assert false
     | Arrow _ -> assert false
     | Unit -> assert false
+    | Ref _ -> assert false
     | Meet _ -> assert false
 
   and subst_row_contravariant s t =
@@ -489,6 +501,7 @@ end = struct
     | Variant _ -> assert false
     | Arrow _ -> assert false
     | Unit -> assert false
+    | Ref _ -> assert false
     | Join _ -> assert false
 
   and subst_row_invariant s t =
@@ -508,7 +521,7 @@ end = struct
     | Top _ -> t
     | Bot _ -> t
     | (Var _ | Row _ | Variant _
-       | Unit | Arrow _ | Meet _ | Join _) ->
+       | Unit | Ref _ | Arrow _ | Meet _ | Join _) ->
         assert false
 
   let subst = subst_types
@@ -540,6 +553,9 @@ end = struct
         let desc = Arrow (subst_vars m t1, subst_vars m t2) in
         { kind; desc }
     | Unit -> t
+    | Ref t ->
+        let desc = Ref (subst_vars m t) in
+        { kind; desc }
     | Meet(t1, t2) ->
         let desc = Meet(subst_vars m t1, subst_vars m t2) in
         { kind; desc }
@@ -612,7 +628,7 @@ end = struct
                 if Constructor.CSet.equal cs cs' then desc'
                 else desc
           end
-        | Row _ | Variant _ | Arrow _ | Unit -> assert false
+        | Row _ | Variant _ | Arrow _ | Unit | Ref _ -> assert false
       end
     | Meet(t1, t2) -> begin
         match normalize t1.desc, normalize t2.desc with
@@ -726,6 +742,8 @@ end = struct
         unify_types t1' t2' >>| fun subst' ->
         Subst.compose subst subst'
     | Unit, Unit -> return Subst.empty
+    | Ref t1, Ref t2 ->
+        unify_types t1 t2
     | (Constructor _ | Or _ | Proj _ | Row _
        | Top _ | Bot _ | Meet _ | Join _), _ ->
         assert false
@@ -783,10 +801,10 @@ end = struct
     | Row t1, Row t2 ->
         unify_row t1 t2
     | (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
-       | Unit | Top _ | Bot _ | Meet _ | Join _), _ ->
+       | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _), _ ->
         assert false
     | _, (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
-       | Unit | Top _ | Bot _ | Meet _ | Join _) ->
+       | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
 
   and unify_row t1 t2 =
@@ -809,10 +827,10 @@ end = struct
     | Top _, Top _ -> return Subst.empty
     | Bot _, Bot _ -> return Subst.empty
     | (Var _ | Proj _ | Row _ | Variant _
-       | Arrow _ | Unit | Meet _ | Join _), _ ->
+       | Arrow _ | Unit | Ref _ | Meet _ | Join _), _ ->
         assert false
     | _, (Var _ | Proj _ | Row _ | Variant _
-          | Arrow _ | Unit | Meet _ | Join _) ->
+          | Arrow _ | Unit | Ref _ | Meet _ | Join _) ->
         assert false
     | _, _ -> error ()
 
@@ -885,9 +903,9 @@ end = struct
         let t2' = subst_row_contravariant subst t2' in
         biunify_row t1 t2' >>| fun subst' ->
         Subst.compose subst subst'
-    | (Row _ | Variant _ | Arrow _ | Unit | Meet _), _ ->
+    | (Row _ | Variant _ | Arrow _ | Unit | Ref _ | Meet _), _ ->
         assert false
-    | _, (Row _ | Variant _ | Arrow _ | Unit | Join _) ->
+    | _, (Row _ | Variant _ | Arrow _ | Unit | Ref _ | Join _) ->
         assert false
     | _, _ ->
         error ()
@@ -1146,13 +1164,20 @@ module Printing = struct
       { types : Var.Set.t;
         ranges : int Var.Map.t;
         row_covariant : Constructor.CSet.t Var.Map.t;
-        row_contravariant : Constructor.CSet.t Var.Map.t; }
+        row_contravariant : Constructor.CSet.t Var.Map.t;
+        nongen_types : Var.Set.t;
+        nongen_ranges : int Var.Map.t;
+        nongen_rows : Var.Set.t;
+      }
 
     let empty =
       { types = Var.Set.empty;
         ranges = Var.Map.empty;
         row_covariant = Var.Map.empty;
-        row_contravariant = Var.Map.empty; }
+        row_contravariant = Var.Map.empty;
+        nongen_types = Var.Set.empty;
+        nongen_ranges = Var.Map.empty;
+        nongen_rows = Var.Set.empty; }
 
     let combine u1 u2 =
       { types =
@@ -1165,19 +1190,37 @@ module Printing = struct
             u1.row_covariant u2.row_covariant;
         row_contravariant =
           Var.Map.union (fun _ cs1 _ -> Some cs1)
-            u1.row_contravariant u2.row_contravariant; }
+            u1.row_contravariant u2.row_contravariant;
+        nongen_types =
+          Var.Set.union u1.nongen_types u2.nongen_types;
+        nongen_ranges =
+          Var.Map.union (fun _ c1 c2 -> Some (c1 + c2))
+            u1.nongen_ranges u2.nongen_ranges;
+        nongen_rows = Var.Set.union u1.nongen_rows u2.nongen_rows; }
 
-    let singleton_type v =
-      { empty with types = Var.Set.singleton v }
+    let singleton_type gen v =
+      if Var.Set.mem v gen then
+        { empty with types = Var.Set.singleton v }
+      else
+        { empty with nongen_types = Var.Set.singleton v }
 
-    let singleton_range v =
-      { empty with ranges = Var.Map.singleton v 1 }
+    let singleton_range gen v =
+      if Var.Set.mem v gen then
+        { empty with ranges = Var.Map.singleton v 1 }
+      else
+        { empty with nongen_ranges = Var.Map.singleton v 1 }
 
-    let singleton_row_covariant v cs =
-      { empty with row_covariant = Var.Map.singleton v cs }
+    let singleton_row_covariant gen v cs =
+      if Var.Set.mem v gen then
+        { empty with row_covariant = Var.Map.singleton v cs }
+      else
+        { empty with nongen_rows = Var.Set.singleton v }
 
-    let singleton_row_contravariant v cs =
-      { empty with row_contravariant = Var.Map.singleton v cs }
+    let singleton_row_contravariant gen v cs =
+      if Var.Set.mem v gen then
+        { empty with row_contravariant = Var.Map.singleton v cs }
+      else
+        { empty with nongen_rows = Var.Set.singleton v }
 
     let only_row_covariant s =
       Var.Map.filter
@@ -1190,6 +1233,8 @@ module Printing = struct
         s.row_contravariant
 
     let types s = s.types
+
+    let nongen_types s = s.nongen_types
 
     let rows all s =
       if all then begin
@@ -1205,63 +1250,73 @@ module Printing = struct
           s.row_contravariant Var.Set.empty
       end
 
+    let nongen_rows s = s.nongen_rows
+
     let aliased_ranges s =
       Var.Map.fold
-        (fun v c acc ->
-          if c > 1 then Var.Set.add v acc
-          else acc)
-        s.ranges Var.Set.empty
+        (fun v c acc -> if c > 1 then Var.Set.add v acc else acc)
+        s.ranges
+        (Var.Map.fold
+           (fun v c acc -> if c > 1 then Var.Set.add v acc else acc)
+           s.nongen_ranges
+           Var.Set.empty)
+
+    let nongen_ranges s =
+      Var.Map.fold
+        (fun v _ acc -> Var.Set.add v acc)
+        s.nongen_ranges Var.Set.empty
 
   end
 
-  let rec analyse_type_vars_types t =
+  let rec analyse_type_vars_types gen t =
     let open Type in
     Uses.combine
-      (analyse_type_desc_vars_types t.desc)
-      (analyse_kind_vars t.kind)
+      (analyse_type_desc_vars_types gen t.desc)
+      (analyse_kind_vars gen t.kind)
 
-  and analyse_type_vars_ranges t =
+  and analyse_type_vars_ranges gen t =
     let open Type in
     Uses.combine
-      (analyse_type_desc_vars_ranges t.desc)
-      (analyse_kind_vars t.kind)
+      (analyse_type_desc_vars_ranges gen t.desc)
+      (analyse_kind_vars gen t.kind)
 
-  and analyse_type_vars_row_covariant t =
+  and analyse_type_vars_row_covariant gen t =
     let open Type in
     Uses.combine
-      (analyse_type_desc_vars_row_covariant t.kind t.desc)
-      (analyse_kind_vars t.kind)
+      (analyse_type_desc_vars_row_covariant gen t.kind t.desc)
+      (analyse_kind_vars gen t.kind)
 
-  and analyse_type_vars_row_contravariant t =
+  and analyse_type_vars_row_contravariant gen t =
     let open Type in
     Uses.combine
-      (analyse_type_desc_vars_row_contravariant t.kind t.desc)
-      (analyse_kind_vars t.kind)
+      (analyse_type_desc_vars_row_contravariant gen t.kind t.desc)
+      (analyse_kind_vars gen t.kind)
 
-  and analyse_type_vars_row_invariant t =
+  and analyse_type_vars_row_invariant gen t =
     let open Type in
     Uses.combine
-      (analyse_type_desc_vars_row_invariant t.desc)
-      (analyse_kind_vars t.kind)
+      (analyse_type_desc_vars_row_invariant gen t.desc)
+      (analyse_kind_vars gen t.kind)
 
-  and analyse_type_desc_vars_types =
+  and analyse_type_desc_vars_types gen =
     let open Type in function
-    | Var v -> Uses.singleton_type v
-    | Variant t -> analyse_type_vars_ranges t
+    | Var v -> Uses.singleton_type gen v
+    | Variant t -> analyse_type_vars_ranges gen t
     | Arrow(t1, t2) ->
         Uses.combine
-          (analyse_type_vars_types t1)
-          (analyse_type_vars_types t2)
+          (analyse_type_vars_types gen t1)
+          (analyse_type_vars_types gen t2)
     | Unit -> Uses.empty
+    | Ref t -> analyse_type_vars_types gen t
     | _ -> assert false
 
-  and analyse_type_desc_vars_ranges =
+  and analyse_type_desc_vars_ranges gen =
     let open Type in function
-    | Var v -> Uses.singleton_range v
-    | Row t -> analyse_type_vars_row_invariant t
+    | Var v -> Uses.singleton_range gen v
+    | Row t -> analyse_type_vars_row_invariant gen t
     | _ -> assert false
 
-  and analyse_type_desc_vars_row_covariant kind =
+  and analyse_type_desc_vars_row_covariant gen kind =
     let open Type in function
     | Var v ->
         let cs =
@@ -1269,18 +1324,18 @@ module Printing = struct
           | Row cs -> cs
           | _ -> assert false
         in
-        Uses.singleton_row_covariant v cs
-    | Constructor(_, t) -> analyse_type_vars_types t
+        Uses.singleton_row_covariant gen v cs
+    | Constructor(_, t) -> analyse_type_vars_types gen t
     | Or(_, t1, _, t2) | Join(t1, t2) ->
         Uses.combine
-          (analyse_type_vars_row_covariant t1)
-          (analyse_type_vars_row_covariant t2)
-    | Proj(_, t, _) -> analyse_type_vars_row_covariant t
+          (analyse_type_vars_row_covariant gen t1)
+          (analyse_type_vars_row_covariant gen t2)
+    | Proj(_, t, _) -> analyse_type_vars_row_covariant gen t
     | Top _ -> Uses.empty
     | Bot _ -> Uses.empty
     | _ -> assert false
 
-  and analyse_type_desc_vars_row_contravariant kind =
+  and analyse_type_desc_vars_row_contravariant gen kind =
     let open Type in function
     | Var v ->
         let cs =
@@ -1288,37 +1343,37 @@ module Printing = struct
           | Row cs -> cs
           | _ -> assert false
         in
-        Uses.singleton_row_contravariant v cs
-    | Constructor(_, t) -> analyse_type_vars_types t
+        Uses.singleton_row_contravariant gen v cs
+    | Constructor(_, t) -> analyse_type_vars_types gen t
     | Or(_, t1, _, t2) | Meet(t1, t2) ->
         Uses.combine
-          (analyse_type_vars_row_contravariant t1)
-          (analyse_type_vars_row_contravariant t2)
-    | Proj(_, t, _) -> analyse_type_vars_row_contravariant t
+          (analyse_type_vars_row_contravariant gen t1)
+          (analyse_type_vars_row_contravariant gen t2)
+    | Proj(_, t, _) -> analyse_type_vars_row_contravariant gen t
     | Top _ -> Uses.empty
     | Bot _ -> Uses.empty
     | _ -> assert false
 
-  and analyse_type_desc_vars_row_invariant =
+  and analyse_type_desc_vars_row_invariant gen =
     let open Type in function
-    | Constructor(_, t) -> analyse_type_vars_types t
+    | Constructor(_, t) -> analyse_type_vars_types gen t
     | Or(_, t1, _, t2) ->
         Uses.combine
-          (analyse_type_vars_row_contravariant t1)
-          (analyse_type_vars_row_contravariant t2)
-    | Proj(_, t, _) -> analyse_type_vars_row_contravariant t
+          (analyse_type_vars_row_contravariant gen t1)
+          (analyse_type_vars_row_contravariant gen t2)
+    | Proj(_, t, _) -> analyse_type_vars_row_contravariant gen t
     | Top _ -> Uses.empty
     | Bot _ -> Uses.empty
     | _ -> assert false
 
-  and analyse_kind_vars =
+  and analyse_kind_vars gen =
     let open Kind in function
     | Type -> Uses.empty
     | Row _ -> Uses.empty
     | Range(t1, t2) ->
         Uses.combine
-          (analyse_type_vars_row_covariant t1)
-          (analyse_type_vars_row_contravariant t2)
+          (analyse_type_vars_row_covariant gen t1)
+          (analyse_type_vars_row_contravariant gen t2)
 
   let name offset i =
     let code = 97 + ((i + offset) mod 26) in
@@ -1340,7 +1395,7 @@ module Printing = struct
           (i, map))
         (Uses.types uses) (0, Var.Map.empty)
     in
-    let _, names =
+    let count, names =
       Var.Set.fold
         (fun v (i, map) ->
           let name = name_types i in
@@ -1349,7 +1404,16 @@ module Printing = struct
           (i, map))
         (Uses.aliased_ranges uses) (count, names)
     in
-    let _, names =
+    let count, names =
+      Var.Set.fold
+        (fun v (i, map) ->
+          let name = name_types i in
+          let i = i + 1 in
+          let map = Var.Map.add v ("'_" ^ name) map in
+          (i, map))
+        (Uses.nongen_types uses) (count, names)
+    in
+    let count2, names =
       Var.Set.fold
         (fun v (i, map) ->
           let name = name_rows i in
@@ -1358,12 +1422,22 @@ module Printing = struct
           (i, map))
         (Uses.rows all uses) (0, names)
     in
+    let _, names =
+      Var.Set.fold
+        (fun v (i, map) ->
+          let name = name_rows i in
+          let i = i + 1 in
+          let map = Var.Map.add v ("!_" ^ name) map in
+          (i, map))
+        (Uses.nongen_rows uses) (count2, names)
+    in
     names
 
   type context =
     | At_toplevel
     | In_arrow_left
     | In_arrow_right
+    | In_ref
     | In_constructor
     | In_or
     | In_meet
@@ -1391,6 +1465,9 @@ module Printing = struct
     | Variant _, _ -> false
     | Arrow _, (In_arrow_right | At_toplevel) -> false
     | Arrow _, _ -> true
+    | Ref _, (In_arrow_left | In_arrow_right | At_toplevel | In_constructor) ->
+        false
+    | Ref _, _ -> true
     | Unit, _ -> false
     | Top _, In_proj -> false
     | Top _, _ -> false
@@ -1403,7 +1480,16 @@ module Printing = struct
 
   let printf = Format.printf
 
-  let rec print_type_desc ctx raw aliased names desc =
+  let print_var aliased names v =
+    match Var.Map.find v names with
+    | name ->
+        printf "%s" name;
+        aliased
+    | exception Not_found ->
+        printf "<%s>" (Var.to_string v);
+        aliased
+
+  let rec print_type_desc ctx raw aliased names nongen desc =
     let open Type in
     let desc = normal raw desc in
     let needs_parens = needs_parens raw desc ctx in
@@ -1413,11 +1499,11 @@ module Printing = struct
       | Var v -> print_var aliased names v
       | Constructor(c, t) ->
           printf "%s of " (Constructor.to_string c);
-          print_type In_constructor raw aliased names t
+          print_type In_constructor raw aliased names nongen t
       | Or(cs1, t1, cs2, t2) -> begin
           match normal raw t1.desc, normal raw t2.desc with
-          | Bot _, _ when not raw-> print_type ctx raw aliased names t2
-          | _, Bot _ when not raw -> print_type ctx raw aliased names t1
+          | Bot _, _ when not raw-> print_type ctx raw aliased names nongen t2
+          | _, Bot _ when not raw -> print_type ctx raw aliased names nongen t1
           | _ ->
               let left, right =
                 if Constructor.CSet.is_finite cs2
@@ -1425,12 +1511,12 @@ module Printing = struct
                   t2, t1
                 else t1, t2
               in
-              let aliased = print_type In_or raw aliased names left in
+              let aliased = print_type In_or raw aliased names nongen left in
               printf " | ";
-              print_type In_or raw aliased names right
+              print_type In_or raw aliased names nongen right
         end
       | Proj(cs1, t, cs2) -> begin
-          let aliased = print_type In_proj raw aliased names t in
+          let aliased = print_type In_proj raw aliased names nongen t in
           match Constructor.CSet.proj_representation cs1 cs2 with
           | Absolute cs ->
               printf "/[ ";
@@ -1448,7 +1534,7 @@ module Printing = struct
           match t.desc with
           | Var v ->
               if raw then begin
-                let aliased = print_kind raw aliased names t.kind in
+                let aliased = print_kind raw aliased names nongen t.kind in
                 printf " as <%s>" (Var.to_string v);
                 aliased
               end else begin
@@ -1457,24 +1543,32 @@ module Printing = struct
                   match Var.Map.find v names with
                   | s ->
                       let aliased = Var.Set.add v aliased in
-                      let aliased = print_kind raw aliased names t.kind in
+                      if Var.Set.mem v nongen then printf "_";
+                      let aliased =
+                        print_kind raw aliased names nongen t.kind
+                      in
                       printf " as %s" s;
                       aliased
                   | exception Not_found ->
-                      print_kind raw aliased names t.kind
+                      if Var.Set.mem v nongen then printf "_";
+                      print_kind raw aliased names nongen t.kind
                 end
               end
           | Row t ->
               printf "[";
-              let aliased = print_type In_row raw aliased names t in
+              let aliased = print_type In_row raw aliased names nongen t in
               printf "]";
               aliased
           | _ -> assert false
         end
       | Arrow(t1, t2) ->
-          let aliased = print_type In_arrow_left raw aliased names t1 in
+          let aliased = print_type In_arrow_left raw aliased names nongen t1 in
           printf " -> ";
-          print_type In_arrow_right raw aliased names t2
+          print_type In_arrow_right raw aliased names nongen t2
+      | Ref t ->
+          let aliased = print_type In_row raw aliased names nongen t in
+          printf " ref";
+          aliased
       | Unit ->
           printf "unit";
           aliased
@@ -1489,58 +1583,51 @@ module Printing = struct
             Constructor.CSet.print_raw cs;
           aliased
       | Meet(t1, t2) ->
-          let aliased = print_type In_meet raw aliased names t1 in
+          let aliased = print_type In_meet raw aliased names nongen t1 in
           printf " /\\ ";
-          print_type In_meet raw aliased names t2
+          print_type In_meet raw aliased names nongen t2
       | Join(t1, t2) ->
-          let aliased = print_type In_join raw aliased names t1 in
+          let aliased = print_type In_join raw aliased names nongen t1 in
           printf " \\/ ";
-          print_type In_join raw aliased names t2
+          print_type In_join raw aliased names nongen t2
     in
     if needs_parens then printf ")";
     aliased
 
-    and print_type (ctx : context) raw aliased names t =
-      let open Type in
-      print_type_desc ctx raw aliased names t.desc
+  and print_type (ctx : context) raw aliased names nongen t =
+    let open Type in
+    print_type_desc ctx raw aliased names nongen t.desc
 
-    and print_kind raw aliased names =
-      let open Kind in function
-      | Type | Row _ -> assert false
-      | Range(t1, t2) ->
-          match normal raw t1.desc, normal raw t2.desc with
-          | Bot _, Top _ ->
-              printf "[+ bot - top]";
-              aliased
-          | Bot _, _ ->
-              printf "[- ";
-              let aliased = print_type In_row raw aliased names t2 in
-              printf "]";
-              aliased
-          | _, Top _ ->
-              printf "[+ ";
-              let aliased = print_type In_row raw aliased names t1 in
-              printf "]";
-              aliased
-          | _, _ ->
-              printf "[+ ";
-              let aliased = print_type In_row raw aliased names t1 in
-              printf " - ";
-              let aliased = print_type In_row raw aliased names t2 in
-              printf "]";
-              aliased
-
-    and print_var aliased names v =
-      match Var.Map.find v names with
-      | name ->
-          printf "%s" name;
-          aliased
-      | exception Not_found ->
-          printf "<%s>" (Var.to_string v);
-          aliased
+  and print_kind raw aliased names nongen =
+    let open Kind in function
+    | Type | Row _ -> assert false
+    | Range(t1, t2) ->
+        match normal raw t1.desc, normal raw t2.desc with
+        | Bot _, Top _ ->
+            printf "[+ bot - top]";
+            aliased
+        | Bot _, _ ->
+            printf "[- ";
+            let aliased = print_type In_row raw aliased names nongen t2 in
+            printf "]";
+            aliased
+        | _, Top _ ->
+            printf "[+ ";
+            let aliased = print_type In_row raw aliased names nongen t1 in
+            printf "]";
+            aliased
+        | _, _ ->
+            printf "[+ ";
+            let aliased = print_type In_row raw aliased names nongen t1 in
+            printf " - ";
+            let aliased = print_type In_row raw aliased names nongen t2 in
+            printf "]";
+            aliased
 
   let print_raw t =
-    ignore (print_type At_toplevel true Var.Set.empty Var.Map.empty t)
+    ignore
+      (print_type At_toplevel true
+         Var.Set.empty Var.Map.empty Var.Set.empty t)
 
   let print_raw_scheme s =
     Var.Set.iter
@@ -1569,8 +1656,8 @@ module Printing = struct
       subst ();
     printf "@]]"
 
-  let print t =
-    let uses = analyse_type_vars_types t in
+  let print_gen vars t =
+    let uses = analyse_type_vars_types vars t in
     let subst =
       Var.Map.fold
         (fun v cs acc -> Subst.add_row_covariant acc v (Type.bot cs))
@@ -1583,19 +1670,31 @@ module Printing = struct
     in
     let t = Type.subst_types subst t in
     let names = names false uses in
-    ignore (print_type At_toplevel false Var.Set.empty names t)
+    let nongen = Uses.nongen_ranges uses in
+    ignore (print_type At_toplevel false Var.Set.empty names nongen t)
+
+  let print t =
+    print_gen (Type.free_variables t) t
+
+  let print_scheme sch =
+    print_gen (Scheme.vars sch) (Scheme.type_ sch)
 
   let print_unification_error t1 t2 _ =
+    let vars =
+      Var.Set.union (Type.free_variables t1) (Type.free_variables t2)
+    in
     let uses =
       Uses.combine
-        (analyse_type_vars_types t1)
-        (analyse_type_vars_types t2)
+        (analyse_type_vars_types vars t1)
+        (analyse_type_vars_types vars t2)
     in
     let names = names true uses in
     printf "@[<v 2>Error: incompatible types:@ ";
-    let aliased = print_type At_toplevel false Var.Set.empty names t1 in
+    let aliased =
+      print_type At_toplevel false Var.Set.empty names Var.Set.empty t1
+    in
     printf "@;<1 -2>and:@ ";
-    ignore (print_type At_toplevel false aliased names t2);
+    ignore (print_type At_toplevel false aliased names Var.Set.empty t2);
     printf "@]"
 
 end

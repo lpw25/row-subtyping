@@ -15,12 +15,14 @@ Fixpoint typ_fv (T : typ) {struct T} : vars :=
   match T with
   | typ_bvar i => \{}
   | typ_fvar x => \{x}
-  | typ_constructor c T1 => (typ_fv T1)
+  | typ_constructor c T1 => typ_fv T1
   | typ_or cs1 T1 cs2 T2 => (typ_fv T1) \u (typ_fv T2)
-  | typ_proj cs1 T1 cs2 => (typ_fv T1)
-  | typ_row T1 => (typ_fv T1)
-  | typ_variant T1 => (typ_fv T1)
+  | typ_proj cs1 T1 cs2 => typ_fv T1
+  | typ_row T1 => typ_fv T1
+  | typ_variant T1 => typ_fv T1
   | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
+  | typ_ref T1 => typ_fv T1
+  | typ_unit => \{}
   | typ_top cs => \{}
   | typ_bot cs => \{}
   | typ_meet T1 T2 => (typ_fv T1) \u (typ_fv T2)
@@ -58,6 +60,9 @@ Definition bind_fv (B : bind) : vars :=
 Definition env_fv := 
   fv_in_values bind_fv.
 
+Definition styp_fv :=
+  fv_in_values typ_fv.
+
 (** Computing free variables of a term. *)
 
 Fixpoint trm_fv (t : trm) {struct t} : vars :=
@@ -71,6 +76,11 @@ Fixpoint trm_fv (t : trm) {struct t} : vars :=
   | trm_match t1 c t2 t3 => (trm_fv t1) \u (trm_fv t2) \u (trm_fv t3)
   | trm_destruct t1 c t2 => (trm_fv t1) \u (trm_fv t2)
   | trm_absurd t1 => trm_fv t1
+  | trm_unit => \{}
+  | trm_loc l => \{}
+  | trm_ref t1 => trm_fv t1
+  | trm_get t1 => trm_fv t1
+  | trm_set t1 t2 => (trm_fv t1) \u (trm_fv t2)
   end.
 
 (* *************************************************************** *)
@@ -88,6 +98,8 @@ Fixpoint typ_subst (Z : var) (U : typ) (T : typ) {struct T} : typ :=
   | typ_variant T1 => typ_variant (typ_subst Z U T1)
   | typ_arrow T1 T2 =>
       typ_arrow (typ_subst Z U T1) (typ_subst Z U T2)
+  | typ_ref T1 => typ_ref (typ_subst Z U T1)
+  | typ_unit => typ_unit
   | typ_top cs => typ_top cs
   | typ_bot cs => typ_bot cs
   | typ_meet T1 T2 =>
@@ -135,6 +147,21 @@ Definition bind_subst Z U B :=
 Definition env_subst Z U E :=
   map (bind_subst Z U) E.
 
+(** Substitution for store types *)
+Definition styp_subst Z U P :=
+  map (typ_subst Z U) P.
+
+Fixpoint styp_substs (Zs : list var) (Us : list typ) (P : styp)
+         {struct Zs} :=
+  match Zs with
+  | nil => P
+  | Z :: Zs =>
+    match Us with
+    | nil => P
+    | U :: Us => styp_substs Zs Us (styp_subst Z U P)
+    end
+  end.
+
 (** Substitution for name in a term. *)
 
 Fixpoint trm_subst (z : var) (u : trm) (t : trm) {struct t} : trm :=
@@ -151,6 +178,11 @@ Fixpoint trm_subst (z : var) (u : trm) (t : trm) {struct t} : trm :=
   | trm_destruct t1 c t2 =>
       trm_destruct (trm_subst z u t1) c (trm_subst z u t2)
   | trm_absurd t1 => trm_absurd (trm_subst z u t1)
+  | trm_unit => trm_unit
+  | trm_loc l => trm_loc l
+  | trm_ref t1 => trm_ref (trm_subst z u t1)
+  | trm_get t1 => trm_get (trm_subst z u t1)
+  | trm_set t1 t2 => trm_set (trm_subst z u t1) (trm_subst z u t2)
   end.
 
 Notation "[ z ~> u ] t" := (trm_subst z u t) (at level 68).
@@ -170,9 +202,10 @@ Ltac gather_vars :=
   let F := gather_vars_with (fun x : typ => typ_fv x) in
   let G := gather_vars_with (fun x : list typ => typ_fv_list x) in
   let H := gather_vars_with (fun x : env => env_fv x) in
-  let I := gather_vars_with (fun x : LibEnv.env bind => env_fv x) in
-  let J := gather_vars_with (fun x : sch => sch_fv x) in
-  constr:(A \u B \u C \u D \u E \u F \u G \u H \u I \u J).
+  let I := gather_vars_with (fun x : styp => styp_fv x) in
+  let J := gather_vars_with (fun x : LibEnv.env bind => env_fv x) in
+  let K := gather_vars_with (fun x : sch => sch_fv x) in
+  constr:(A \u B \u C \u D \u E \u F \u G \u H \u I \u J \u K).
 
 Tactic Notation "pick_fresh" ident(x) :=
   let L := gather_vars in (pick_fresh_gen L x).
@@ -1098,9 +1131,6 @@ Proof.
   assumption.
 Qed.
 
-Definition no_term_bindings E :=
-  forall x M, not (binds x (bind_typ M) E).
-
 Lemma no_term_bindings_empty :
     no_term_bindings empty.
 Proof.
@@ -1145,3 +1175,119 @@ Qed.
 Hint Resolve no_term_bindings_empty no_term_bindings_concat
      no_term_bindings_kind no_term_bindings_kinds
   : no_term_bindings.
+
+(* *************************************************************** *)
+(** ** Store types *)
+
+Lemma styp_fv_empty :
+  styp_fv empty = \{}.
+Proof.
+  unfold styp_fv, fv_in_values; rew_env_defs; simpl; reflexivity. 
+Qed.  
+
+Lemma styp_fv_single : forall x T,
+  styp_fv (x ~ T) = typ_fv T.
+Proof.
+  intros.
+  unfold styp_fv, fv_in_values; rew_env_defs; simpl. 
+  apply union_empty_r.
+Qed.  
+
+Lemma styp_fv_concat : forall E F,
+  styp_fv (E & F) = styp_fv E \u styp_fv F.
+Proof.
+  intros.
+  unfold styp_fv, fv_in_values; rew_env_defs.
+  rewrite LibList.map_app.
+  rewrite LibList.fold_right_app.
+  induction F.
+  - simpl. symmetry. apply union_empty_r.
+  - rewrite LibList.map_cons.
+    simpl.
+    rewrite union_comm_assoc.
+    rewrite IHF.
+    reflexivity.
+Qed. 
+
+Hint Rewrite styp_fv_empty styp_fv_single styp_fv_concat
+  : rew_styp_fv.
+
+Lemma styp_subst_empty : forall X U,
+  styp_subst X U empty = empty.
+Proof.
+  intros.
+  unfold styp_subst.
+  autorewrite with rew_env_map.
+  reflexivity. 
+Qed.
+
+Lemma styp_subst_single : forall X U x T,
+  styp_subst X U (x ~ T) = (x ~ typ_subst X U T).
+Proof.
+  intros.
+  unfold styp_subst.
+  autorewrite with rew_env_map.
+  reflexivity.
+Qed.  
+
+Lemma styp_subst_concat : forall X U E F,
+  styp_subst X U (E & F) = styp_subst X U E & styp_subst X U F.
+Proof.
+  intros.
+  unfold styp_subst.
+  autorewrite with rew_env_map.
+  reflexivity. 
+Qed.
+
+Hint Rewrite styp_subst_empty styp_subst_single styp_subst_concat
+  : rew_styp_subst.
+
+Lemma styp_dom_subst : forall Z U P,
+    dom (styp_subst Z U P) = dom P.
+Proof.
+  intros.
+  induction P using env_ind;
+    autorewrite with rew_styp_subst rew_env_dom.
+  - reflexivity.
+  - rewrite IHP. reflexivity.
+Qed.
+
+Hint Rewrite dom_empty dom_single dom_concat styp_dom_subst
+  : rew_styp_dom.
+
+Lemma styp_subst_fresh : forall X U P, 
+  X \notin styp_fv P -> 
+  styp_subst X U P = P.
+Proof.
+  intros.
+  induction P using env_ind;
+    autorewrite with rew_styp_subst rew_styp_fv in *.
+  - reflexivity.
+  - rewrite typ_subst_fresh; auto.
+    rewrite IHP; auto.
+Qed.
+
+Lemma styp_subst_binds : forall X T P Z U,
+    binds X T P ->
+    binds X (typ_subst Z U T) (styp_subst Z U P).
+Proof.
+  introv Hbd.
+  induction P using env_ind.
+  - apply binds_empty_inv in Hbd; contradiction.
+  - destruct (binds_push_inv Hbd) as [[Hx Hb]|[Hx Hb]].
+    + subst. autorewrite with rew_styp_subst.
+      apply binds_push_eq.
+    + autorewrite with rew_styp_subst.
+      apply binds_push_neq; auto.
+Qed.
+
+Lemma styp_substs_fresh : forall Xs Us P, 
+  fresh (styp_fv P) (length Xs) Xs ->
+  styp_substs Xs Us P = P.
+Proof.
+  introv H. generalize dependent Us.
+  induction Xs; intro; simpl; auto.
+  destruct Us; auto.
+  destruct H.
+  rewrite styp_subst_fresh; auto.
+Qed.

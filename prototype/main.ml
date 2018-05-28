@@ -1,16 +1,16 @@
 
 module StringMap = Map.Make(String)
 
-let last_type = ref None
+let last_scheme = ref None
 
 let quit () =
   exit 0
 
 let raw () =
-  match !last_type with
+  match !last_scheme with
   | None -> ()
-  | Some type_ ->
-      Types.Printing.print_raw type_;
+  | Some scheme ->
+      Types.Printing.print_raw_scheme scheme;
       Format.printf "\n%!"
 
 let directives_list =
@@ -173,32 +173,39 @@ let main () =
           supplier start
       in
       match phrase with
-      | Ok (Definition def) -> begin
-          let name =
-            match def.binding with
-            | Unnamed -> "_"
-            | Named { name; location } -> name
-          in
-          match Infer.infer env def with
-          | env, type_ ->
-              Format.printf "%s : " name;
-              Types.Printing.print type_;
-              Format.printf "\n%!";
-              last_type := Some type_;
-              env
-          | exception Infer.Error(loc, Typing(t1, t2, err)) ->
-              Types.Printing.print_unification_error t1 t2 err;
-              Format.printf "\n\n%!";
-              highlight_location lb loc.start_pos loc.end_pos;
-              env
-          | exception Infer.Error(loc, Binding name) ->
-              Format.printf "Error: unbound variable %s\n\n%!" name;
-              highlight_location lb loc.start_pos loc.end_pos;
+      | Ok phrase -> begin
+          match phrase.desc with
+          | Statement { statement } -> begin
+              let name =
+                match statement.desc with
+                | Definition { binding } -> begin
+                    match binding with
+                    | Unnamed -> "_"
+                    | Named { name; location } -> name
+                  end
+                | Expr _ -> "_"
+              in
+              match Infer.infer env statement with
+              | env, scheme ->
+                  Format.printf "%s : " name;
+                  Types.Printing.print_scheme scheme;
+                  Format.printf "\n%!";
+                  last_scheme := Some scheme;
+                  env
+              | exception Infer.Error(loc, Typing(t1, t2, err)) ->
+                  Types.Printing.print_unification_error t1 t2 err;
+                  Format.printf "\n\n%!";
+                  highlight_location lb loc.start_pos loc.end_pos;
+                  env
+              | exception Infer.Error(loc, Binding name) ->
+                  Format.printf "Error: unbound variable %s\n\n%!" name;
+                  highlight_location lb loc.start_pos loc.end_pos;
+                  env
+            end
+          | Directive { directive } ->
+              run_directive directive;
               env
         end
-      | Ok (Directive dir) ->
-          run_directive dir;
-          env
       | Error menv ->
           let start_pos, end_pos = Parser.MenhirInterpreter.positions menv in
           let state = Parser.MenhirInterpreter.current_state_number menv in

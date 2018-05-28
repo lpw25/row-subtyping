@@ -8,4 +8,4 @@ type error =
 
 exception Error of location * error
 
-val infer : Env.t -> definition -> Env.t * Type.t
+val infer : Env.t -> statement -> Env.t * Scheme.t

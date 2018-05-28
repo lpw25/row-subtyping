@@ -18,6 +18,43 @@ let lookup loc env v =
   | t -> t
   | exception Not_found -> raise (Error(loc, Binding v))
 
+let rec is_value ast =
+  match ast.desc with
+  | Var _ -> true
+  | Abs _ -> true
+  | Let { params; def; body } ->
+      let def_value =
+        match params with
+        | [] -> is_value def
+        | _ :: _ -> true
+      in
+      def_value && is_value body
+  | App _ -> false
+  | Constructor { arg } -> is_value arg
+  | Match { expr; cases } ->
+      is_value expr && List.for_all is_value_case cases
+  | Unit -> true
+  | Ref _ -> false
+  | Deref { reference } -> is_value reference
+  | Set { reference; value } ->
+      is_value reference && is_value value
+  | Sequence { right } -> is_value right
+
+and is_value_case = function
+  | Destruct { body } -> is_value body
+  | Default { body } -> is_value body
+
+let generalize_expr env expr typ =
+  if is_value expr then
+    Type.generalize env typ
+  else
+    Scheme.of_type typ
+
+let generalize_let env params def typ =
+  match params with
+  | [] -> generalize_expr env def typ
+  | _ :: _ -> Type.generalize env typ
+
 let rec infer_expr env ast =
   match ast.desc with
   | Var { name } ->
@@ -28,7 +65,7 @@ let rec infer_expr env ast =
   | Let { binding; params; def; body } ->
       let def_subst, def_t = infer_abs env ast.location params def in
       let env = Env.subst def_subst env in
-      let scheme = Type.generalize env def_t in
+      let scheme = generalize_let env params def def_t in
       let env =
         match binding with
         | Unnamed -> env
@@ -99,6 +136,37 @@ let rec infer_expr env ast =
       subst, result_t
   | Unit ->
       Subst.empty, Type.unit ()
+  | Ref { value } ->
+      let subst, value_t = infer_expr env value in
+      let result_t = Type.ref value_t in
+      subst, result_t
+  | Deref { reference } ->
+      let reference_subst, reference_t = infer_expr env reference in
+      let result_t = Type.fresh_var Kind.type_ in
+      let ref_t = Type.ref result_t in
+      let ref_subst = unify ast.location ref_t reference_t in
+      let result_t = Type.subst ref_subst result_t in
+      let subst = Subst.compose reference_subst ref_subst in
+      subst, result_t
+  | Set { reference; value } ->
+      let reference_subst, reference_t = infer_expr env reference in
+      let env = Env.subst reference_subst env in
+      let value_subst, value_t = infer_expr env value in
+      let ref_t = Type.ref value_t in
+      let ref_subst = unify reference.location ref_t reference_t in
+      let subst =
+        Subst.compose reference_subst
+          (Subst.compose value_subst ref_subst)
+      in
+      subst, Type.unit ()
+  | Sequence { left; right } ->
+      let left_subst, left_t = infer_expr env left in
+      let unit_subst = unify left.location left_t (Type.unit ()) in
+      let left_subst = Subst.compose left_subst unit_subst in
+      let env = Env.subst left_subst env in
+      let right_subst, right_t = infer_expr env right in
+      let subst = Subst.compose left_subst right_subst in
+      subst, right_t
 
 and infer_case env result_t incoming_t case =
   match case with
@@ -212,13 +280,20 @@ and infer_abs env loc params body =
   let subst = Subst.compose subst (unify loc s body_t) in
   subst, Type.subst subst t
 
-let infer env { binding; params; def; location} =
-  let def_subst, def_t = infer_abs env location params def in
-  let env = Env.subst def_subst env in
-  let scheme = Type.generalize env def_t in
-  let env =
-    match binding with
-    | Unnamed -> env
-    | Named { name; location } -> Env.add name scheme env
-  in
-  env, def_t
+let infer env x =
+  match x.desc with
+  | Definition { binding; params; def } ->
+      let def_subst, def_t = infer_abs env x.location params def in
+      let env = Env.subst def_subst env in
+      let scheme = generalize_let env params def def_t in
+      let env =
+        match binding with
+        | Unnamed -> env
+        | Named { name } -> Env.add name scheme env
+      in
+      env, scheme
+  | Expr { expr } ->
+      let subst, t = infer_expr env expr in
+      let env = Env.subst subst env in
+      let scheme = generalize_expr env expr t in
+      env, scheme

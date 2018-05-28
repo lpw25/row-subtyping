@@ -7,7 +7,7 @@ Set Implicit Arguments.
 Require Import LibLN Cofinite Definitions Substitution
         Wellformedness Kinding Subtyping.
 
-Hint Constructors typing.
+Hint Constructors value typing.
 
 Lemma valid_scheme_empty : forall E T,
     kinding E T knd_type ->
@@ -20,20 +20,20 @@ Proof.
   destruct Xs; try discriminate; auto.
 Qed.
 
-Lemma typing_weakening : forall E F G t T,
-    typing (E & G) t T ->
+Lemma typing_weakening : forall E F G P t T,
+    typing (E & G) P t T ->
     valid_env (E & F & G) ->
-    typing (E & F & G) t T.
+    typing (E & F & G) P t T.
 Proof.
   introv Ht Hv.
   apply validated_typing in Ht.
   remember (E & G) as EG.
   generalize dependent G.
   induction Ht; introv Heq Hv; subst;
-    eauto using valid_instance_weakening, binds_weakening,
+    eauto 6 using valid_instance_weakening, binds_weakening,
                 kinding_weakening, subtype_weakening,
-                type_equal_weakening
-          with valid_env_regular.    
+                type_equal_weakening, valid_store_type_weakening
+          with valid_env_regular.   
   - apply typing_abs with (L := L \u dom E \u dom F \u dom G);
       auto using kinding_weakening.
     intros x Hn.
@@ -42,8 +42,8 @@ Proof.
     rewrite <- concat_assoc.
     rewrite <- concat_assoc in He.
     auto using concat_assoc.
-  - apply typing_let
-      with (M := M) (L := L \u dom E \u dom F \u dom G).
+  - apply typing_let_val
+      with (M := M) (L := L \u dom E \u dom F \u dom G); auto.
     + intros Xs Hl.
       assert (valid_env (E & F & G & Xs ~::* M))
         as He by auto using valid_env_kinds_weakening.
@@ -56,6 +56,14 @@ Proof.
       rewrite <- concat_assoc.
       rewrite <- concat_assoc in He.
       auto using concat_assoc.
+  - apply typing_let
+      with (L := L \u dom E \u dom F \u dom G) (T1 := T1); auto.
+    intros x Hn.
+    assert (valid_env (E & F & G & x ~: sch_empty T1))
+      as He by auto using valid_env_type_weakening.
+    rewrite <- concat_assoc.
+    rewrite <- concat_assoc in He.
+    auto using concat_assoc.
   - apply typing_match
       with (L := L \u dom E \u dom F \u dom G)
            (T1 := T1) (T2 := T2) (T3 := T3) (T4 := T4)
@@ -88,20 +96,21 @@ Proof.
     auto using concat_assoc.
 Qed.
 
-Lemma typing_weakening_l : forall E F t T,
-    typing E t T ->
+Lemma typing_weakening_l : forall E F P t T,
+    typing E P t T ->
     valid_env (E & F) ->
-    typing (E & F) t T.
+    typing (E & F) P t T.
 Proof.
   introv Ht Hv.
   rewrite <- concat_empty_r with (E := E & F).
   apply typing_weakening; rewrite concat_empty_r; assumption.
 Qed.
 
-Lemma typing_typ_subst : forall E F X K S t T,
-    typing (E & X ~:: K & F) t T ->
+Lemma typing_typ_subst : forall E F X K S P t T,
+    typing (E & X ~:: K & F) P t T ->
     kinding E S K ->
-    typing (E & env_subst X S F) t (typ_subst X S T).
+    typing (E & env_subst X S F) (styp_subst X S P) t
+           (typ_subst X S T).
 Proof.
   introv Ht Hk.
   remember (E & X ~:: K & F) as EXF.
@@ -111,7 +120,8 @@ Proof.
         with (M := sch_subst X S M)
              (Us := (List.map (typ_subst X S) Us));
       eauto using valid_env_typ_subst, valid_instance_typ_subst,
-                  sch_subst_instance, binds_typ_typ_subst
+                  sch_subst_instance, binds_typ_typ_subst,
+                  valid_store_type_typ_subst
             with kinding_regular.
     replace knd_type with (knd_subst X S knd_type) by reflexivity.
     rewrite<- sch_subst_instance; auto with kinding_regular.
@@ -126,8 +136,9 @@ Proof.
       rewrite <- concat_assoc.
       rewrite <- env_subst_typ.
       auto using concat_assoc.
-  - apply typing_let
+  - apply typing_let_val
       with (L := L \u \{X} \u dom E \u dom F) (M := sch_subst X S M).
+    + assumption.
     + introv Hf.
       autorewrite with rew_sch_arity in Hf.
       fresh_length Hf as Hl.
@@ -144,6 +155,15 @@ Proof.
       rewrite <- concat_assoc.
       rewrite <- env_subst_typ.
       auto using concat_assoc.
+  - apply typing_let
+      with (L := L \u \{X} \u dom E \u dom F)
+             (T1 := typ_subst X S T1); auto.
+    introv Hn.
+    rewrite <- concat_assoc.
+    replace (sch_empty (typ_subst X S T1))
+      with (sch_subst X S (sch_empty T1)) by reflexivity.
+    rewrite <- env_subst_typ.
+    auto using concat_assoc.
   - apply typing_constructor
       with (T2 := typ_subst X S T2) (T3 := typ_subst X S T3); auto.
     + replace (knd_range (typ_top CSet.universe) (typ_subst X S T2))
@@ -262,12 +282,21 @@ Proof.
       eauto using kinding_typ_subst.
     + replace knd_type with (knd_subst X S knd_type) by reflexivity.
       eauto using kinding_typ_subst.
+  - apply typing_unit;
+      eauto using valid_env_typ_subst, valid_store_type_typ_subst.
+  - apply typing_loc with (T1 := typ_subst X S T1);
+      eauto
+        using valid_env_typ_subst, valid_store_type_typ_subst,
+          styp_subst_binds.
+    fold (knd_subst X S knd_type).
+    eauto using type_equal_typ_subst.
+  - apply typing_ref; auto.
 Qed.
 
-Lemma typing_typ_subst_l : forall E X K S t T,
-    typing (E & X ~:: K) t T ->
+Lemma typing_typ_subst_l : forall E X K S P t T,
+    typing (E & X ~:: K) P t T ->
     kinding E S K ->
-    typing E t (typ_subst X S T).
+    typing E (styp_subst X S P) t (typ_subst X S T).
 Proof.
   introv Ht Hk.
   rewrite <- concat_empty_r with (E := E).
@@ -277,27 +306,28 @@ Proof.
   eauto using typing_typ_subst.
 Qed.      
 
-Lemma typing_typ_substs_l : forall E Xs M Us t T,
+Lemma typing_typ_substs_l : forall E Xs M Us P t T,
     fresh (dom E) (sch_arity M) Xs ->
-    typing (E & Xs ~::* M) t T ->
+    typing (E & Xs ~::* M) P t T ->
     valid_instance E Us M ->
-    typing E t (typ_substs Xs Us T).
+    typing E (styp_substs Xs Us P) t (typ_substs Xs Us T).
 Proof.
   introv Hf Ht Hv.
   generalize dependent Us.
   generalize dependent M.
   generalize dependent T.
+  generalize dependent P.
   induction Xs; introv Hf Ht Hv.
   - simpl. simpl in Ht. rewrite concat_empty_r in Ht.
     auto using typing_weakening_l with valid_instance_validated.
   - assert (types (sch_arity M) Us) as Hts
       by auto with valid_instance_regular.
     destruct Hts as [Hl2 Hts].
-    destruct Us; destruct M; try discriminate.
-    simpl.
-    fresh_length Hf as Hl1.
+    destruct Us; destruct M; try discriminate;
+      simpl;
+      fresh_length Hf as Hl1;
+      inversion Hl1.
     inversion Hl2.
-    inversion Hl1.
     inversion Hf.
     inversion Hv.
     inversion Hts.
@@ -316,26 +346,29 @@ Proof.
     auto.
 Qed.
 
-Lemma typing_instance : forall L E M t Us,
+Lemma typing_instance : forall L E M P t Us,
   (forall Xs,
     fresh L (sch_arity M) Xs ->
-    typing (E & Xs ~::* M) t (instance_vars M Xs)) ->
+    typing (E & Xs ~::* M) P t (instance_vars M Xs)) ->
   valid_instance E Us M ->
-  typing E t (instance M Us). 
+  typing E P t (instance M Us). 
 Proof.
   introv Hs Hv.
   pick_freshes (sch_arity M) Xs.
+  fresh_length Fr as Hl.
   rewrite typ_substs_intro_instance with (Xs := Xs);
     auto with valid_instance_regular.
+  rewrite <- styp_substs_fresh with (Xs := Xs) (Us := Us) (P := P);
+    auto.
   apply typing_typ_substs_l with (M := M); auto.
 Qed.
 
 (* Respects type equality *)
 
-Lemma typing_equal_binding : forall E F T1 T2 x t T,
+Lemma typing_equal_binding : forall E F T1 T2 x P t T,
     type_equal E T1 T2 knd_type ->
-    typing (E & x ~: sch_empty T1 & F) t T ->
-    typing (E & x ~: sch_empty T2 & F) t T.
+    typing (E & x ~: sch_empty T1 & F) P t T ->
+    typing (E & x ~: sch_empty T2 & F) P t T.
 Proof.
   introv He Ht.
   assert (valid_scheme E (sch_empty T2))
@@ -345,7 +378,9 @@ Proof.
   remember (E & x ~: sch_empty T1 & F) as ExF.
   generalize dependent F.
   induction Ht; intros; subst;
-    eauto using kinding_swap_typ_bind, subtype_swap_typ_bind.
+    eauto using kinding_swap_typ_bind, subtype_swap_typ_bind,
+      valid_store_type_swap_typ_bind, valid_env_swap_typ_bind,
+      type_equal_swap_typ_bind.
   - assert (valid_env (E & x ~: sch_empty T2 & F))
       by eauto using valid_env_swap_typ_bind with typing_validated.
     case_if_eq x x0.
@@ -356,6 +391,7 @@ Proof.
           by assumption.
         inversion Heq; subst; inversion Hi; subst; simpl in *.
         apply typing_var with (M := sch_empty T2) (Us := nil); auto.
+        - eauto using valid_store_type_swap_typ_bind.
         - eauto using binds_middle_eq, ok_middle_inv_r,
                       ok_from_environment, valid_instance_weakening,
                       valid_instance_remove_typ_bind.
@@ -370,20 +406,25 @@ Proof.
           using valid_instance_weakening,
                 valid_instance_remove_typ_bind,
                 type_equal_weakening, type_equal_remove_typ_bind,
-                binds_weakening, binds_subst
+                binds_weakening, binds_subst,
+                valid_store_type_swap_typ_bind
           with valid_env_regular.
   - econstructor;
       eauto using kinding_swap_typ_bind.
     introv Hn.
     rewrite<- concat_assoc.
     eauto using concat_assoc.
-  - econstructor.
+  - econstructor; try assumption.
     + introv Hf.
       rewrite<- concat_assoc.
       eauto using concat_assoc.
     + introv Hn.
       rewrite<- concat_assoc.
       eauto using concat_assoc.
+  - eapply typing_let; eauto.
+    introv Hn.
+    rewrite<- concat_assoc.
+    eauto using concat_assoc.
   - apply typing_match
       with (L := L) (T1 := T0) (T2 := T3) (T3 := T4)
            (T4 := T5) (T5 := T6) (T6 := T7) (T7 := T8);
@@ -401,10 +442,10 @@ Proof.
     eauto using concat_assoc.
 Qed.
 
-Lemma typing_equal_binding_l : forall E T1 T2 x t T,
+Lemma typing_equal_binding_l : forall E T1 T2 x P t T,
     type_equal E T1 T2 knd_type ->
-    typing (E & x ~: sch_empty T1) t T ->
-    typing (E & x ~: sch_empty T2) t T.
+    typing (E & x ~: sch_empty T1) P t T ->
+    typing (E & x ~: sch_empty T2) P t T.
 Proof.
   introv Hte Ht.
   rewrite<- concat_empty_r with (E := E & x ~: sch_empty T2).
@@ -412,9 +453,9 @@ Proof.
   eauto using typing_equal_binding.
 Qed.
 
-Lemma typing_equal_cong : forall E t T1 T2,
+Lemma typing_equal_cong : forall E P t T1 T2,
     type_equal_cong E T1 T2 knd_type ->
-    typing E t T1 -> typing E t T2.
+    typing E P t T1 -> typing E P t T2.
 Proof.
   introv He Ht.
   apply validated_typing in Ht.
@@ -444,7 +485,9 @@ Proof.
             by assumption.
           inversion Hec. }
   - eauto.
-  - apply typing_let with (L := L \u dom E) (M := M);
+  - apply typing_let_val with (L := L \u dom E) (M := M);
+      auto using type_equal_cong_weakening_l.
+  - apply typing_let with (L := L \u dom E) (T1 := T1);
       auto using type_equal_cong_weakening_l.
   - inversion He; subst.
     + apply typing_constructor with (T2 := T2) (T3 := T3); auto.
@@ -469,11 +512,58 @@ Proof.
       with (L := L) (T1 := T1) (T2 := T2) (T3 := T3);
       auto using type_equal_cong_weakening_l.
   - eauto with type_equal_cong_validated.
+  - inversion He.
+    assert (type_equal_symm E typ_unit T2 knd_type) as He2
+        by assumption.
+    inversion He2.
+    + assert (type_equal_core E typ_unit T2 knd_type) as He3
+        by assumption.
+      inversion He3.
+    + assert (type_equal_core E T2 typ_unit knd_type) as He3
+        by assumption.
+      inversion He3.
+  - inversion He; subst.
+    + assert (type_equal E T1 T1' knd_type)
+        by eauto using type_equal_post_step.
+      eauto.
+    + { assert
+          (type_equal_symm E (typ_ref T2) T0 knd_type) as Hes
+          by assumption.
+        inversion Hes.
+        - assert
+            (type_equal_core E (typ_ref T2) T0 knd_type) as Hec
+            by assumption.
+          inversion Hec.
+        - assert
+            (type_equal_core E T0 (typ_ref T2) knd_type) as Hec
+            by assumption.
+          inversion Hec. }
+  - inversion He; subst; auto.
+    assert (type_equal_symm E (typ_ref T) T2 knd_type) as He2
+        by assumption.
+    inversion He2.
+    + assert (type_equal_core E (typ_ref T) T2 knd_type) as He3
+        by assumption.
+      inversion He3.
+    + assert (type_equal_core E T2 (typ_ref T) knd_type) as He3
+        by assumption.
+      inversion He3.
+  - auto.
+  - inversion He.
+    assert (type_equal_symm E typ_unit T2 knd_type) as He2
+        by assumption.
+    inversion He2.
+    + assert (type_equal_core E typ_unit T2 knd_type) as He3
+        by assumption.
+      inversion He3.
+    + assert (type_equal_core E T2 typ_unit knd_type) as He3
+        by assumption.
+      inversion He3.
 Qed.
 
-Lemma typing_equal : forall E t T1 T2,
+Lemma typing_equal : forall E P t T1 T2,
     type_equal E T1 T2 knd_type ->
-    typing E t T1 -> typing E t T2.
+    typing E P t T1 -> typing E P t T2.
 Proof.
   introv Hte Ht.
   remember knd_type as K.
@@ -483,12 +573,26 @@ Qed.
 
 (* Term substitution *)
 
-Lemma typing_trm_subst : forall L E F x M s t T,
-    typing (E & x ~: M & F) t T ->
+Lemma value_trm_subst : forall x s t,
+    value t ->
+    term s ->
+    value (trm_subst x s t).
+Proof.
+  introv Hv Ht.
+  induction Hv; simpl; auto.
+  apply value_abs.
+  replace (trm_abs (trm_subst x s t))
+    with (trm_subst x s (trm_abs t))
+    by auto.
+  auto using trm_subst_term.
+Qed.
+
+Lemma typing_trm_subst : forall L E F x M P s t T,
+    typing (E & x ~: M & F) P t T ->
     (forall Xs,
       fresh L (sch_arity M) Xs ->
-      typing (E & Xs ~::* M) s (instance_vars M Xs)) ->
-    typing (E & F) (trm_subst x s t) T.
+      typing (E & Xs ~::* M) P s (instance_vars M Xs)) ->
+    typing (E & F) P (trm_subst x s t) T.
 Proof.
   introv Ht Hs.
   assert (term s)
@@ -499,7 +603,9 @@ Proof.
   apply validated_typing in Ht.
   generalize dependent F.
   induction Ht; intros; subst; simpl;
-    eauto using kinding_remove_typ_bind, subtype_remove_typ_bind.
+    eauto using kinding_remove_typ_bind, subtype_remove_typ_bind,
+      valid_env_remove_typ_bind, valid_store_type_remove_typ_bind,
+      type_equal_remove_typ_bind.
   - case_var.
     + assert (bind_typ M0 = bind_typ M) as Heq
         by eauto using binds_middle_eq_inv, ok_from_environment.
@@ -509,7 +615,7 @@ Proof.
       apply typing_instance with (L := L \u dom F);
         eauto using valid_instance_remove_typ_bind, valid_env_remove_typ_bind.
       introv Hf.
-      assert (typing (E & Xs ~::* M) s (instance_vars M Xs)) as Ht
+      assert (typing (E & Xs ~::* M) P s (instance_vars M Xs)) as Ht
         by auto.
       assert (valid_env (E & Xs ~::* M))
         by auto with typing_validated.
@@ -517,7 +623,8 @@ Proof.
         eauto using valid_env_kinds_weakening_l, valid_env_remove_typ_bind.
     + apply typing_var with (M := M0) (Us := Us);
         eauto using valid_env_remove_typ_bind,
-          valid_instance_remove_typ_bind, type_equal_remove_typ_bind. 
+          valid_instance_remove_typ_bind, type_equal_remove_typ_bind,
+          valid_store_type_remove_typ_bind. 
       apply binds_subst with (x2 := x) (v2 := bind_typ M); auto.
   - apply typing_abs with (L := L0 \u \{x}).
     + eauto using kinding_remove_typ_bind.
@@ -525,7 +632,8 @@ Proof.
       rewrite trm_subst_open_var; auto.
       rewrite<- concat_assoc.
       auto using concat_assoc.
-  - apply typing_let with (L := L0 \u \{x}) (M := M0).
+  - apply typing_let_val with (L := L0 \u \{x}) (M := M0).
+    + auto using value_trm_subst.
     + introv Hf.
       rewrite<- concat_assoc.
       auto using concat_assoc.
@@ -533,6 +641,11 @@ Proof.
       rewrite trm_subst_open_var; auto.
       rewrite<- concat_assoc.
       auto using concat_assoc.
+  - apply typing_let with (L := L0 \u \{x}) (T1 := T1); auto.
+    introv Hn.
+    rewrite trm_subst_open_var; auto.
+    rewrite<- concat_assoc.
+    auto using concat_assoc.
   - apply typing_match
       with (L := L0 \u \{x}) (T1 := T1) (T2 := T2) (T3 := T3)
            (T4 := T4) (T5 := T5) (T6 := T6) (T7 := T7);
@@ -554,12 +667,12 @@ Proof.
     auto using concat_assoc.
 Qed.
 
-Lemma typing_trm_subst_l : forall L E x M s t T,
-    typing (E & x ~: M) t T ->
+Lemma typing_trm_subst_l : forall L E x M P s t T,
+    typing (E & x ~: M) P t T ->
     (forall Xs,
       fresh L (sch_arity M) Xs ->
-      typing (E & Xs ~::* M) s (instance_vars M Xs)) ->
-    typing E (trm_subst x s t) T.
+      typing (E & Xs ~::* M) P s (instance_vars M Xs)) ->
+    typing E P (trm_subst x s t) T.
 Proof.
   introv Ht Hts.
   rewrite <- concat_empty_r with (E := E).
@@ -567,10 +680,10 @@ Proof.
   eauto using typing_trm_subst.
 Qed.
 
-Lemma typing_trm_subst_empty : forall E F x s t T1 T2,
-    typing (E & x ~: sch_empty T2 & F) t T1 ->
-    typing E s T2 ->
-    typing (E & F) (trm_subst x s t) T1.
+Lemma typing_trm_subst_empty : forall E F x P s t T1 T2,
+    typing (E & x ~: sch_empty T2 & F) P t T1 ->
+    typing E P s T2 ->
+    typing (E & F) P (trm_subst x s t) T1.
 Proof.
   introv Ht1 Ht2.
   apply typing_trm_subst with (L := \{}) (M := sch_empty T2); auto.
@@ -581,13 +694,40 @@ Proof.
   assumption.
 Qed.
 
-Lemma typing_trm_subst_empty_l : forall E x s t T1 T2,
-    typing (E & x ~: sch_empty T2) t T1 ->
-    typing E s T2 ->
-    typing E (trm_subst x s t) T1.
+Lemma typing_trm_subst_empty_l : forall E x P s t T1 T2,
+    typing (E & x ~: sch_empty T2) P t T1 ->
+    typing E P s T2 ->
+    typing E P (trm_subst x s t) T1.
 Proof.
   introv Ht Hts.
   rewrite <- concat_empty_r with (E := E).
   rewrite <- concat_empty_r with (E := E & x ~: sch_empty T2) in Ht.
   eauto using typing_trm_subst_empty.
+Qed.
+
+Lemma typing_extend_store_type : forall E P P' t T,
+    typing E P t T ->
+    extends P P' ->
+    valid_store_type E P' ->
+    typing E P' t T.
+Proof.
+  introv Ht He Hs.
+  apply validated_typing in Ht.
+  induction Ht; eauto.
+  - apply typing_abs with (L := L \u dom E); auto.
+    auto using valid_store_type_add_typ_bind_l, valid_scheme_empty.
+  - apply typing_let_val with (L := L \u dom E) (M := M); auto.
+    + auto using valid_store_type_weakening_l.
+    + auto using valid_store_type_add_typ_bind_l.
+  - apply typing_let with (L := L \u dom E) (T1 := T1); auto.
+    auto using valid_store_type_add_typ_bind_l, valid_scheme_empty.
+  - apply typing_match with (L := L \u dom E) (T1 := T1) (T2 := T2)
+      (T3 := T3) (T4 := T4) (T5 := T5) (T6 := T6) (T7 := T7); auto.
+    + eauto 6 using valid_store_type_add_typ_bind_l,
+        valid_scheme_empty, kinding_range_top_bot.
+    + eauto 6 using valid_store_type_add_typ_bind_l,
+        valid_scheme_empty, kinding_range_top_bot.
+  - apply typing_destruct
+      with (L := L \u dom E) (T1 := T1) (T2 := T2) (T3 := T3); auto.
+    auto using valid_store_type_add_typ_bind_l, valid_scheme_empty.
 Qed.
