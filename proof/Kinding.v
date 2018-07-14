@@ -985,8 +985,6 @@ Proof.
       autorewrite with rew_env_subst rew_env_concat.
       simpl.
       apply valid_env_type; autorewrite with rew_env_dom; eauto.
-  - apply type_equal_cong_range_subsumption
-      with (T3 := typ_subst X S T3) (T4 := typ_subst X S T4); eauto.
 Qed.
 
 Lemma valid_kind_typ_subst : forall E F X J S K,
@@ -2294,13 +2292,6 @@ with kinding_validated : env -> typ -> knd -> Prop :=
       CSet.Nonempty cs ->
       valid_env_validated E ->
       kinding_validated E (typ_proj cs T cs') (knd_row cs')
-  | kinding_validated_row : forall E T,
-      kinding_validated E T (knd_row CSet.universe) ->
-      environment E ->
-      type T ->
-      valid_env_validated E ->
-      valid_kind_validated E (knd_range T T) ->
-      kinding_validated E (typ_row T) (knd_range T T)
   | kinding_validated_variant : forall E T,
       kinding_validated E T
         (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
@@ -2842,31 +2833,6 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding_validated E T1' (knd_row cs1) ->
       type_equal_cong_validated E
         (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) (knd_row cs2)
-  | type_equal_cong_validated_row : forall E T1 T1',
-      type_equal_cong_validated E T1 T1' (knd_row CSet.universe) ->
-      environment E ->
-      type T1 ->
-      type T1' ->
-      valid_env_validated E ->
-      kinding_validated E T1 (knd_row CSet.universe) ->
-      kinding_validated E T1' (knd_row CSet.universe) ->
-      kinding_validated E (typ_row T1') (knd_range T1 T1) ->
-      valid_kind_validated E (knd_range T1 T1) ->
-      type_equal_cong_validated E
-        (typ_row T1) (typ_row T1') (knd_range T1 T1)
-  | type_equal_cong_validated_variant : forall E T1 T1',
-      type_equal_cong_validated E T1 T1'
-        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
-      environment E ->
-      type T1 ->
-      type T1' ->
-      valid_env_validated E ->
-      kinding_validated E T1
-        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
-      kinding_validated E T1'
-        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
-      type_equal_cong_validated E
-        (typ_variant T1) (typ_variant T1') knd_type
   | type_equal_cong_validated_arrow_l : forall E T1 T1' T2,
       kinding_validated E T2 knd_type ->
       type_equal_cong_validated E T1 T1' knd_type ->
@@ -2952,30 +2918,6 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding_validated E T2' (knd_row cs) ->
       type_equal_cong_validated E
         (typ_join T1 T2) (typ_join T1 T2') (knd_row cs)
-  | type_equal_cong_validated_range_subsumption :
-      forall E T1 T2 T3 T4 T3' T4',
-      type_equal_cong_validated E T1 T2 (knd_range T3 T4) ->
-      subtype_validated E T3 T3' CSet.universe ->
-      subtype_validated E T4' T4 CSet.universe ->
-      environment E ->
-      type T1 ->
-      type T2 ->
-      type T3 ->
-      type T3' ->
-      type T4 ->
-      type T4' ->
-      valid_env_validated E ->
-      kinding_validated E T1 (knd_range T3 T4) ->
-      kinding_validated E T2 (knd_range T3 T4) ->
-      kinding_validated E T3 (knd_row CSet.universe) ->
-      kinding_validated E T3' (knd_row CSet.universe) ->
-      kinding_validated E T4 (knd_row CSet.universe) ->
-      kinding_validated E T4' (knd_row CSet.universe) ->
-      subtype_validated E T4 T3 CSet.universe ->
-      subtype_validated E T4' T3' CSet.universe ->
-      valid_kind_validated E (knd_range T3 T4) ->
-      valid_kind_validated E (knd_range T3' T4') ->
-      type_equal_cong_validated E T1 T2 (knd_range T3' T4')
   | type_equal_cong_validated_symm : forall E T1 T1' K,
       type_equal_symm_validated E T1 T1' K ->
       environment E ->
@@ -3888,8 +3830,6 @@ Proof.
     auto with valid_env_validated valid_env_regular.
   - destruct (eq_push_inv H2) as [_ [? _]].
     discriminate.
-  - apply type_equal_cong_validated_range_subsumption
-      with (T3 := T3) (T4 := T4); auto with valid_env_regular.
   - apply type_equal_validated_step with (T2 := T2);
       auto with valid_env_regular.
 Qed.
@@ -4051,33 +3991,10 @@ Lemma type_equal_cong_validated_symmetric : forall E T1 T2 K,
     type_equal_cong_validated E T1 T2 K ->
     type_equal_cong_validated E T2 T1 K.
 Proof.
-  introv Hte.
+  introv Hte. 
   induction Hte;
     eauto using type_equal_symm_validated_symmetric,
       type_equal_cong_validated.
-  assert (type_equal_validated E T1 T1' (knd_row CSet.universe))
-    by eauto
-         using type_equal_validated_reflexive, type_equal_validated
-         with kinding_regular kinding_validated.
-  assert (type_equal_validated E T1' T1 (knd_row CSet.universe))
-    by eauto
-         using type_equal_validated_reflexive, type_equal_validated
-         with kinding_regular kinding_validated.
-  assert (subtype_validated E T1 T1' CSet.universe)
-    by auto using subtype_validated_reflexive.
-  assert (subtype_validated E T1' T1 CSet.universe)
-    by auto using subtype_validated_reflexive.
-  assert (valid_kind_validated E (knd_range T1' T1'))
-    by auto using valid_kind_validated, subtype_validated_refl.
-  assert (kinding_validated E (typ_row T1') (knd_range T1' T1'))
-    by eauto using kinding_validated.
-  assert (kinding_validated E (typ_row T1) (knd_range T1' T1'))
-    by (eapply kinding_validated_range_subsumption;
-          eauto using subtype_validated_refl with kinding_validated).
-  apply type_equal_cong_validated_range_subsumption
-    with (T3 := T1') (T4 := T1');
-    eauto using subtype_validated_refl, type_equal_cong_validated,
-      valid_kind_validated, subtype_validated_refl.
 Qed.
 
 Lemma type_equal_validated_symmetric_ind : forall E T1 T2 T3 K,
@@ -4236,8 +4153,6 @@ Proof.
     assert (valid_kind_validated E K)
       by (eapply valid_kind_validated_from_env; eassumption).   
     auto with kinding_validated.
-  - auto using subtype_validated_refl
-      with valid_kind_validated kinding_regular kinding_validated.
   - assert (valid_kind_validated E (knd_range T1 T2)) as Hknd
       by auto with kinding_validated.
     inversion Hknd; subst.
@@ -4250,36 +4165,6 @@ Proof.
     pick_freshes_gen L (sch_arity M) Xs.
     assert (valid_scheme_vars_validated E M Xs) by auto.
     auto with valid_scheme_vars_validated.
-  - assert (subtype_validated E T1' T1' CSet.universe)
-      by auto using subtype_validated_refl
-           with type_equal_cong_validated.
-    assert (subtype_validated E T1 T1 CSet.universe)
-      by auto using subtype_validated_refl
-           with type_equal_cong_validated.
-    assert (subtype_validated E T1 T1' CSet.universe)
-      by eauto using subtype_validated_reflexive
-           with type_equal_validated
-                  type_equal_cong_regular type_equal_cong_validated.
-    assert (subtype_validated E T1' T1 CSet.universe)
-      by eauto
-           using subtype_validated_reflexive,
-                   type_equal_validated_symmetric
-           with type_equal_validated
-                  type_equal_cong_regular type_equal_cong_validated.
-    apply type_equal_cong_validated_row;
-      auto with valid_kind_validated type_equal_cong_validated.
-    apply kinding_validated_range_subsumption
-      with (T1 := T1') (T2 := T1');
-      auto with valid_kind_validated kinding_validated
-        type_equal_cong_regular type_equal_cong_validated.
-  - assert (valid_kind_validated E (knd_range T3 T4)) as Hknd
-      by auto with type_equal_cong_validated.
-    inversion Hknd; subst.
-    assert (subtype_validated E T4' T3' CSet.universe)
-      by eauto using subtype_validated_transitive.
-    econstructor; try eassumption;
-      auto with valid_kind_validated
-        type_equal_cong_validated subtype_validated.
   - assert (kinding_validated E (typ_meet T1 T2) (knd_row cs)) as Hk
       by auto with type_equal_validated.
     inversion Hk; subst.

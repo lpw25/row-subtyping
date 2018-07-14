@@ -490,8 +490,6 @@ Proof.
   - apply typing_let with (L := L \u dom E) (T1 := T1);
       auto using type_equal_cong_weakening_l.
   - inversion He; subst.
-    + apply typing_constructor with (T2 := T2) (T3 := T3); auto.
-      eauto using kinding_type_equal_cong_range.
     + { assert
           (type_equal_symm E (typ_variant T1) T0 knd_type) as Hes
           by assumption.

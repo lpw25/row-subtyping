@@ -59,8 +59,6 @@ module rec Type : sig
 
   val proj : t -> Constructor.CSet.t -> t
 
-  val row : t -> t
-
   val variant : t -> t
 
   val arrow : t -> t -> t

@@ -189,7 +189,6 @@ module rec TypeT : sig
     | Constructor of Constructor.t * t
     | Or of Constructor.CSet.t * t * Constructor.CSet.t * t
     | Proj of Constructor.CSet.t * t * Constructor.CSet.t
-    | Row of t
     | Variant of t
     | Arrow of t * t
     | Unit
@@ -258,8 +257,6 @@ module rec Type : sig
 
   val proj : t -> Constructor.CSet.t -> t
 
-  val row : t -> t
-
   val variant : t -> t
 
   val arrow : t -> t -> t
@@ -286,8 +283,6 @@ module rec Type : sig
 
   val subst_row_contravariant : Subst.t -> t -> t
 
-  val subst_row_invariant : Subst.t -> t -> t
-
   val subst : Subst.t -> t -> t
 
   val subst_vars : Var.t Var.Map.t -> t -> t
@@ -297,8 +292,6 @@ module rec Type : sig
   val unify_types : t -> t -> Subst.t Result.t
 
   val unify_ranges : t -> t -> Subst.t Result.t
-
-  val unify_row : t -> t -> Subst.t Result.t
 
   val biunify_row : t -> t -> Subst.t Result.t
 
@@ -339,11 +332,6 @@ end = struct
         let desc = Proj(cs2, t, cs1) in
         let kind = Kind.Row cs1 in
         { desc; kind }
-
-  let row t =
-    let desc = Row t in
-    let kind = Kind.Range(t, t) in
-    { desc; kind }
 
   let variant t =
     let desc = Variant t in
@@ -390,7 +378,7 @@ end = struct
         Var.Set.empty
     | Var v ->
         Var.Set.singleton v
-    | Constructor(_, t) | Proj(_, t, _) | Row t | Variant t | Ref t ->
+    | Constructor(_, t) | Proj(_, t, _) | Variant t | Ref t ->
         free_variables t
     | Or(_, t1, _, t2) | Arrow(t1, t2) | Meet(t1, t2) | Join(t1, t2) ->
         Var.Set.union (free_variables t1) (free_variables t2)
@@ -418,7 +406,7 @@ end = struct
     | Ref t ->
         let desc = Ref (subst_types s t) in
         { kind; desc }
-    | (Constructor _ | Or _ | Proj _ | Row _
+    | (Constructor _ | Or _ | Proj _
        | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
 
@@ -431,9 +419,6 @@ end = struct
         | t -> t
         | exception Not_found -> { kind; desc }
       end
-    | Row t ->
-        let desc = Row (subst_row_invariant s t) in
-        { kind; desc }
     | (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
        | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
@@ -463,7 +448,6 @@ end = struct
     | Join(t1, t2) ->
         let desc = Join(subst_row_covariant s t1, subst_row_covariant s t2) in
         { kind; desc }
-    | Row _ -> assert false
     | Variant _ -> assert false
     | Arrow _ -> assert false
     | Unit -> assert false
@@ -497,32 +481,11 @@ end = struct
           Meet(subst_row_contravariant s t1, subst_row_contravariant s t2)
         in
         { kind; desc }
-    | Row _ -> assert false
     | Variant _ -> assert false
     | Arrow _ -> assert false
     | Unit -> assert false
     | Ref _ -> assert false
     | Join _ -> assert false
-
-  and subst_row_invariant s t =
-    let kind = Kind.subst s t.kind in
-    match t.desc with
-    | Constructor(c, t) ->
-        let desc = Constructor(c, subst_types s t) in
-        { kind; desc }
-    | Or(cs1, t1, cs2, t2) ->
-        let desc =
-          Or(cs1, subst_row_invariant s t1, cs2, subst_row_invariant s t2)
-        in
-        { kind; desc }
-    | Proj(cs1, t, cs2) ->
-        let desc = Proj(cs1, subst_row_invariant s t, cs2) in
-        { kind; desc }
-    | Top _ -> t
-    | Bot _ -> t
-    | (Var _ | Row _ | Variant _
-       | Unit | Ref _ | Arrow _ | Meet _ | Join _) ->
-        assert false
 
   let subst = subst_types
 
@@ -542,9 +505,6 @@ end = struct
         { kind; desc }
     | Proj(cs1, t, cs2) ->
         let desc = Proj(cs1, subst_vars m t, cs2) in
-        { kind; desc }
-    | Row t ->
-        let desc = Row (subst_vars m t) in
         { kind; desc }
     | Variant t ->
         let desc = Variant (subst_vars m t) in
@@ -628,7 +588,7 @@ end = struct
                 if Constructor.CSet.equal cs cs' then desc'
                 else desc
           end
-        | Row _ | Variant _ | Arrow _ | Unit | Ref _ -> assert false
+        | Variant _ | Arrow _ | Unit | Ref _ -> assert false
       end
     | Meet(t1, t2) -> begin
         match normalize t1.desc, normalize t2.desc with
@@ -744,10 +704,10 @@ end = struct
     | Unit, Unit -> return Subst.empty
     | Ref t1, Ref t2 ->
         unify_types t1 t2
-    | (Constructor _ | Or _ | Proj _ | Row _
+    | (Constructor _ | Or _ | Proj _
        | Top _ | Bot _ | Meet _ | Join _), _ ->
         assert false
-    | _, (Constructor _ | Or _ | Proj _ | Row _
+    | _, (Constructor _ | Or _ | Proj _
        | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
     | _, _ -> error ()
@@ -774,65 +734,12 @@ end = struct
             in
             Subst.compose subst (Subst.compose subst' subst'')
       end
-    | Var v1, Row t2' -> begin
-        match t1.kind with
-        | Type | Row _ -> assert false
-        | Range(t1, t1') ->
-            Type.biunify_row t1 t2' >>= fun subst ->
-            let t1' = Type.subst_row_contravariant subst t1' in
-            let t2' = Type.subst_row_invariant subst t2' in
-            Type.biunify_row t2' t1' >>| fun subst' ->
-            let t2' = Type.subst_row_invariant subst' t2' in
-            let subst'' = Subst.add_range Subst.empty v1 t2' in
-            Subst.compose subst (Subst.compose subst' subst'')
-      end
-    | Row t1', Var v2 -> begin
-        match t2.kind with
-        | Type | Row _ -> assert false
-        | Range(t2, t2') ->
-            Type.biunify_row t2 t1' >>= fun subst ->
-            let t2' = Type.subst_row_contravariant subst t2' in
-            let t1' = Type.subst_row_invariant subst t1' in
-            Type.biunify_row t1' t2' >>| fun subst' ->
-            let t1' = Type.subst_row_invariant subst' t1' in
-            let subst'' = Subst.add_range Subst.empty v2 t1' in
-            Subst.compose subst (Subst.compose subst' subst'')
-      end
-    | Row t1, Row t2 ->
-        unify_row t1 t2
     | (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
        | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _), _ ->
         assert false
     | _, (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
        | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
-
-  and unify_row t1 t2 =
-    let open Result in
-    match normalize t1.desc, normalize t2.desc with
-    | Constructor(_, t1), Constructor(_, t2) ->
-        unify_types t1 t2
-    | Or(cs1, t1, cs1', t1'), Or(cs2, t2, cs2', t2') ->
-        let pairs = or_pairs cs1 t1 cs1' t1' cs2 t2 cs2' t2' in
-        let rec loop subst pairs =
-          match pairs with
-          | [] -> return subst
-          | (t1, t2) :: rest ->
-              let t1 = Type.subst_row_invariant subst t1 in
-              let t2 = Type.subst_row_invariant subst t2 in
-              unify_row t1 t2 >>= fun subst' ->
-              loop (Subst.compose subst subst') rest
-        in
-        loop Subst.empty pairs
-    | Top _, Top _ -> return Subst.empty
-    | Bot _, Bot _ -> return Subst.empty
-    | (Var _ | Proj _ | Row _ | Variant _
-       | Arrow _ | Unit | Ref _ | Meet _ | Join _), _ ->
-        assert false
-    | _, (Var _ | Proj _ | Row _ | Variant _
-          | Arrow _ | Unit | Ref _ | Meet _ | Join _) ->
-        assert false
-    | _, _ -> error ()
 
   and biunify_row t1 (* pos *) t2 (* neg *) =
     let open Result in
@@ -903,9 +810,9 @@ end = struct
         let t2' = subst_row_contravariant subst t2' in
         biunify_row t1 t2' >>| fun subst' ->
         Subst.compose subst subst'
-    | (Row _ | Variant _ | Arrow _ | Unit | Ref _ | Meet _), _ ->
+    | (Variant _ | Arrow _ | Unit | Ref _ | Meet _), _ ->
         assert false
-    | _, (Row _ | Variant _ | Arrow _ | Unit | Ref _ | Join _) ->
+    | _, (Variant _ | Arrow _ | Unit | Ref _ | Join _) ->
         assert false
     | _, _ ->
         error ()
@@ -1292,12 +1199,6 @@ module Printing = struct
       (analyse_type_desc_vars_row_contravariant gen t.kind t.desc)
       (analyse_kind_vars gen t.kind)
 
-  and analyse_type_vars_row_invariant gen t =
-    let open Type in
-    Uses.combine
-      (analyse_type_desc_vars_row_invariant gen t.desc)
-      (analyse_kind_vars gen t.kind)
-
   and analyse_type_desc_vars_types gen =
     let open Type in function
     | Var v -> Uses.singleton_type gen v
@@ -1313,7 +1214,6 @@ module Printing = struct
   and analyse_type_desc_vars_ranges gen =
     let open Type in function
     | Var v -> Uses.singleton_range gen v
-    | Row t -> analyse_type_vars_row_invariant gen t
     | _ -> assert false
 
   and analyse_type_desc_vars_row_covariant gen kind =
@@ -1442,8 +1342,8 @@ module Printing = struct
     | In_or
     | In_meet
     | In_join
-    | In_row
     | In_proj
+    | In_range
 
   let normal raw desc =
     if not raw then Type.normalize desc else desc
@@ -1461,7 +1361,6 @@ module Printing = struct
       end
     | Or _, _ -> false
     | Proj _, _ -> false
-    | Row _, _ -> false
     | Variant _, _ -> false
     | Arrow _, (In_arrow_right | At_toplevel) -> false
     | Arrow _, _ -> true
@@ -1529,7 +1428,6 @@ module Printing = struct
               printf "]";
               aliased
         end
-      | Row _ -> assert false
       | Variant t -> begin
           match t.desc with
           | Var v ->
@@ -1554,11 +1452,6 @@ module Printing = struct
                       print_kind raw aliased names nongen t.kind
                 end
               end
-          | Row t ->
-              printf "[";
-              let aliased = print_type In_row raw aliased names nongen t in
-              printf "]";
-              aliased
           | _ -> assert false
         end
       | Arrow(t1, t2) ->
@@ -1566,7 +1459,7 @@ module Printing = struct
           printf " -> ";
           print_type In_arrow_right raw aliased names nongen t2
       | Ref t ->
-          let aliased = print_type In_row raw aliased names nongen t in
+          let aliased = print_type In_ref raw aliased names nongen t in
           printf " ref";
           aliased
       | Unit ->
@@ -1608,19 +1501,19 @@ module Printing = struct
             aliased
         | Bot _, _ ->
             printf "[- ";
-            let aliased = print_type In_row raw aliased names nongen t2 in
+            let aliased = print_type In_range raw aliased names nongen t2 in
             printf "]";
             aliased
         | _, Top _ ->
             printf "[+ ";
-            let aliased = print_type In_row raw aliased names nongen t1 in
+            let aliased = print_type In_range raw aliased names nongen t1 in
             printf "]";
             aliased
         | _, _ ->
             printf "[+ ";
-            let aliased = print_type In_row raw aliased names nongen t1 in
+            let aliased = print_type In_range raw aliased names nongen t1 in
             printf " - ";
-            let aliased = print_type In_row raw aliased names nongen t2 in
+            let aliased = print_type In_range raw aliased names nongen t2 in
             printf "]";
             aliased
 

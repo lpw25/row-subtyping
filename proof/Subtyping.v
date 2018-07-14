@@ -206,7 +206,20 @@ Lemma type_equal_range_subsumption : forall E T1 T2 T3 T4 T3' T4',
 Proof.
   introv Hte Hs1 Hs2.
   remember (knd_range T3 T4) as K.
-  induction Hte; subst; eauto.
+  induction Hte; subst.
+  - eauto.
+  - assert (type_equal_cong E T1 T2 (knd_range T3 T4))
+      as Hec by assumption.
+    inversion Hec; subst.
+    assert (type_equal_symm E T1 T2 (knd_range T3 T4))
+      as Hes by assumption.
+    inversion Hes; subst.
+    + assert (type_equal_core E T1 T2 (knd_range T3 T4))
+        as Her by assumption.
+      inversion Her; subst.
+    + assert (type_equal_core E T2 T1 (knd_range T3 T4))
+        as Her by assumption.
+      inversion Her; subst.
 Qed.
 
 Lemma type_equal_constructor : forall E c T1 T1' cs,
@@ -234,21 +247,6 @@ Proof.
   induction Hte; subst; eauto.
 Qed.
 
-Lemma type_equal_row : forall E T1 T1',
-    type_equal E T1 T1' (knd_row CSet.universe) ->
-    type_equal E (typ_row T1) (typ_row T1') (knd_range T1 T1).
-Proof.
-  introv Hte.
-  remember (knd_row CSet.universe) as K.
-  induction Hte; subst; auto.
-  apply type_equal_step with (T2 := typ_row T2); auto.
-  apply type_equal_range_subsumption
-    with (T3 := T2) (T4 := T2);
-      eauto using subtype_reflexive, type_equal_symmetric,
-        type_equal_reflexive
-          with type_equal_cong_validated.
-Qed.
-
 Lemma type_equal_variant : forall E T1 T1',
     type_equal E T1 T1'
       (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
@@ -257,7 +255,28 @@ Proof.
   introv Hte.
   remember
     (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) as K.
-  induction Hte; subst; eauto.
+  induction Hte; subst.
+  - eauto.  
+  - assert
+      (type_equal_cong E T1 T2
+        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)))
+      as Hec by assumption.
+    inversion Hec; subst.
+    assert
+      (type_equal_symm E T1 T2
+        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)))
+      as Hes by assumption.
+    inversion Hes; subst.
+    + assert
+        (type_equal_core E T1 T2
+          (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)))
+        as Her by assumption.
+      inversion Her.
+    + assert
+        (type_equal_core E T2 T1
+          (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)))
+        as Her by assumption.
+      inversion Her.
 Qed.
  
 Lemma type_equal_or : forall E T1 T1' T2 T2' cs1 cs2 cs,
@@ -465,38 +484,6 @@ Proof.
 Qed.  
 
 (* *************************************************************** *)
-(** Kinding respects type equality on ranges *)
- 
-Lemma kinding_type_equal_cong_range : forall E T1 T2 T3 T4 T5 T6,
-    kinding E T1 (knd_range T3 T4) ->
-    type_equal_cong E T1 T2 (knd_range T5 T6) ->
-    kinding E T2 (knd_range T3 T4).
-Proof.
-  introv Hk Hte.
-  remember (knd_range T5 T6) as K.
-  generalize dependent T5.
-  generalize dependent T6.
-  induction Hte; introv HeqK; inversion HeqK; subst.
-  - clear IHHte HeqK.
-    remember (typ_row T6) as T.
-    remember (knd_range T3 T4) as K.
-    generalize dependent T3.
-    generalize dependent T4.
-    induction Hk; introv HeqK; inversion HeqT; inversion HeqK;
-      subst; subst.
-    + apply kinding_range_subsumption
-        with (T1 := T1') (T2 := T1');
-        eauto using subtype_reflexive, type_equal_symmetric
-          with type_equal_cong_validated. 
-    + apply kinding_range_subsumption
-        with (T1 := T1) (T2 := T2); eauto.
-  - eauto.
-  - inversion H; subst.
-    + inversion H1.
-    + inversion H1.
-Qed.
-
-(* *************************************************************** *)
 (** Kinding respects type equality *)
 (*
 Lemma kinding_type_equal_core_l : forall E T1 T2 K1 K2,
@@ -641,15 +628,6 @@ Proof.
         by assumption.
       inversion Hv; subst.
       auto.
-    + eauto using subtype_transitive.
-  - clear -Hk2.
-    remember (knd_range T4 T5) as K.
-    remember (typ_row T3) as T.
-    generalize dependent T4.
-    generalize dependent T5.
-    induction Hk2; introv HeqK2;
-      inversion HeqK2; inversion HeqT; subst; subst.
-    + auto using subtype_reflexive.
     + eauto using subtype_transitive.
   - eauto using subtype_transitive.
 Qed.

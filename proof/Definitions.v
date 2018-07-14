@@ -19,7 +19,6 @@ Inductive typ : Type :=
   | typ_constructor : nat -> typ -> typ
   | typ_or : cset -> typ -> cset -> typ -> typ
   | typ_proj : cset -> typ -> cset -> typ
-  | typ_row : typ -> typ
   | typ_variant : typ -> typ
   | typ_arrow : typ -> typ -> typ
   | typ_ref   : typ -> typ
@@ -69,7 +68,6 @@ Fixpoint typ_open_k (k : nat) (U : typ) (T : typ) {struct T}: typ :=
   | typ_or cs1 T1 cs2 T2 =>
     typ_or cs1 (typ_open_k k U T1) cs2 (typ_open_k k U T2)
   | typ_proj cs1 T cs2 => typ_proj cs1 (typ_open_k k U T) cs2
-  | typ_row T => typ_row (typ_open_k k U T)
   | typ_variant T => typ_variant (typ_open_k k U T)
   | typ_arrow T1 T2 =>
     typ_arrow (typ_open_k k U T1) (typ_open_k k U T2)
@@ -150,9 +148,6 @@ Inductive type : typ -> Prop :=
   | type_proj : forall cs1 T cs2,
       type T ->
       type (typ_proj cs1 T cs2)
-  | type_row : forall T,
-      type T ->
-      type (typ_row T)
   | type_variant : forall T,
       type T ->
       type (typ_variant T)
@@ -412,9 +407,6 @@ with kinding : env -> typ -> knd -> Prop :=
       CSet.Subset cs2 cs1 ->
       CSet.Nonempty cs2 ->
       kinding E (typ_proj cs1 T cs2) (knd_row cs2)
-  | kinding_row : forall E T,
-      kinding E T (knd_row CSet.universe) ->
-      kinding E (typ_row T) (knd_range T T)
   | kinding_variant : forall E T,
       kinding E T
         (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
@@ -724,14 +716,6 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
       type_equal_cong E T1 T1' (knd_row cs1) ->
       type_equal_cong E
         (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) (knd_row cs2)
-  | type_equal_cong_row : forall E T1 T1',
-      type_equal_cong E T1 T1' (knd_row CSet.universe) ->
-      type_equal_cong E (typ_row T1) (typ_row T1') (knd_range T1 T1)
-  | type_equal_cong_variant : forall E T1 T1',
-      type_equal_cong E T1 T1'
-        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
-      type_equal_cong E
-        (typ_variant T1) (typ_variant T1') knd_type
   | type_equal_cong_arrow_l : forall E T1 T1' T2,
       kinding E T2 knd_type ->
       type_equal_cong E T1 T1' knd_type ->
@@ -763,11 +747,6 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
       type_equal_cong E T2 T2' (knd_row cs) ->
       type_equal_cong E
         (typ_join T1 T2) (typ_join T1 T2') (knd_row cs)
-  | type_equal_cong_range_subsumption : forall E T1 T2 T3 T4 T3' T4',
-      type_equal_cong E T1 T2 (knd_range T3 T4) ->
-      subtype E T3 T3' CSet.universe ->
-      subtype E T4' T4 CSet.universe ->
-      type_equal_cong E T1 T2 (knd_range T3' T4')
   | type_equal_cong_symm : forall E T1 T1' K,
       type_equal_symm E T1 T1' K ->
       type_equal_cong E T1 T1' K

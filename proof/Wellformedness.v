@@ -631,11 +631,6 @@ with kinding_regular : env -> typ -> knd -> Prop :=
       type T ->
       CSet.Nonempty cs ->
       kinding_regular E (typ_proj cs T cs') (knd_row cs')
-  | kinding_regular_row : forall E T,
-      kinding_regular E T (knd_row CSet.universe) ->
-      environment E ->
-      type T ->
-      kinding_regular E (typ_row T) (knd_range T T)
   | kinding_regular_variant : forall E T,
       kinding_regular E T
         (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
@@ -1115,21 +1110,6 @@ with type_equal_cong_regular : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs1 ->
       type_equal_cong_regular E
         (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) (knd_row cs2)
-  | type_equal_cong_regular_row : forall E T1 T1',
-      type_equal_cong_regular E T1 T1' (knd_row CSet.universe) ->
-      environment E ->
-      type T1 ->
-      type T1' ->
-      type_equal_cong_regular E
-        (typ_row T1) (typ_row T1') (knd_range T1 T1)
-  | type_equal_cong_regular_variant : forall E T1 T1',
-      type_equal_cong_regular E T1 T1'
-        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
-      environment E ->
-      type T1 ->
-      type T1' ->
-      type_equal_cong_regular E
-        (typ_variant T1) (typ_variant T1') knd_type
   | type_equal_cong_regular_arrow_l : forall E T1 T1' T2,
       kinding_regular E T2 knd_type ->
       type_equal_cong_regular E T1 T1' knd_type ->
@@ -1194,19 +1174,6 @@ with type_equal_cong_regular : env -> typ -> typ -> knd -> Prop :=
       CSet.Nonempty cs ->
       type_equal_cong_regular E
         (typ_join T1 T2) (typ_join T1 T2') (knd_row cs)
-  | type_equal_cong_regular_range_subsumption :
-      forall E T1 T2 T3 T4 T3' T4',
-      type_equal_cong_regular E T1 T2 (knd_range T3 T4) ->
-      subtype_regular E T3 T3' CSet.universe ->
-      subtype_regular E T4' T4 CSet.universe ->
-      environment E ->
-      type T1 ->
-      type T2 ->
-      type T3 ->
-      type T3' ->
-      type T4 ->
-      type T4' ->
-      type_equal_cong_regular E T1 T2 (knd_range T3' T4')
   | type_equal_cong_regular_symm : forall E T1 T1' K,
       type_equal_symm_regular E T1 T1' K ->
       environment E ->
