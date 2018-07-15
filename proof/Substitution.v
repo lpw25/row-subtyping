@@ -22,6 +22,7 @@ Fixpoint typ_fv (T : typ) {struct T} : vars :=
   | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
   | typ_ref T1 => typ_fv T1
   | typ_unit => \{}
+  | typ_prod T1 T2 => (typ_fv T1) \u (typ_fv T2)
   | typ_top cs => \{}
   | typ_bot cs => \{}
   | typ_meet T1 T2 => (typ_fv T1) \u (typ_fv T2)
@@ -76,6 +77,9 @@ Fixpoint trm_fv (t : trm) {struct t} : vars :=
   | trm_destruct t1 c t2 => (trm_fv t1) \u (trm_fv t2)
   | trm_absurd t1 => trm_fv t1
   | trm_unit => \{}
+  | trm_prod t1 t2 => (trm_fv t1) \u (trm_fv t2)
+  | trm_fst t1 => trm_fv t1
+  | trm_snd t1 => trm_fv t1
   | trm_loc l => \{}
   | trm_ref t1 => trm_fv t1
   | trm_get t1 => trm_fv t1
@@ -98,6 +102,8 @@ Fixpoint typ_subst (Z : var) (U : typ) (T : typ) {struct T} : typ :=
       typ_arrow (typ_subst Z U T1) (typ_subst Z U T2)
   | typ_ref T1 => typ_ref (typ_subst Z U T1)
   | typ_unit => typ_unit
+  | typ_prod T1 T2 =>
+      typ_prod (typ_subst Z U T1) (typ_subst Z U T2)
   | typ_top cs => typ_top cs
   | typ_bot cs => typ_bot cs
   | typ_meet T1 T2 =>
@@ -177,6 +183,9 @@ Fixpoint trm_subst (z : var) (u : trm) (t : trm) {struct t} : trm :=
       trm_destruct (trm_subst z u t1) c (trm_subst z u t2)
   | trm_absurd t1 => trm_absurd (trm_subst z u t1)
   | trm_unit => trm_unit
+  | trm_prod t1 t2 => trm_prod (trm_subst z u t1) (trm_subst z u t2)
+  | trm_fst t1 => trm_fst (trm_subst z u t1)
+  | trm_snd t1 => trm_snd (trm_subst z u t1)
   | trm_loc l => trm_loc l
   | trm_ref t1 => trm_ref (trm_subst z u t1)
   | trm_get t1 => trm_get (trm_subst z u t1)

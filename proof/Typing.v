@@ -284,6 +284,7 @@ Proof.
       eauto using kinding_typ_subst.
   - apply typing_unit;
       eauto using valid_env_typ_subst, valid_store_type_typ_subst.
+  - apply typing_prod; auto.
   - apply typing_loc with (T1 := typ_subst X S T1);
       eauto
         using valid_env_typ_subst, valid_store_type_typ_subst,
@@ -520,6 +521,18 @@ Proof.
     + assert (type_equal_core E T2 typ_unit knd_type) as He3
         by assumption.
       inversion He3.
+  - inversion He; subst; auto.
+    assert (type_equal_symm E (typ_prod T1 T2) T0 knd_type) as He2
+        by assumption.
+    inversion He2.
+    + assert (type_equal_core E (typ_prod T1 T2) T0 knd_type) as He3
+        by assumption.
+      inversion He3.
+    + assert (type_equal_core E T0 (typ_prod T1 T2) knd_type) as He3
+        by assumption.
+      inversion He3.
+  - eauto.
+  - eauto.
   - inversion He; subst.
     + assert (type_equal E T1 T1' knd_type)
         by eauto using type_equal_post_step.

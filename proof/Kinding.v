@@ -2317,6 +2317,14 @@ with kinding_validated : env -> typ -> knd -> Prop :=
       valid_env_validated E ->
       environment E ->
       kinding_validated E typ_unit knd_type
+  | kinding_validated_prod : forall E T1 T2,
+      kinding_validated E T1 knd_type -> 
+      kinding_validated E T2 knd_type -> 
+      environment E ->
+      type T1 ->
+      type T2 ->
+      valid_env_validated E ->
+      kinding_validated E (typ_prod T1 T2) knd_type
   | kinding_validated_top : forall E cs,
       valid_env_validated E ->
       CSet.Nonempty cs ->
@@ -2857,6 +2865,30 @@ with type_equal_cong_validated : env -> typ -> typ -> knd -> Prop :=
       kinding_validated E T2' knd_type ->
       type_equal_cong_validated E
         (typ_arrow T1 T2) (typ_arrow T1 T2') knd_type
+  | type_equal_cong_validated_prod_l : forall E T1 T1' T2,
+      kinding_validated E T2 knd_type ->
+      type_equal_cong_validated E T1 T1' knd_type ->
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type T2 ->
+      valid_env_validated E ->
+      kinding_validated E T1 knd_type ->
+      kinding_validated E T1' knd_type ->
+      type_equal_cong_validated E
+        (typ_prod T1 T2) (typ_prod T1' T2) knd_type
+  | type_equal_cong_validated_prod_r : forall E T1 T2 T2',
+      kinding_validated E T1 knd_type ->
+      type_equal_cong_validated E T2 T2' knd_type ->
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T2' ->
+      valid_env_validated E ->
+      kinding_validated E T2 knd_type ->
+      kinding_validated E T2' knd_type ->
+      type_equal_cong_validated E
+        (typ_prod T1 T2) (typ_prod T1 T2') knd_type
   | type_equal_cong_validated_ref : forall E T1 T1',
       type_equal_cong_validated E T1 T1' knd_type ->
       environment E ->
@@ -4822,6 +4854,44 @@ Inductive typing_validated : env -> styp -> trm -> typ -> Prop :=
       environment E ->
       store_type P ->
       typing_validated E P trm_unit typ_unit
+  | typing_validated_prod : forall E P T1 T2 t1 t2,
+      typing_validated E P t1 T1 ->
+      typing_validated E P t2 T2 ->
+      environment E ->
+      store_type P ->
+      type T1 ->
+      type T2 ->
+      term t1 ->
+      term t2 ->
+      valid_env E ->
+      valid_store_type E P ->
+      kinding E T1 knd_type ->
+      kinding E T2 knd_type ->
+      typing_validated E P (trm_prod t1 t2) (typ_prod T1 T2)
+  | typing_validated_fst : forall E P T1 T2 t1,
+      typing_validated E P t1 (typ_prod T1 T2) ->
+      environment E ->
+      store_type P ->
+      type T1 ->
+      type T2 ->
+      term t1 ->
+      valid_env E ->
+      valid_store_type E P ->
+      kinding E T1 knd_type ->
+      kinding E T2 knd_type ->
+      typing_validated E P (trm_fst t1) T1
+  | typing_validated_snd : forall E P T1 T2 t1,
+      typing_validated E P t1 (typ_prod T1 T2) ->
+      environment E ->
+      store_type P ->
+      type T1 ->
+      type T2 ->
+      term t1 ->
+      valid_env E ->
+      valid_store_type E P ->
+      kinding E T1 knd_type ->
+      kinding E T2 knd_type ->
+      typing_validated E P (trm_snd t1) T2
   | typing_validated_loc : forall E P l T1 T2,
       valid_env E ->
       valid_store_type E P ->
@@ -5060,6 +5130,15 @@ Proof.
       auto with typing_validated.   
   - econstr auto with typing_validated.
   - econstr auto with typing_validated.
+  - econstr auto with typing_validated.
+  - assert (kinding E (typ_prod T1 T2) knd_type)
+      as Hk by auto with typing_validated.
+    inversion Hk; subst.
+    econstr auto with typing_validated.
+  - assert (kinding E (typ_prod T1 T2) knd_type)
+      as Hk by auto with typing_validated.
+    inversion Hk; subst.
+    econstr auto with typing_validated.
   - econstr
       eauto using kinding_from_store_type
         with typing_validated type_equal_validated.  

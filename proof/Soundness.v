@@ -171,6 +171,46 @@ Proof.
     splits; auto.
     eauto using typing_extend_store_type with typing_store_validated.
   - inversion Ht; subst.
+    assert (typing_validated E P t1 T1) as Ht2 by auto.
+    destruct (IHHr _ Hs _ Ht2) as [P' [He [Ht' Hs']]].
+    exists P'.
+    splits; auto.
+    eauto using typing_extend_store_type with typing_store_validated.
+  - inversion Ht; subst.
+    assert (typing_validated E P t2 T2) as Ht2 by auto.
+    destruct (IHHr _ Hs _ Ht2) as [P' [He [Ht' Hs']]].
+    exists P'.
+    splits; auto.
+    eauto using typing_extend_store_type with typing_store_validated.
+  - inversion Ht; subst.
+    assert (typing_validated E P t (typ_prod T T2)) as Ht2 by auto.
+    destruct (IHHr _ Hs _ Ht2) as [P' [He [Ht' Hs']]].
+    exists P'.
+    splits; auto.
+    eauto using typing_extend_store_type with typing_store_validated.
+  - exists P.
+    splits; auto.
+    inversion Ht; subst.
+    assert
+      (typing_validated E P (trm_prod t1 t2) (typ_prod T T2))
+      as Ht2 by assumption.
+    inversion Ht2; subst.
+    auto.
+  - inversion Ht; subst.
+    assert (typing_validated E P t (typ_prod T1 T)) as Ht2 by auto.
+    destruct (IHHr _ Hs _ Ht2) as [P' [He [Ht' Hs']]].
+    exists P'.
+    splits; auto.
+    eauto using typing_extend_store_type with typing_store_validated.
+  - exists P.
+    splits; auto.
+    inversion Ht; subst.
+    assert
+      (typing_validated E P (trm_prod t1 t2) (typ_prod T1 T))
+      as Ht2 by assumption.
+    inversion Ht2; subst.
+    auto.
+  - inversion Ht; subst.
     assert (typing_validated E P t T0) as Ht2 by auto.
     destruct (IHHr _ Hs _ Ht2) as [P' [He [Ht' Hs']]].
     exists P'.
@@ -304,6 +344,21 @@ Proof.
                 (typ_bot CSet.universe) (CSet.singleton c));
       eauto using subtype_proj, subtype_from_ranges with csetdec.
     auto using subtype_reflexive, type_equal_proj_bot with csetdec.
+  - assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
+      as IH1 by auto.
+    assert (value t2 \/ (exists t2' V2', red t2 V t2' V2'))
+      as IH2 by auto.
+    destruct IH1 as [Hv1|[t1' [V1' He1]]];
+      destruct IH2 as [Hv2|[t2' [V2' He2]]];
+        eauto.
+  - assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
+      as IH1 by eauto.
+    destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
+    destruct Hv1; inversion Ht; subst; eauto.
+  - assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
+      as IH1 by eauto.
+    destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
+    destruct Hv1; inversion Ht; subst; eauto.
   - assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
     destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.

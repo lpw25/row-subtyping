@@ -653,6 +653,13 @@ with kinding_regular : env -> typ -> knd -> Prop :=
       valid_env_regular E ->
       environment E ->
       kinding_regular E typ_unit knd_type
+  | kinding_regular_prod : forall E T1 T2,
+      kinding_regular E T1 knd_type -> 
+      kinding_regular E T2 knd_type -> 
+      environment E ->
+      type T1 ->
+      type T2 ->
+      kinding_regular E (typ_prod T1 T2) knd_type
   | kinding_regular_top : forall E cs,
       valid_env_regular E ->
       CSet.Nonempty cs ->
@@ -1128,6 +1135,24 @@ with type_equal_cong_regular : env -> typ -> typ -> knd -> Prop :=
       type T2' ->
       type_equal_cong_regular E
         (typ_arrow T1 T2) (typ_arrow T1 T2') knd_type
+  | type_equal_cong_regular_prod_l : forall E T1 T1' T2,
+      kinding_regular E T2 knd_type ->
+      type_equal_cong_regular E T1 T1' knd_type ->
+      environment E ->
+      type T1 ->
+      type T1' ->
+      type T2 ->
+      type_equal_cong_regular E
+        (typ_prod T1 T2) (typ_prod T1' T2) knd_type
+  | type_equal_cong_regular_prod_r : forall E T1 T2 T2',
+      kinding_regular E T1 knd_type ->
+      type_equal_cong_regular E T2 T2' knd_type ->
+      environment E ->
+      type T1 ->
+      type T2 ->
+      type T2' ->
+      type_equal_cong_regular E
+        (typ_prod T1 T2) (typ_prod T1 T2') knd_type
   | type_equal_cong_regular_ref : forall E T1 T1',
       type_equal_cong_regular E T1 T1' knd_type ->
       environment E ->
@@ -2365,6 +2390,32 @@ Inductive typing_regular : env -> styp -> trm -> typ -> Prop :=
       valid_env E ->
       valid_store_type E P ->
       typing_regular E P trm_unit typ_unit
+  | typing_regular_prod : forall E P T1 T2 t1 t2,
+      environment E ->
+      store_type P ->
+      type T1 ->
+      type T2 ->
+      term t1 ->
+      term t2 ->
+      typing_regular E P t1 T1 ->
+      typing_regular E P t2 T2 ->
+      typing_regular E P (trm_prod t1 t2) (typ_prod T1 T2)
+  | typing_regular_fst : forall E P T1 T2 t1,
+      environment E ->
+      store_type P ->
+      type T1 ->
+      type T2 ->
+      term t1 ->
+      typing_regular E P t1 (typ_prod T1 T2) ->
+      typing_regular E P (trm_fst t1) T1
+  | typing_regular_snd : forall E P T1 T2 t1,
+      environment E ->
+      store_type P ->
+      type T1 ->
+      type T2 ->
+      term t1 ->
+      typing_regular E P t1 (typ_prod T1 T2) ->
+      typing_regular E P (trm_snd t1) T2
   | typing_regular_loc : forall E P l T1 T2,
       environment E ->
       store_type P ->
@@ -2593,6 +2644,18 @@ Proof.
       auto with typing_regular kinding_regular.
   - apply typing_regular_unit;
       auto with valid_store_type_regular.
+  - apply typing_regular_prod;
+      auto with typing_regular.
+  - assert (type (typ_prod T1 T2)) as Htyp
+      by auto with typing_regular.
+    inversion Htyp; subst.
+    apply typing_regular_fst with (T2 := T2);
+      auto with typing_regular.
+  - assert (type (typ_prod T1 T2)) as Htyp
+      by auto with typing_regular.
+    inversion Htyp; subst.
+    apply typing_regular_snd with (T1 := T1);
+      auto with typing_regular.
   - apply typing_regular_loc with (T1 := T1);
       auto with valid_store_type_regular.
     + eauto using type_from_store_type with valid_store_type_regular.
@@ -2600,7 +2663,7 @@ Proof.
   - apply typing_regular_ref;
       auto with typing_regular.
   - assert (type (typ_ref T)) as Htyp
-        by auto with typing_regular.
+      by auto with typing_regular.
     inversion Htyp; subst.
     apply typing_regular_get;
       auto with typing_regular.
@@ -2671,13 +2734,19 @@ Hint Extern 1 (store_type ?P) =>
 Inductive value_regular : trm -> Prop :=
   | value_regular_constructor : forall c t,
       term t ->
-      value t ->
+      value_regular t ->
       value_regular (trm_constructor c t)
   | value_regular_abs : forall t,
       term_body t ->
       value_regular (trm_abs t)
   | value_regular_unit :
       value_regular trm_unit
+  | value_regular_prod : forall t1 t2,
+      term t1 ->
+      term t2 ->
+      value_regular t1 ->
+      value_regular t2 ->
+      value_regular (trm_prod t1 t2)
   | value_regular_loc : forall l,
       value_regular (trm_loc l).
 
@@ -2819,6 +2888,51 @@ Inductive red_regular : trm -> sto -> trm -> sto -> Prop :=
       term t' ->
       red_regular t V t' V' ->
       red_regular (trm_absurd t) V (trm_absurd t') V'
+  | red_regular_prod_1 : forall V V' t1 t1' t2,
+      store V ->
+      store V' ->
+      term t1 ->
+      term t1' ->
+      term t2 ->
+      red_regular t1 V t1' V' -> 
+      red_regular (trm_prod t1 t2) V (trm_prod t1' t2) V'
+  | red_regular_prod_2 : forall V V' t1 t2 t2', 
+      store V ->
+      store V' ->
+      term t1 ->
+      term t2 ->
+      term t2' ->
+      value t1 ->
+      red_regular t2 V t2' V' ->
+      red_regular (trm_prod t1 t2) V (trm_prod t1 t2') V'
+  | red_regular_fst_1 : forall V V' t t',
+      store V ->
+      store V' ->
+      term t ->
+      term t' ->
+      red_regular t V t' V' ->
+      red_regular (trm_fst t) V (trm_fst t') V'
+  | red_regular_fst_2 : forall V t1 t2, 
+      store V ->
+      term t1 ->
+      term t2 ->
+      value t1 -> 
+      value t2 ->  
+      red_regular (trm_fst (trm_prod t1 t2)) V t1 V
+  | red_regular_snd_1 : forall V V' t t',
+      store V ->
+      store V' ->
+      term t ->
+      term t' ->
+      red_regular t V t' V' ->
+      red_regular (trm_snd t) V (trm_snd t') V'
+  | red_regular_snd_2 : forall V t1 t2, 
+      store V ->
+      term t1 ->
+      term t2 ->
+      value t1 -> 
+      value t2 ->  
+      red_regular (trm_snd (trm_prod t1 t2)) V t2 V
   | red_regular_ref_1 : forall V V' t t',
       store V ->
       store V' ->

@@ -23,6 +23,7 @@ Inductive typ : Type :=
   | typ_arrow : typ -> typ -> typ
   | typ_ref   : typ -> typ
   | typ_unit : typ
+  | typ_prod : typ -> typ -> typ
   | typ_top : cset -> typ
   | typ_bot : cset -> typ
   | typ_meet : typ -> typ -> typ
@@ -73,6 +74,8 @@ Fixpoint typ_open_k (k : nat) (U : typ) (T : typ) {struct T}: typ :=
     typ_arrow (typ_open_k k U T1) (typ_open_k k U T2)
   | typ_ref T => typ_ref (typ_open_k k U T)
   | typ_unit => typ_unit
+  | typ_prod T1 T2 =>
+    typ_prod (typ_open_k k U T1) (typ_open_k k U T2)
   | typ_top cs => typ_top cs
   | typ_bot cs => typ_bot cs
   | typ_meet T1 T2 =>
@@ -160,6 +163,10 @@ Inductive type : typ -> Prop :=
       type (typ_ref T)
   | type_unit :
       type typ_unit
+  | type_prod : forall T1 T2,
+      type T1 -> 
+      type T2 -> 
+      type (typ_prod T1 T2)
   | type_top : forall cs,
       type (typ_top cs)
   | type_bot : forall cs,
@@ -223,6 +230,9 @@ Inductive trm : Type :=
   | trm_destruct : trm -> nat -> trm -> trm
   | trm_absurd : trm -> trm
   | trm_unit : trm
+  | trm_prod : trm -> trm -> trm
+  | trm_fst : trm -> trm
+  | trm_snd : trm -> trm
   | trm_loc : loc -> trm
   | trm_ref : trm -> trm
   | trm_get : trm -> trm
@@ -248,6 +258,10 @@ Fixpoint trm_open_rec (k : nat) (u : trm) (t : trm) {struct t} : trm :=
                    (trm_open_rec (S k) u t2)
   | trm_absurd t1 => trm_absurd (trm_open_rec k u t1)
   | trm_unit => trm_unit
+  | trm_prod t1 t2 =>
+      trm_prod (trm_open_rec k u t1) (trm_open_rec k u t2)
+  | trm_fst t1 => trm_fst (trm_open_rec k u t1)
+  | trm_snd t1 => trm_snd (trm_open_rec k u t1)
   | trm_loc l => trm_loc l
   | trm_ref t1 => trm_ref (trm_open_rec k u t1)
   | trm_get t1 => trm_get (trm_open_rec k u t1)
@@ -298,6 +312,16 @@ Inductive term : trm -> Prop :=
       term (trm_absurd t)
   | term_unit :
       term trm_unit
+  | term_prod : forall t1 t2,
+      term t1 -> 
+      term t2 -> 
+      term (trm_prod t1 t2)
+  | term_fst : forall t,
+      term t ->
+      term (trm_fst t)
+  | term_snd : forall t,
+      term t ->
+      term (trm_snd t)
   | term_loc : forall l,
       term (trm_loc l)
   | term_ref : forall t,
@@ -421,6 +445,10 @@ with kinding : env -> typ -> knd -> Prop :=
   | kinding_unit : forall E,
       valid_env E ->
       kinding E typ_unit knd_type
+  | kinding_prod : forall E T1 T2,
+      kinding E T1 knd_type -> 
+      kinding E T2 knd_type -> 
+      kinding E (typ_prod T1 T2) knd_type
   | kinding_top : forall E cs,
       valid_env E ->
       CSet.Nonempty cs ->
@@ -724,6 +752,14 @@ with type_equal_cong : env -> typ -> typ -> knd -> Prop :=
       kinding E T1 knd_type ->
       type_equal_cong E T2 T2' knd_type ->
       type_equal_cong E (typ_arrow T1 T2) (typ_arrow T1 T2') knd_type
+  | type_equal_cong_prod_l : forall E T1 T1' T2,
+      kinding E T2 knd_type ->
+      type_equal_cong E T1 T1' knd_type ->
+      type_equal_cong E (typ_prod T1 T2) (typ_prod T1' T2) knd_type
+  | type_equal_cong_prod_r : forall E T1 T2 T2',
+      kinding E T1 knd_type ->
+      type_equal_cong E T2 T2' knd_type ->
+      type_equal_cong E (typ_prod T1 T2) (typ_prod T1 T2') knd_type
   | type_equal_cong_ref : forall E T1 T1',
       type_equal_cong E T1 T1' knd_type ->
       type_equal_cong E (typ_ref T1) (typ_ref T1') knd_type
@@ -809,6 +845,10 @@ Inductive value : trm -> Prop :=
       term (trm_abs t) -> value (trm_abs t)
   | value_unit :
       value trm_unit
+  | value_prod : forall t1 t2,
+      value t1 ->
+      value t2 ->
+      value (trm_prod t1 t2)
   | value_loc : forall l,
       value (trm_loc l).
 
@@ -941,6 +981,16 @@ Inductive typing : env -> styp -> trm -> typ -> Prop :=
       valid_env E ->
       valid_store_type E P ->
       typing E P trm_unit typ_unit
+  | typing_prod : forall E P T1 T2 t1 t2,
+      typing E P t1 T1 ->
+      typing E P t2 T2 ->
+      typing E P (trm_prod t1 t2) (typ_prod T1 T2)
+  | typing_fst : forall E P T1 T2 t1,
+      typing E P t1 (typ_prod T1 T2) ->
+      typing E P (trm_fst t1) T1
+  | typing_snd : forall E P T1 T2 t1,
+      typing E P t1 (typ_prod T1 T2) ->
+      typing E P (trm_snd t1) T2
   | typing_loc : forall E P l T1 T2,
       valid_env E ->
       valid_store_type E P ->
@@ -1033,6 +1083,30 @@ Inductive red : trm -> sto -> trm -> sto -> Prop :=
   | red_absurd : forall V V' t t',
       red t V t' V' ->
       red (trm_absurd t) V (trm_absurd t') V'
+  | red_prod_1 : forall V V' t1 t1' t2,
+      term t2 ->
+      red t1 V t1' V' -> 
+      red (trm_prod t1 t2) V (trm_prod t1' t2) V'
+  | red_prod_2 : forall V V' t1 t2 t2', 
+      value t1 ->
+      red t2 V t2' V' ->
+      red (trm_prod t1 t2) V (trm_prod t1 t2') V'
+  | red_fst_1 : forall V V' t t',
+      red t V t' V' ->
+      red (trm_fst t) V (trm_fst t') V'
+  | red_fst_2 : forall V t1 t2, 
+      store V ->
+      value t1 -> 
+      value t2 ->  
+      red (trm_fst (trm_prod t1 t2)) V t1 V
+  | red_snd_1 : forall V V' t t',
+      red t V t' V' ->
+      red (trm_snd t) V (trm_snd t') V'
+  | red_snd_2 : forall V t1 t2, 
+      store V ->
+      value t1 -> 
+      value t2 ->  
+      red (trm_snd (trm_prod t1 t2)) V t2 V
   | red_ref_1 : forall V V' t t',
       red t V t' V' ->
       red (trm_ref t) V (trm_ref t') V'
