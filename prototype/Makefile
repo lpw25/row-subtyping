@@ -7,6 +7,8 @@ LFLAGS=-linkpkg -package menhirLib
 
 MODULES=ast.cmx parser.cmx parserMessages.cmx lexer.cmx types.cmx infer.cmx main.cmx
 
+.PHONY: all clean check-errors
+
 all: prototype
 
 ast.cmi: ast.mli
@@ -68,3 +70,9 @@ clean:
 	-rm parser.ml
 	-rm parser.mli
 	-rm lexer.ml
+
+parser.new-messages: parser.mly
+	${MENHIR} --list-errors parser.mly > parser.new-messages
+
+check-errors: parser.messages parser.new-messages
+	${MENHIR} --compare-errors parser.new-messages --compare-errors parser.messages parser.mly

@@ -10,46 +10,52 @@ type 'a with_location =
 type var = string
 
 type binding =
-  | Unnamed
-  | Named of { name : string; location : location; }
+  { name : var; location : location; }
+
+type pattern =
+  | Any
+  | Var of binding
+  | Tuple of pattern list
+  | Unit
 
 type constructor = string
 
 type expr_desc =
   | Var of { name : var }
-  | Abs of { params : binding list; body : expr; }
+  | Abs of { params : pattern list; body : expr; }
   | Let of
-      { binding : binding;
-        params : binding list;
+      { pattern : pattern;
+        params : pattern list;
         def : expr;
         body : expr; }
   | App of { fn : expr; args : expr list; }
   | Constructor of { constructor : constructor; arg : expr; }
-  | Match of { expr: expr; cases : case list; }
+  | Match of { expr : expr; cases : case list; }
   | Unit
-  | Ref of { value: expr; }
-  | Deref of { reference: expr; }
-  | Set of { reference: expr; value: expr; }
-  | Sequence of { left : expr; right: expr; }
+  | Tuple of { exprs : expr list; }
+  | Ref of { value : expr; }
+  | Deref of { reference : expr; }
+  | Set of { reference : expr; value : expr; }
+  | Sequence of { left : expr; right : expr; }
 
 and expr = expr_desc with_location
 
 and case =
   | Destruct of
       { constructor : constructor;
-        arg_binding : binding;
+        arg_pattern : pattern;
         as_binding : binding option;
         body : expr;
         location : location; }
   | Default of
-      { binding : binding;
+      { binding : binding option;
         body : expr;
         location : location; }
 
 type statement_desc =
   | Definition of
-      { binding : binding;
-        params : binding list;
+      { pattern : pattern;
+        params : pattern list;
         def : expr; }
   | Expr of
       { expr : expr; }
@@ -79,14 +85,21 @@ let dump_option dump ppf option =
 let dump_var ppf var =
   Format.fprintf ppf "%s" var
 
+let dump_binding ppf binding =
+  Format.fprintf ppf "%a" dump_var binding.name
+
 let dump_constructor ppf constructor =
   Format.fprintf ppf "%s" constructor
 
-let dump_binding ppf = function
-  | Unnamed ->
-      Format.fprintf ppf "Unnamed"
-  | Named { name; location } ->
-      Format.fprintf ppf "%a" dump_var name
+let rec dump_pattern ppf = function
+  | Any ->
+      Format.fprintf ppf "Any"
+  | Var binding ->
+      Format.fprintf ppf "Var(%a)" dump_binding binding
+  | Tuple patterns ->
+      Format.fprintf ppf "Tuple(@[<h>%a@])" (dump_list dump_pattern) patterns
+  | Unit ->
+      Format.fprintf ppf "Unit"
 
 let dump_constructor ppf constructor =
   Format.fprintf ppf "%s" constructor
@@ -97,12 +110,12 @@ let rec dump_expr_desc ppf = function
   | Abs { params; body; } ->
       Format.fprintf ppf
         "@[<v 2>Abs@ Params @[<h>%a@]@ @[<v 2>Body@ %a@]@]"
-        (dump_list dump_binding) params dump_expr body
-  | Let { binding; params; def; body; } ->
+        (dump_list dump_pattern) params dump_expr body
+  | Let { pattern; params; def; body; } ->
       Format.fprintf ppf
-        "@[<v 2>Let@ Binding %a@ Params @[<h>%a@]@ \
+        "@[<v 2>Let@ Pattern @[<h>%a@]@ Params @[<h>%a@]@ \
          @[<v 2>Def@ %a@]@ @[<v 2>Body@ %a@]@]"
-        dump_binding binding (dump_list dump_binding) params
+        dump_pattern pattern (dump_list dump_pattern) params
         dump_expr def dump_expr body
   | App { fn; args; } ->
       Format.fprintf ppf
@@ -118,6 +131,8 @@ let rec dump_expr_desc ppf = function
         dump_expr expr (dump_list dump_case) cases
   | Unit ->
       Format.fprintf ppf "Unit"
+  | Tuple { exprs; } ->
+      Format.fprintf ppf "@[<v 2>Tuple@ %a@]" (dump_list dump_expr) exprs
   | Ref { value; } ->
       Format.fprintf ppf
         "@[<v 2>Ref@ @[<v 2>Value@ %a@]@]"
@@ -139,22 +154,22 @@ and dump_expr ppf expr =
   dump_expr_desc ppf expr.desc
 
 and dump_case ppf = function
-  | Destruct { constructor; arg_binding; as_binding; body } ->
+  | Destruct { constructor; arg_pattern; as_binding; body } ->
       Format.fprintf ppf
-        "@[<v 2>Destruct@ Constructor %a@ Arg_binding %a@ As_binding %a@ @[<v 2>Body@ %a@]@]"
-        dump_constructor constructor dump_binding arg_binding
+        "@[<v 2>Destruct@ Constructor %a@ Arg_pattern %a@ As_binding %a@ @[<v 2>Body@ %a@]@]"
+        dump_constructor constructor dump_pattern arg_pattern
         (dump_option dump_binding) as_binding dump_expr body
   | Default { binding; body } ->
       Format.fprintf ppf
         "@[<v 2>Default@ Binding %a@ @[<v 2>Body@ %a@]@]"
-        dump_binding binding dump_expr body
+        (dump_option dump_binding) binding dump_expr body
 
 let dump_statement_desc ppf = function
-  | Definition { binding; params; def } ->
+  | Definition { pattern; params; def } ->
       Format.fprintf ppf
-        "@[<v 2>Definition@ Binding %a@ Params @[<h>%a@]@ \
+        "@[<v 2>Definition@ Pattern @[<h>%a@]@ Params @[<h>%a@]@ \
          @[<v 2>Def@ %a@]@]"
-        dump_binding binding (dump_list dump_binding) params dump_expr def
+        dump_pattern pattern (dump_list dump_pattern) params dump_expr def
   | Expr { expr } ->
       Format.fprintf ppf
         "@[<v 2>Expr@ %a@]"

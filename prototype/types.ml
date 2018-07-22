@@ -192,6 +192,7 @@ module rec TypeT : sig
     | Variant of t
     | Arrow of t * t
     | Unit
+    | Prod of t * t
     | Ref of t
     | Top of Constructor.CSet.t
     | Bot of Constructor.CSet.t
@@ -262,6 +263,8 @@ module rec Type : sig
   val arrow : t -> t -> t
 
   val unit : unit -> t
+
+  val prod : t -> t -> t
 
   val ref : t -> t
 
@@ -348,6 +351,11 @@ end = struct
     let kind = Kind.Type in
     { desc; kind }
 
+  let prod t1 t2 =
+    let desc = Prod(t1, t2) in
+    let kind = Kind.Type in
+    { desc; kind }
+
   let ref t =
     let desc = Ref t in
     let kind = Kind.Type in
@@ -380,7 +388,7 @@ end = struct
         Var.Set.singleton v
     | Constructor(_, t) | Proj(_, t, _) | Variant t | Ref t ->
         free_variables t
-    | Or(_, t1, _, t2) | Arrow(t1, t2) | Meet(t1, t2) | Join(t1, t2) ->
+    | Or(_, t1, _, t2) | Arrow(t1, t2) | Prod(t1, t2) | Meet(t1, t2) | Join(t1, t2) ->
         Var.Set.union (free_variables t1) (free_variables t2)
 
   and free_variables t =
@@ -402,6 +410,9 @@ end = struct
     | Arrow(t1, t2) ->
         let desc = Arrow (subst_types s t1, subst_types s t2) in
         { kind; desc }
+    | Prod(t1, t2) ->
+        let desc = Prod (subst_types s t1, subst_types s t2) in
+        { kind; desc }
     | Unit -> { kind; desc }
     | Ref t ->
         let desc = Ref (subst_types s t) in
@@ -420,7 +431,7 @@ end = struct
         | exception Not_found -> { kind; desc }
       end
     | (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
-       | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _) ->
+       | Unit | Prod _ | Ref _ | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
 
   and subst_row_covariant s t =
@@ -451,6 +462,7 @@ end = struct
     | Variant _ -> assert false
     | Arrow _ -> assert false
     | Unit -> assert false
+    | Prod _ -> assert false
     | Ref _ -> assert false
     | Meet _ -> assert false
 
@@ -484,6 +496,7 @@ end = struct
     | Variant _ -> assert false
     | Arrow _ -> assert false
     | Unit -> assert false
+    | Prod _ -> assert false
     | Ref _ -> assert false
     | Join _ -> assert false
 
@@ -513,6 +526,9 @@ end = struct
         let desc = Arrow (subst_vars m t1, subst_vars m t2) in
         { kind; desc }
     | Unit -> t
+    | Prod(t1, t2) ->
+        let desc = Prod (subst_vars m t1, subst_vars m t2) in
+        { kind; desc }
     | Ref t ->
         let desc = Ref (subst_vars m t) in
         { kind; desc }
@@ -588,7 +604,7 @@ end = struct
                 if Constructor.CSet.equal cs cs' then desc'
                 else desc
           end
-        | Variant _ | Arrow _ | Unit | Ref _ -> assert false
+        | Variant _ | Arrow _ | Unit | Prod _ | Ref _ -> assert false
       end
     | Meet(t1, t2) -> begin
         match normalize t1.desc, normalize t2.desc with
@@ -702,6 +718,12 @@ end = struct
         unify_types t1' t2' >>| fun subst' ->
         Subst.compose subst subst'
     | Unit, Unit -> return Subst.empty
+    | Prod(t1, t1'), Prod(t2, t2') ->
+        unify_types t1 t2 >>= fun subst ->
+        let t1' = subst_types subst t1' in
+        let t2' = subst_types subst t2' in
+        unify_types t1' t2' >>| fun subst' ->
+        Subst.compose subst subst'
     | Ref t1, Ref t2 ->
         unify_types t1 t2
     | (Constructor _ | Or _ | Proj _
@@ -735,10 +757,10 @@ end = struct
             Subst.compose subst (Subst.compose subst' subst'')
       end
     | (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
-       | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _), _ ->
+       | Unit | Prod _ | Ref _ | Top _ | Bot _ | Meet _ | Join _), _ ->
         assert false
     | _, (Constructor _ | Or _ | Proj _ | Variant _ | Arrow _
-       | Unit | Ref _ | Top _ | Bot _ | Meet _ | Join _) ->
+       | Unit | Prod _ | Ref _ | Top _ | Bot _ | Meet _ | Join _) ->
         assert false
 
   and biunify_row t1 (* pos *) t2 (* neg *) =
@@ -810,9 +832,9 @@ end = struct
         let t2' = subst_row_contravariant subst t2' in
         biunify_row t1 t2' >>| fun subst' ->
         Subst.compose subst subst'
-    | (Variant _ | Arrow _ | Unit | Ref _ | Meet _), _ ->
+    | (Variant _ | Arrow _ | Unit | Prod _ | Ref _ | Meet _), _ ->
         assert false
-    | _, (Variant _ | Arrow _ | Unit | Ref _ | Join _) ->
+    | _, (Variant _ | Arrow _ | Unit | Prod _ | Ref _ | Join _) ->
         assert false
     | _, _ ->
         error ()
@@ -1208,6 +1230,10 @@ module Printing = struct
           (analyse_type_vars_types gen t1)
           (analyse_type_vars_types gen t2)
     | Unit -> Uses.empty
+    | Prod(t1, t2) ->
+        Uses.combine
+          (analyse_type_vars_types gen t1)
+          (analyse_type_vars_types gen t2)
     | Ref t -> analyse_type_vars_types gen t
     | _ -> assert false
 
@@ -1338,6 +1364,8 @@ module Printing = struct
     | In_arrow_left
     | In_arrow_right
     | In_ref
+    | In_prod_left
+    | In_prod_right
     | In_constructor
     | In_or
     | In_meet
@@ -1368,6 +1396,10 @@ module Printing = struct
         false
     | Ref _, _ -> true
     | Unit, _ -> false
+    | Prod _,
+      (In_prod_left | In_arrow_left | In_arrow_right | In_constructor) ->
+        true
+    | Prod _, _ -> false
     | Top _, In_proj -> false
     | Top _, _ -> false
     | Bot _, In_proj -> false
@@ -1465,6 +1497,10 @@ module Printing = struct
       | Unit ->
           printf "unit";
           aliased
+      | Prod(t1, t2) ->
+          let aliased = print_type In_prod_left raw aliased names nongen t1 in
+          printf " * ";
+          print_type In_prod_right raw aliased names nongen t2
       | Top cs ->
           printf "top";
           if raw then

@@ -18,7 +18,37 @@ let lookup loc env v =
   | t -> t
   | exception Not_found -> raise (Error(loc, Binding v))
 
-let rec is_value ast =
+type 'a binding =
+  { name : var; desc : 'a }
+
+type type_binding = Type.t binding
+
+type scheme_binding = Scheme.t binding
+
+type type_bindings = type_binding list
+
+type scheme_bindings = scheme_binding list
+
+let subst_type_bindings subst bindings =
+  List.map
+    (fun { name; desc } ->
+      let desc = Type.subst subst desc in
+      { name; desc })
+    bindings
+
+let scheme_bindings_of_type_bindings bindings =
+  List.map
+    (fun { name; desc } ->
+      let desc = Scheme.of_type desc in
+      { name; desc })
+    bindings
+
+let add_scheme_bindings_to_env env bindings =
+  List.fold_left
+    (fun env { name; desc } -> Env.add name desc env)
+    env bindings
+
+let rec is_value (ast : expr) =
   match ast.desc with
   | Var _ -> true
   | Abs _ -> true
@@ -34,6 +64,8 @@ let rec is_value ast =
   | Match { expr; cases } ->
       is_value expr && List.for_all is_value_case cases
   | Unit -> true
+  | Tuple { exprs } ->
+      List.for_all is_value exprs
   | Ref _ -> false
   | Deref { reference } -> is_value reference
   | Set { reference; value } ->
@@ -50,27 +82,68 @@ let generalize_expr env expr typ =
   else
     Scheme.of_type typ
 
-let generalize_let env params def typ =
-  match params with
-  | [] -> generalize_expr env def typ
-  | _ :: _ -> Type.generalize env typ
+let generalize_bindings env bindings =
+  List.map
+    (fun { name; desc } ->
+      let desc = Type.generalize env desc in
+      { name; desc })
+    bindings
 
-let rec infer_expr env ast =
+let generalize_bindings_expr env expr bindings =
+  if is_value expr then
+    generalize_bindings env bindings
+  else
+    scheme_bindings_of_type_bindings bindings
+
+let generalize_let env params def bindings =
+  match params with
+  | [] -> generalize_bindings_expr env def bindings
+  | _ :: _ -> generalize_bindings env bindings
+
+let rec infer_pattern = function
+  | Any -> Type.fresh_var Kind.type_, []
+  | Var { name } ->
+      let bound_t = Type.fresh_var Kind.type_ in
+      let binding = { name; desc = bound_t } in
+      bound_t, [binding]
+  | Tuple patterns ->
+      let rev_pattern_ts, rev_bindings =
+        List.fold_left
+          (fun (acc_pattern_ts, acc_bindings) pattern ->
+            let pattern_t, pattern_bindings = infer_pattern pattern in
+            let pattern_ts = pattern_t :: acc_pattern_ts in
+            let bindings = List.rev_append pattern_bindings acc_bindings in
+            pattern_ts, bindings)
+          ([], []) patterns
+      in
+      let bindings = List.rev rev_bindings in
+      let t =
+        match rev_pattern_ts with
+        | [] -> assert false
+        | last :: rest ->
+            List.fold_left
+              (fun acc_t pattern_t -> Type.prod pattern_t acc_t)
+              last rest
+      in
+      t, bindings
+  | Unit -> Type.unit (), []
+
+let rec infer_expr env (ast : expr) =
   match ast.desc with
   | Var { name } ->
       let scheme = lookup ast.location env name in
       let type_ = Scheme.instantiate scheme in
       Subst.empty, type_
   | Abs { params; body } -> infer_abs env ast.location params body
-  | Let { binding; params; def; body } ->
+  | Let { pattern; params; def; body } ->
       let def_subst, def_t = infer_abs env ast.location params def in
       let env = Env.subst def_subst env in
-      let scheme = generalize_let env params def def_t in
-      let env =
-        match binding with
-        | Unnamed -> env
-        | Named { name; location } -> Env.add name scheme env
-      in
+      let match_t, type_bindings = infer_pattern pattern in
+      let unify_subst = unify ast.location def_t match_t in
+      let env = Env.subst unify_subst env in
+      let type_bindings = subst_type_bindings unify_subst type_bindings in
+      let scheme_bindings = generalize_let env params def type_bindings in
+      let env = add_scheme_bindings_to_env env scheme_bindings in
       let body_subst, body_t = infer_expr env body in
       Subst.compose def_subst body_subst, body_t
   | App { fn; args } ->
@@ -136,6 +209,26 @@ let rec infer_expr env ast =
       subst, result_t
   | Unit ->
       Subst.empty, Type.unit ()
+  | Tuple { exprs } ->
+      let subst, rev_types =
+        List.fold_left
+          (fun (subst, rev_types) expr ->
+            let env = Env.subst subst env in
+            let expr_subst, expr_t = infer_expr env expr in
+            let subst = Subst.compose subst expr_subst in
+            subst, expr_t :: rev_types)
+          (Subst.empty, []) exprs
+      in
+      let result_t =
+        match rev_types with
+        | [] -> assert false
+        | last :: rest ->
+            List.fold_left
+              (fun right_t left_t ->
+                Type.prod left_t right_t)
+              last rest
+      in
+      subst, result_t
   | Ref { value } ->
       let subst, value_t = infer_expr env value in
       let result_t = Type.ref value_t in
@@ -170,9 +263,9 @@ let rec infer_expr env ast =
 
 and infer_case env result_t incoming_t case =
   match case with
-  | Destruct { constructor; arg_binding; as_binding; body; location } ->
+  | Destruct { constructor; arg_pattern; as_binding; body; location } ->
       let constructor = Constructor.of_string constructor in
-      let arg_t = Type.fresh_var Kind.type_ in
+      let arg_t, type_bindings = infer_pattern arg_pattern in
       let constructor_t = Type.constructor constructor arg_t in
       let as_constructor_t =
         Type.fresh_var
@@ -209,26 +302,23 @@ and infer_case env result_t incoming_t case =
         Type.variant range
       in
       let match_subst = unify location match_t incoming_t in
-      let arg_t = Type.subst match_subst arg_t in
+      let type_bindings = subst_type_bindings match_subst type_bindings in
       let as_t = Type.subst match_subst as_t in
       let rest_t = Type.subst match_subst rest_t in
+      let result_t = Type.subst match_subst result_t in
       let env = Env.subst match_subst env in
-      let env =
-        match arg_binding with
-        | Unnamed -> env
-        | Named { name; location } ->
-            let scheme = Scheme.of_type arg_t in
-            Env.add name scheme env
-      in
+      let scheme_bindings = scheme_bindings_of_type_bindings type_bindings in
+      let env = add_scheme_bindings_to_env env scheme_bindings in
       let env =
         match as_binding with
-        | None | Some Unnamed -> env
-        | Some (Named { name; location }) ->
+        | None -> env
+        | Some { name; location } ->
             let scheme = Scheme.of_type as_t in
             Env.add name scheme env
       in
       let body_subst, body_t = infer_expr env body in
       let rest_t = Type.subst body_subst rest_t in
+      let result_t = Type.subst body_subst result_t in
       let result_subst = unify location body_t result_t in
       let rest_t = Type.subst result_subst rest_t in
       let subst =
@@ -245,12 +335,13 @@ and infer_case env result_t incoming_t case =
       in
       let env =
         match binding with
-        | Unnamed -> env
-        | Named { name; location } ->
+        | None -> env
+        | Some { name; location } ->
             let scheme = Scheme.of_type incoming_t in
             Env.add name scheme env
       in
       let body_subst, body_t = infer_expr env body in
+      let result_t = Type.subst body_subst result_t in
       let result_subst = unify location body_t result_t in
       let subst = Subst.compose body_subst result_subst in
       subst, rest_t
@@ -258,18 +349,15 @@ and infer_case env result_t incoming_t case =
 and infer_abs env loc params body =
   let body_t = Type.fresh_var Kind.type_ in
   let env, t =
-    let rec loop env bindings =
-      match bindings with
+    let rec loop env patterns =
+      match patterns with
       | [] -> env, body_t
-      | binding :: rest ->
-          let param_t = Type.fresh_var Kind.type_ in
-          let env =
-            match binding with
-            | Unnamed -> env
-            | Named { name; location } ->
-                let scheme = Scheme.of_type param_t in
-                Env.add name scheme env
+      | pattern :: rest ->
+          let param_t, type_bindings = infer_pattern pattern in
+          let scheme_bindings =
+            scheme_bindings_of_type_bindings type_bindings
           in
+          let env = add_scheme_bindings_to_env env scheme_bindings in
           let env, t = loop env rest in
           let t = Type.arrow param_t t in
           env, t
@@ -280,20 +368,23 @@ and infer_abs env loc params body =
   let subst = Subst.compose subst (unify loc s body_t) in
   subst, Type.subst subst t
 
-let infer env x =
+let infer env (x : statement) =
   match x.desc with
-  | Definition { binding; params; def } ->
+  | Definition { pattern; params; def } ->
       let def_subst, def_t = infer_abs env x.location params def in
       let env = Env.subst def_subst env in
-      let scheme = generalize_let env params def def_t in
-      let env =
-        match binding with
-        | Unnamed -> env
-        | Named { name } -> Env.add name scheme env
+      let match_t, type_bindings = infer_pattern pattern in
+      let unify_subst = unify x.location def_t match_t in
+      let env = Env.subst unify_subst env in
+      let type_bindings = subst_type_bindings unify_subst type_bindings in
+      let scheme_bindings = generalize_let env params def type_bindings in
+      let env = add_scheme_bindings_to_env env scheme_bindings in
+      let result =
+        List.map (fun {name; desc} -> (Some name, desc)) scheme_bindings
       in
-      env, scheme
+      env, result
   | Expr { expr } ->
       let subst, t = infer_expr env expr in
       let env = Env.subst subst env in
       let scheme = generalize_expr env expr t in
-      env, scheme
+      env, [None, scheme]

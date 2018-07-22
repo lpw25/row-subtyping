@@ -10,6 +10,11 @@ let with_location desc start_pos end_pos =
   let location = location start_pos end_pos in
   { desc; location }
 
+let option_join = function
+  | None -> None
+  | Some None -> None
+  | Some (Some x) -> Some x
+
 %}
 
 /* Keywords */
@@ -34,6 +39,7 @@ let with_location desc start_pos end_pos =
 %token BANG
 %token BAR
 %token COLONEQUALS
+%token COMMA
 %token EQUALS
 %token HASH
 %token LPAREN
@@ -44,7 +50,7 @@ let with_location desc start_pos end_pos =
 
 %start <Ast.phrase> phrase
 
-%on_error_reduce nonempty_list(binding)
+%on_error_reduce nonempty_list(pattern)
 
 %%
 
@@ -58,8 +64,8 @@ phrase:
 ;
 
 statement:
-  | LET binding = binding params = loption(parameters) EQUALS def = sequence_expr
-      { let desc = Definition { binding; params; def } in
+  | LET pattern = pattern params = loption(parameters) EQUALS def = sequence_expr
+      { let desc = Definition { pattern; params; def } in
         with_location desc $startpos $endpos }
   | expr = expr
       { let desc = Expr { expr } in
@@ -77,6 +83,10 @@ simple_expr:
       { expr }
   | LPAREN RPAREN
       { let desc = Unit in
+        with_location desc $startpos $endpos }
+  | LPAREN first = expr COMMA rest = separated_nonempty_list(COMMA, expr) RPAREN
+      { let exprs = first :: rest in
+        let desc = Tuple { exprs } in
         with_location desc $startpos $endpos }
 ;
 
@@ -103,8 +113,8 @@ expr:
 sequence_expr:
   | expr = expr
       { expr }
-  | LET binding = binding params = loption(parameters) EQUALS def = expr IN body = sequence_expr
-      { let desc = Let{ binding; params; def; body; } in
+  | LET pattern = pattern params = loption(parameters) EQUALS def = expr IN body = sequence_expr
+      { let desc = Let{ pattern; params; def; body; } in
         with_location desc $startpos $endpos }
   | FUN params = parameters ARROW body = sequence_expr
       { let desc = Abs{ params; body } in
@@ -114,32 +124,48 @@ sequence_expr:
         with_location desc $startpos $endpos }
 ;
 
-
 binding:
   | name = LIDENT
       { let location = location $startpos(name) $endpos(name) in
-        Named { name; location } }
+        { name; location } }
+;
+
+pattern:
   | UNDERSCORE
-      { Unnamed }
+      { Any }
+  | binding = binding
+      { Var binding }
+  | LPAREN first = pattern COMMA rest = separated_nonempty_list(COMMA, pattern) RPAREN
+      { Tuple (first :: rest) }
+  | LPAREN RPAREN
+      { Unit }
 ;
 
 parameters:
-  | params = nonempty_list(binding)
+  | params = nonempty_list(pattern)
       { params }
 ;
 
 as_binding:
+  | AS UNDERSCORE
+      { None }
   | AS binding = binding
-      { binding }
+      { Some binding }
 ;
 
 case:
-  | BAR constructor = UIDENT arg_binding = binding
-      as_binding = ioption(as_binding) ARROW body = sequence_expr
+  | BAR constructor = UIDENT arg_pattern = pattern
+      as_binding_opt = ioption(as_binding) ARROW body = sequence_expr
         { let location = location $startpos $endpos in
-          Destruct { constructor; arg_binding; as_binding; body; location } }
+          let as_binding = option_join as_binding_opt in
+          Destruct { constructor; arg_pattern; as_binding; body; location } }
   | BAR binding = binding ARROW body = expr
         { let location = location $startpos $endpos in
+          let binding = Some binding in
+          Default { binding; body; location } }
+  | BAR UNDERSCORE ARROW body = expr
+        { let location = location $startpos $endpos in
+          let binding = None in
           Default { binding; body; location } }
 ;
 

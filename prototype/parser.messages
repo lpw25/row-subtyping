@@ -544,5 +544,152 @@ phrase: REF WITH
 
 Expected an argument
 
+phrase: LET LPAREN WITH 
+##
+## Ends in an error in state: 12.
+##
+## pattern -> LPAREN . pattern COMMA separated_nonempty_list(COMMA,pattern) RPAREN [ UNDERSCORE RPAREN LPAREN LIDENT EQUALS COMMA AS ARROW ]
+## pattern -> LPAREN . RPAREN [ UNDERSCORE RPAREN LPAREN LIDENT EQUALS COMMA AS ARROW ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN 
+##
 
+Expected a pattern or ")"
+
+phrase: LET LPAREN UNDERSCORE WITH 
+##
+## Ends in an error in state: 15.
+##
+## pattern -> LPAREN pattern . COMMA separated_nonempty_list(COMMA,pattern) RPAREN [ UNDERSCORE RPAREN LPAREN LIDENT EQUALS COMMA AS ARROW ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN pattern 
+##
+
+Expected ","
+
+phrase: LET LPAREN UNDERSCORE COMMA WITH 
+##
+## Ends in an error in state: 16.
+##
+## pattern -> LPAREN pattern COMMA . separated_nonempty_list(COMMA,pattern) RPAREN [ UNDERSCORE RPAREN LPAREN LIDENT EQUALS COMMA AS ARROW ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN pattern COMMA 
+##
+
+Expected a pattern
+
+phrase: LET LPAREN UNDERSCORE COMMA UNDERSCORE WITH 
+##
+## Ends in an error in state: 19.
+##
+## separated_nonempty_list(COMMA,pattern) -> pattern . [ RPAREN ]
+## separated_nonempty_list(COMMA,pattern) -> pattern . COMMA separated_nonempty_list(COMMA,pattern) [ RPAREN ]
+##
+## The known suffix of the stack is as follows:
+## pattern 
+##
+
+Expected "," or ")"
+
+phrase: LET LPAREN UNDERSCORE COMMA UNDERSCORE COMMA WITH 
+##
+## Ends in an error in state: 20.
+##
+## separated_nonempty_list(COMMA,pattern) -> pattern COMMA . separated_nonempty_list(COMMA,pattern) [ RPAREN ]
+##
+## The known suffix of the stack is as follows:
+## pattern COMMA 
+##
+
+Expected a pattern
+
+phrase: MATCH LIDENT WITH BAR LIDENT WITH 
+##
+## Ends in an error in state: 62.
+##
+## case -> BAR binding . ARROW expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR binding 
+##
+
+Expected "->"
+
+phrase: MATCH LIDENT WITH BAR LIDENT ARROW WITH 
+##
+## Ends in an error in state: 63.
+##
+## case -> BAR binding ARROW . expr [ END BAR ]
+##
+## The known suffix of the stack is as follows:
+## BAR binding ARROW 
+##
+
+Expected an expression
+
+phrase: LPAREN LIDENT SEMI LIDENT WITH 
+##
+## Ends in an error in state: 69.
+##
+## simple_expr -> LPAREN sequence_expr . RPAREN [ WITH SEMISEMI SEMI RPAREN LPAREN LIDENT IN END COMMA COLONEQUALS BAR BANG ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN sequence_expr 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 30, spurious reduction of production expr -> simple_expr 
+## In state 42, spurious reduction of production sequence_expr -> expr 
+## In state 44, spurious reduction of production sequence_expr -> expr SEMI sequence_expr 
+##
+
+Expected an argument or ")"
+
+phrase: LPAREN LIDENT COMMA WITH 
+##
+## Ends in an error in state: 72.
+##
+## simple_expr -> LPAREN expr COMMA . separated_nonempty_list(COMMA,expr) RPAREN [ WITH SEMISEMI SEMI RPAREN LPAREN LIDENT IN END COMMA COLONEQUALS BAR BANG ]
+##
+## The known suffix of the stack is as follows:
+## LPAREN expr COMMA 
+##
+
+Expected an expression
+
+phrase: LPAREN LIDENT COMMA LIDENT WITH 
+##
+## Ends in an error in state: 75.
+##
+## separated_nonempty_list(COMMA,expr) -> expr . [ RPAREN ]
+## separated_nonempty_list(COMMA,expr) -> expr . COMMA separated_nonempty_list(COMMA,expr) [ RPAREN ]
+##
+## The known suffix of the stack is as follows:
+## expr 
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 30, spurious reduction of production expr -> simple_expr 
+##
+
+Expected an argument, "," or ")"
+
+phrase: LPAREN LIDENT COMMA LIDENT COMMA WITH 
+##
+## Ends in an error in state: 76.
+##
+## separated_nonempty_list(COMMA,expr) -> expr COMMA . separated_nonempty_list(COMMA,expr) [ RPAREN ]
+##
+## The known suffix of the stack is as follows:
+## expr COMMA 
+##
+
+Expected an expression
 

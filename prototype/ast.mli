@@ -10,23 +10,29 @@ type 'a with_location =
 type var = string
 
 type binding =
-  | Unnamed
-  | Named of { name : string; location : location; }
+  { name : var; location : location; }
+
+type pattern =
+  | Any
+  | Var of binding
+  | Tuple of pattern list
+  | Unit
 
 type constructor = string
 
 type expr_desc =
   | Var of { name : var }
-  | Abs of { params : binding list; body : expr; }
+  | Abs of { params : pattern list; body : expr; }
   | Let of
-      { binding : binding;
-        params : binding list;
+      { pattern : pattern;
+        params : pattern list;
         def : expr;
         body : expr; }
   | App of { fn : expr; args : expr list; }
   | Constructor of { constructor : constructor; arg : expr; }
   | Match of { expr: expr; cases : case list; }
   | Unit
+  | Tuple of { exprs : expr list; }
   | Ref of { value: expr; }
   | Deref of { reference: expr; }
   | Set of { reference: expr; value: expr; }
@@ -37,19 +43,19 @@ and expr = expr_desc with_location
 and case =
   | Destruct of
       { constructor : constructor;
-        arg_binding : binding;
+        arg_pattern : pattern;
         as_binding : binding option;
         body : expr;
         location : location; }
   | Default of
-      { binding : binding;
+      { binding : binding option;
         body : expr;
         location : location; }
 
 type statement_desc =
   | Definition of
-      { binding : binding;
-        params : binding list;
+      { pattern : pattern;
+        params : pattern list;
         def : expr; }
   | Expr of
       { expr : expr; }

@@ -47,3 +47,4 @@ prototype/parser.mli
 prototype/lexer.ml
 prototype/parserMessages.ml
 prototype/prototype
+prototype/parser.new-messages

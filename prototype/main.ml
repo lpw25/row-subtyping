@@ -1,21 +1,38 @@
 
 module StringMap = Map.Make(String)
 
-let last_scheme = ref None
+let last_schemes = ref None
+let last_ast = ref None
 
 let quit () =
   exit 0
 
 let raw () =
-  match !last_scheme with
+  match !last_schemes with
   | None -> ()
-  | Some scheme ->
-      Types.Printing.print_raw_scheme scheme;
-      Format.printf "\n%!"
+  | Some schemes ->
+      List.iter
+        (fun (name, scheme) ->
+          let name =
+            match name with
+            | None -> "-"
+            | Some name -> name
+          in
+          Format.printf "%s : " name;
+          Types.Printing.print_raw_scheme scheme;
+          Format.printf "\n%!")
+        schemes
+
+let ast () =
+  match !last_ast with
+  | None -> ()
+  | Some ast ->
+      Format.printf "%a\n%!" Ast.dump_statement ast
 
 let directives_list =
   [ "quit", quit;
-    "raw", raw ]
+    "raw", raw;
+    "ast", ast; ]
 
 let directives =
   List.fold_left
@@ -29,6 +46,18 @@ let run_directive dir =
   | fn -> fn ()
   | exception Not_found ->
       Format.printf "Unknown directive: %s.@." dir
+
+let previous_token_was_semisemi = ref false
+
+let lexer lexbuf =
+  let token = Lexer.token lexbuf in
+  let is_semisemi =
+    match token with
+    | Parser.SEMISEMI -> true
+    | _ -> false
+  in
+  previous_token_was_semisemi := is_semisemi;
+  token
 
 let prompt = "# "
 
@@ -54,7 +83,7 @@ let read_interactive_input first buffer len =
       (!i, false)
 
 let first_line = ref true
-let got_eof = ref false;;
+let got_eof = ref false
 
 let refill_lexbuf buffer len =
   if !got_eof then begin
@@ -138,11 +167,15 @@ let highlight_location lb start_pos end_pos =
 
 let rec skip_phrase lexbuf =
   try
-    match Lexer.token lexbuf with
+    match lexer lexbuf with
     | Parser.SEMISEMI -> ()
     | _ -> skip_phrase lexbuf
   with
   | Lexer.Error _ -> skip_phrase lexbuf
+
+let maybe_skip_phrase lexbuf =
+  if !previous_token_was_semisemi then ()
+  else skip_phrase lexbuf
 
 let start_pos =
   { Lexing.pos_fname = "*REPL*";
@@ -155,7 +188,7 @@ let main () =
   let lb = Lexing.from_function refill_lexbuf in
   lb.lex_curr_p <- start_pos;
   let supplier =
-    Parser.MenhirInterpreter.lexer_lexbuf_to_supplier Lexer.token lb
+    Parser.MenhirInterpreter.lexer_lexbuf_to_supplier lexer lb
   in
   let start = Parser.Incremental.phrase start_pos in
   Sys.catch_break true;
@@ -176,21 +209,21 @@ let main () =
       | Ok phrase -> begin
           match phrase.desc with
           | Statement { statement } -> begin
-              let name =
-                match statement.desc with
-                | Definition { binding } -> begin
-                    match binding with
-                    | Unnamed -> "_"
-                    | Named { name; location } -> name
-                  end
-                | Expr _ -> "_"
-              in
+              last_ast := Some statement;
               match Infer.infer env statement with
-              | env, scheme ->
-                  Format.printf "%s : " name;
-                  Types.Printing.print_scheme scheme;
-                  Format.printf "\n%!";
-                  last_scheme := Some scheme;
+              | env, schemes ->
+                  List.iter
+                    (fun (name, scheme) ->
+                      let name =
+                        match name with
+                        | None -> "-"
+                        | Some name -> name
+                      in
+                      Format.printf "%s : " name;
+                      Types.Printing.print_scheme scheme;
+                      Format.printf "\n%!")
+                    schemes;
+                  last_schemes := Some schemes;
                   env
               | exception Infer.Error(loc, Typing(t1, t2, err)) ->
                   Types.Printing.print_unification_error t1 t2 err;
@@ -210,9 +243,9 @@ let main () =
           let start_pos, end_pos = Parser.MenhirInterpreter.positions menv in
           let state = Parser.MenhirInterpreter.current_state_number menv in
           let msg = ParserMessages.message state in
+          maybe_skip_phrase lb;
           Format.printf "Error: %s\n%!" msg;
           highlight_location lb start_pos end_pos;
-          skip_phrase lb;
           env
     with
     | exception End_of_file -> exit 0
@@ -220,9 +253,9 @@ let main () =
         Format.printf "Interrupted.@.";
         loop env
     | exception Lexer.Error (Lexer.Illegal_character c, pos) ->
+        skip_phrase lb;
         Format.printf "Error: illegal character %c\n\n%!" c;
         highlight_location lb pos pos;
-        skip_phrase lb;
         loop env
     | env -> loop env
   in

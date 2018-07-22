@@ -50,6 +50,7 @@ rule token = parse
   | '!' { BANG }
   | '|' { BAR }
   | ":=" { COLONEQUALS }
+  | "," { COMMA }
   | '=' { EQUALS }
   | '#' { HASH }
   | '(' { LPAREN }
