@@ -6,7 +6,7 @@
 
 Set Implicit Arguments.
 Require Import Arith LibLN.
-Require Import Cofinite Definitions Substitution
+Require Import Cofinite Disjoint Definitions Substitution
         Wellformedness Kinding Subtyping Typing.
 
 Hint Constructors red.
@@ -43,10 +43,10 @@ Proof.
     splits; auto.
     inversion Ht; subst.
     + pick_fresh x.
-      rewrite trm_subst_intro with (x := x); auto with value_regular.
-      apply typing_trm_subst_l with (L := L) (M := M); auto.
+      rewrite trm_subst_single_intro with (x := x); auto.
+      apply typing_trm_subst_single_l with (M := M); eauto.
     + pick_fresh x.
-      rewrite trm_subst_intro with (x := x); auto with value_regular.
+      rewrite trm_subst_single_intro with (x := x); auto.
       apply typing_trm_subst_empty_l with (T2 := T1); auto.
   - inversion Ht; subst.
     + assert (value t1) as Hv by assumption.
@@ -57,9 +57,11 @@ Proof.
       exists P'.
       splits; auto.
       apply typing_let with (L := L \u dom E) (T1 := T1); auto.
-      eauto 6 using typing_extend_store_type,
-        valid_store_type_add_typ_bind_l, valid_scheme_empty
-        with typing_store_validated.
+      introv Hn.
+      apply typing_extend_store_type with (P := P);
+        auto using valid_store_type_add_typ_bind_l,
+          valid_scheme_empty_of_kinding
+            with typing_store_validated.
   - inversion Ht; subst.
     assert (typing_validated E P t1 (typ_arrow S T)) as Ht2 by auto.
     destruct (IHHr _ Hs _ Ht2) as [P' [He [Ht' Hs']]].
@@ -79,8 +81,19 @@ Proof.
       by assumption.
     inversion Ht2; subst.
     pick_fresh x.
-    rewrite trm_subst_intro with (x := x); auto.
+    rewrite trm_subst_single_intro with (x := x); auto.
     apply typing_trm_subst_empty_l with (T2 := S); auto.
+  - exists P.
+    splits; auto.
+    inversion Ht; subst.
+    assert (typing_validated E P (trm_fix t1) (typ_arrow S T)) as Ht2
+      by assumption.
+    inversion Ht2; subst.
+    pick_fresh x.
+    pick_fresh y.
+    rewrite trm_subst_intro with (xs := cons x (y::nil)); auto.
+    apply typing_trm_subst_empty2_l
+      with (T2 := typ_arrow S T) (T3 := S); auto.
   - inversion Ht; subst.
     assert (typing_validated E P t T3) as Ht2 by auto.
     destruct (IHHr _ Hs _ Ht2) as [P' [He [Ht' Hs']]].
@@ -96,7 +109,7 @@ Proof.
       (T3 := T3) (T4 := T4) (T5 := T5) (T6 := T6) (T7 := T7); auto;
       eauto 8 using typing_extend_store_type,
         valid_store_type_add_typ_bind_l,
-        valid_scheme_empty, kinding_range_top_bot
+        valid_scheme_empty_of_kinding, kinding_range_top_bot
         with typing_store_validated.
   - exists P.
     splits; auto.
@@ -106,7 +119,7 @@ Proof.
       as Ht2 by assumption.
     inversion Ht2; subst.
     pick_fresh x.
-    rewrite trm_subst_intro with (x := x); auto.
+    rewrite trm_subst_single_intro with (x := x); auto.
     apply typing_trm_subst_empty_l with (T2 := typ_variant T3); auto.
     apply typing_constructor with (T2 := T4) (T3 := T9); auto.
     apply subtype_transitive
@@ -124,7 +137,7 @@ Proof.
       as Ht2 by assumption.
     inversion Ht2; subst.
     pick_fresh x.
-    rewrite trm_subst_intro with (x := x); auto.
+    rewrite trm_subst_single_intro with (x := x); auto.
     apply typing_trm_subst_empty_l with (T2 := typ_variant T5); auto.
     apply typing_constructor with (T2 := T6) (T3 := T9); auto.
     apply subtype_transitive
@@ -143,7 +156,7 @@ Proof.
       (T1 := T1) (T2 := T2) (T3 := T3); auto.
     eauto 6 using typing_extend_store_type, 
       valid_store_type_add_typ_bind_l,
-      valid_scheme_empty with typing_store_validated.
+      valid_scheme_empty_of_kinding with typing_store_validated.
   - exists P.
     splits; auto.
     inversion Ht; subst.
@@ -152,7 +165,7 @@ Proof.
       as Ht2 by assumption.
     inversion Ht2; subst.
     pick_fresh x.
-    rewrite trm_subst_intro with (x := x); auto.
+    rewrite trm_subst_single_intro with (x := x); auto.
     apply typing_trm_subst_empty_l with (T2 := T3); auto.
     apply typing_equal with (T1 := T5); auto.
     apply subtype_preserves_constructor
@@ -320,7 +333,7 @@ Proof.
     destruct (Nat.eq_dec c c0); subst; eauto 6.
     exfalso.
     apply no_subtype_constructor_bot
-      with (E := E) (T := T6) (c := c0).
+      with (chk := true) (E := E) (T := T6) (c := c0).
     apply subtype_transitive
       with (T2 := typ_proj CSet.universe T5 (CSet.singleton c0));
       auto.
@@ -334,7 +347,7 @@ Proof.
     destruct Hv1; inversion Ht; subst.
     exfalso.
     apply no_subtype_constructor_bot
-      with (E := E) (T := T4) (c := c).
+      with (chk := true) (E := E) (T := T4) (c := c).
     apply subtype_transitive
       with (T2 := typ_proj CSet.universe T3 (CSet.singleton c));
       auto.
