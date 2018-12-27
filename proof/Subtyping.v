@@ -8,211 +8,643 @@ Require Import Arith LibLN.
 Require Import Cofinite Disjoint Definitions Substitution
         Wellformedness Kinding.
 
+(* ****************************************************** *)
+(** ** Add hints for subtyping constructors *)
+
+Hint Constructors type_equal_core type_equal_symm
+     type_equal_cong type_equal subtype.
+
 (* *************************************************************** *)
-(** Type equality in an equivalence *)
+(** Valid output *)
 
-Lemma type_equal_reflexive : forall chk E T K,
-    kinding chk E T K ->
-    type_equal chk E T T K.
+Lemma output_type_equal_core : forall E T1 T2 K,
+  type_equal_core E T1 T2 K ->
+  type_environment E ->
+  kind K.
 Proof.
-  apply type_equal_reflexive.
-Qed.
-
-Lemma type_equal_transitive : forall chk E T1 T2 T3 K,
-    type_equal chk E T1 T2 K ->
-    type_equal chk E T2 T3 K ->
-    type_equal chk E T1 T3 K.
-Proof.
-  apply type_equal_transitive.
-Qed.
-
-Lemma type_equal_symmetric : forall chk E T1 T2 K,
-    type_equal chk E T1 T2 K ->
-    type_equal chk E T2 T1 K.
-Proof.
-  introv Hte.
-  apply type_equal_unvalidated_symmetric;
-    auto with type_equal_validated.
+  introv Hte He.
+  induction Hte; eauto 3 using output_kinding;
+    auto with csetdec.
+  - assert (kind (knd_row cs3)) as Hk
+      by eauto using output_kinding.
+    inversion Hk; subst.
+    auto with csetdec.
 Qed.
 
 (* *************************************************************** *)
-(** Convenient lemmas for single-step equality proofs *)
+(** Kinding from type equality *)
 
-Lemma type_equal_single : forall chk E T1 T2 K,
-    type_equal_cong chk E T1 T2 K ->
-    type_equal chk E T1 T2 K.
+Lemma type_equal_core_kinding_1 : forall E T1 T2 K,
+    type_equal_core E T1 T2 K ->
+    type_environment E ->
+    kinding E T1 K.
 Proof.
-  introv Hte.
-  eauto with type_equal_cong_validated.
+  introv Hte He.
+  induction Hte; auto with csetdec.
+  - assert (kind (knd_row cs1)) as Hk
+      by eauto using output_kinding.
+    inversion Hk; subst.
+    auto with csetdec.
+  - assert (kind (knd_row cs1)) as Hk
+      by eauto using output_kinding.
+    inversion Hk; subst.
+    auto.
+  - assert (kind (knd_row cs1)) as Hk
+      by eauto using output_kinding.
+    inversion Hk; subst.
+    auto.
 Qed.
 
-Lemma type_equal_post_step : forall chk E T1 T2 T3 K,
-    type_equal chk E T1 T2 K ->
-    type_equal_cong chk E T2 T3 K ->
-    type_equal chk E T1 T3 K.
+Lemma type_equal_core_kinding_2 : forall E T1 T2 K,
+    type_equal_core E T1 T2 K ->
+    type_environment E ->
+    kinding E T2 K.
+Proof.
+  introv Hte He.
+  induction Hte; auto with csetdec.
+Qed.
+
+Lemma type_equal_symm_kinding_1 : forall E T1 T2 K,
+    type_equal_symm E T1 T2 K ->
+    type_environment E ->
+    kinding E T1 K.
+Proof.
+  introv Hte He.
+  destruct Hte;
+    eauto using type_equal_core_kinding_1,
+      type_equal_core_kinding_2.
+Qed.
+
+Lemma type_equal_symm_kinding_2 : forall E T1 T2 K,
+    type_equal_symm E T1 T2 K ->
+    type_environment E ->
+    kinding E T2 K.
+Proof.
+  introv Hte He.
+  destruct Hte;
+    eauto using type_equal_core_kinding_1,
+      type_equal_core_kinding_2.
+Qed.
+
+Lemma type_equal_cong_kinding_1 : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K ->
+    type_environment E ->
+    kinding E T1 K.
+Proof.
+  introv Hte He.
+  induction Hte;
+    eauto using type_equal_symm_kinding_1.
+Qed.
+
+Lemma type_equal_cong_kinding_2 : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K ->
+    type_environment E ->
+    kinding E T2 K.
+Proof.
+  introv Hte He.
+  induction Hte;
+    eauto using type_equal_symm_kinding_2.
+Qed.
+
+Lemma type_equal_kinding_1 : forall E T1 T2 K,
+    type_equal E T1 T2 K ->
+    type_environment E ->
+    kinding E T1 K.
+Proof.
+  introv Hte He.
+  induction Hte;
+    eauto using type_equal_cong_kinding_1.
+Qed.
+
+Lemma type_equal_kinding_2 : forall E T1 T2 K,
+    type_equal E T1 T2 K ->
+    type_environment E ->
+    kinding E T2 K.
+Proof.
+  introv Hte He.
+  induction Hte;
+    eauto using type_equal_cong_kinding_2.
+Qed.
+
+Lemma subtype_kinding_1 : forall E T1 T2 cs,
+    subtype E T1 T2 cs ->
+    type_environment E ->
+    kinding E T1 (knd_row cs).
+Proof.
+  introv Hte He.
+  induction Hte;
+    eauto using type_equal_kinding_1.
+Qed.
+
+Lemma subtype_kinding_2 : forall E T1 T2 cs,
+    subtype E T1 T2 cs ->
+    type_environment E ->
+    kinding E T2 (knd_row cs).
+Proof.
+  introv Hte He.
+  assert (kinding E (typ_meet T1 T2) (knd_row cs)) as Hk
+    by (induction Hte; eauto using type_equal_kinding_2).
+  inversion Hk; subst.
+  auto.
+Qed.
+
+(* *************************************************************** *)
+(** Automation *)
+
+Ltac equality_kinding :=
+  match goal with
+  | |- kinding ?E ?T _ =>
+    match goal with
+    | He : type_environment ?E,
+      H : type_equal_core ?E ?Th _ _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (type_equal_core_kinding_1 H He) T
+      end
+    | He : type_environment ?E,
+      H : type_equal_core ?E _ ?Th _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (type_equal_core_kinding_2 H He) T
+      end
+    | He : type_environment ?E,
+      H : type_equal_symm ?E ?Th _ _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (type_equal_symm_kinding_1 H He) T
+      end
+    | He : type_environment ?E,
+      H : type_equal_symm ?E _ ?Th _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (type_equal_symm_kinding_2 H He) T
+      end
+    | He : type_environment ?E,
+      H : type_equal_cong ?E ?Th _ _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (type_equal_cong_kinding_1 H He) T
+      end
+    | He : type_environment ?E,
+      H : type_equal_cong ?E _ ?Th _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (type_equal_cong_kinding_2 H He) T
+      end
+    | He : type_environment ?E,
+      H : type_equal ?E ?Th _ _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (type_equal_kinding_1 H He) T
+      end
+    | He : type_environment ?E,
+      H : type_equal ?E _ ?Th _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (type_equal_kinding_2 H He) T
+      end
+    | He : type_environment ?E,
+      H : subtype ?E ?Th _ _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (subtype_kinding_1 H He) T
+      end
+    | He : type_environment ?E,
+      H : subtype ?E _ ?Th _ |- _ =>
+      match Th with
+      | context[T] =>
+          extract_kinding (subtype_kinding_2 H He) T
+      end
+    end
+  end. 
+
+Hint Extern 1 (kinding _ _ _) => equality_kinding : kinding.
+
+(* *************************************************************** *)
+(** Weakening *)
+
+Lemma type_equal_core_weakening : forall E1 E2 E3 T1 T2 K,
+   type_equal_core (E1 & E3) T1 T2 K -> 
+   type_environment (E1 & E2 & E3) ->
+   type_equal_core (E1 & E2 & E3) T1 T2 K.
+Proof.
+  introv Hte He.
+  remember (E1 & E3) as E4.
+  destruct Hte; subst; auto using kinding_weakening.
+Qed.
+
+Lemma type_equal_symm_weakening : forall E1 E2 E3 T1 T2 K,
+   type_equal_symm (E1 & E3) T1 T2 K -> 
+   type_environment (E1 & E2 & E3) ->
+   type_equal_symm (E1 & E2 & E3) T1 T2 K.
+Proof.
+  introv Hte He.
+  remember (E1 & E3) as E4.
+  destruct Hte; subst; auto using type_equal_core_weakening.
+Qed.
+
+Lemma type_equal_cong_weakening : forall E1 E2 E3 T1 T2 K,
+   type_equal_cong (E1 & E3) T1 T2 K -> 
+   type_environment (E1 & E2 & E3) ->
+   type_equal_cong (E1 & E2 & E3) T1 T2 K.
+Proof.
+  introv Hte He.
+  remember (E1 & E3) as E4.
+  induction Hte; subst;
+    auto using type_equal_symm_weakening, kinding_weakening.
+Qed.
+
+Lemma type_equal_weakening : forall E1 E2 E3 T1 T2 K,
+   type_equal (E1 & E3) T1 T2 K -> 
+   type_environment (E1 & E2 & E3) ->
+   type_equal (E1 & E2 & E3) T1 T2 K.
+Proof.
+  introv Hte He.
+  remember (E1 & E3) as E4.
+  induction Hte; subst;
+    eauto using kinding_weakening, type_equal_cong_weakening.
+Qed.
+
+Lemma type_equal_weakening_l : forall E1 E2 T1 T2 K,
+   type_equal E1 T1 T2 K -> 
+   type_environment (E1 & E2) ->
+   type_equal (E1 & E2) T1 T2 K.
+Proof.
+  introv Hv He.
+  rewrite <- concat_empty_r with (E := E1 & E2).
+  apply type_equal_weakening; rewrite concat_empty_r; assumption.
+Qed.
+
+Lemma subtype_weakening : forall E1 E2 E3 T1 T2 cs,
+   subtype (E1 & E3) T1 T2 cs -> 
+   type_environment (E1 & E2 & E3) ->
+   subtype (E1 & E2 & E3) T1 T2 cs.
+Proof.
+  introv Hsb He.
+  remember (E1 & E3) as E4.
+  destruct Hsb; subst; auto using type_equal_weakening.
+Qed.
+
+Lemma subtype_weakening_l : forall E1 E2 T1 T2 cs,
+   subtype E1 T1 T2 cs -> 
+   type_environment (E1 & E2) ->
+   subtype (E1 & E2) T1 T2 cs.
+Proof.
+  introv Hv He.
+  rewrite <- concat_empty_r with (E := E1 & E2).
+  apply subtype_weakening; rewrite concat_empty_r; assumption.
+Qed.
+
+(* *************************************************************** *)
+(** Closed *)
+
+Lemma type_equal_core_closed_l : forall E T1 T2 K X,
+    type_equal_core E T1 T2 K ->
+    X # E ->
+    X \notin (typ_fv T1).
+Proof.
+  introv Hte Hn.
+  - destruct Hte; simpl;
+      rewrite ?notin_union;
+      intuition eauto using kinding_closed.
+Qed.
+
+Lemma type_equal_core_closed_r : forall E T1 T2 K X,
+    type_equal_core E T1 T2 K ->
+    X # E ->
+    X \notin (typ_fv T2).
+Proof.
+  introv Hte Hn.
+  - destruct Hte; simpl;
+      rewrite ?notin_union;
+      intuition eauto using kinding_closed.
+Qed.
+
+Lemma type_equal_symm_closed_l : forall E T1 T2 K X,
+    type_equal_symm E T1 T2 K ->
+    X # E ->
+    X \notin (typ_fv T1).
+Proof.
+  introv Hte Hn.
+  destruct Hte;
+    eauto using type_equal_core_closed_l, type_equal_core_closed_r.
+Qed.
+
+Lemma type_equal_symm_closed_r : forall E T1 T2 K X,
+    type_equal_symm E T1 T2 K ->
+    X # E ->
+    X \notin (typ_fv T2).
+Proof.
+  introv Hte Hn.
+  destruct Hte;
+    eauto using type_equal_core_closed_l, type_equal_core_closed_r.
+Qed.
+
+Lemma type_equal_cong_closed_l : forall E T1 T2 K X,
+    type_equal_cong E T1 T2 K ->
+    X # E ->
+    X \notin (typ_fv T1).
+Proof.
+  introv Hte Hn.
+  induction Hte; simpl;
+    rewrite ?notin_union;
+    intuition eauto using kinding_closed, type_equal_symm_closed_l.
+Qed.  
+
+Lemma type_equal_cong_closed_r : forall E T1 T2 K X,
+    type_equal_cong E T1 T2 K ->
+    X # E ->
+    X \notin (typ_fv T2).
+Proof.
+  introv Hte Hn.
+  induction Hte; simpl;
+    rewrite ?notin_union;
+    intuition eauto using kinding_closed, type_equal_symm_closed_r.
+Qed.
+
+Lemma type_equal_closed_l : forall E T1 T2 K X,
+    type_equal E T1 T2 K ->
+    X # E ->
+    X \notin (typ_fv T1).
+Proof.
+  introv Hte Hn.
+  induction Hte;
+    eauto using kinding_closed, type_equal_cong_closed_l.
+Qed.
+
+Lemma type_equal_closed_r : forall E T1 T2 K X,
+    type_equal E T1 T2 K ->
+    X # E ->
+    X \notin (typ_fv T2).
+Proof.
+  introv Hte Hn.
+  induction Hte; eauto using kinding_closed.
+Qed.
+
+Lemma subtype_closed_l : forall E T1 T2 cs X,
+    subtype E T1 T2 cs ->
+    X # E ->
+    X \notin (typ_fv T1).
+Proof.
+  introv Hsb Hn.
+  destruct Hsb.
+  eauto using type_equal_closed_l.
+Qed.
+
+Lemma subtype_closed_r : forall E T1 T2 cs X,
+    subtype E T1 T2 cs ->
+    X # E ->
+    X \notin (typ_fv T2).
+Proof.
+  introv Hsb Hn.
+  destruct Hsb.
+  assert (X \notin (typ_fv (typ_meet T1 T2)))
+    by eauto using type_equal_closed_r.
+  simpl in *.
+  auto.
+Qed.
+
+(* *************************************************************** *)
+(** Preserved by type substitution *)
+
+Lemma type_equal_core_typ_subst : forall E1 E2 Xs Rs Us T1 T2 K,
+  type_equal_core (E1 & Xs ~* Rs & E2) T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  rangings (tenv_subst Xs Us (E1 & E2))
+    Us (rng_subst_list Xs Us Rs) ->
+  type_equal_core (tenv_subst Xs Us (E1 & E2))
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte Hl He Hrs.
+  assert (kindings (tenv_subst Xs Us (E1 & E2))
+            Us (rngs_knds (rng_subst_list Xs Us Rs)))
+    by eauto using kinding_typ_subst, rangings_kindings.
+  remember (E1 & Xs ~* Rs & E2) as E3.
+  destruct Hte; subst; simpl; eauto using kinding_typ_subst.
+  - apply type_equal_core_or_meet_distribution;
+      eauto using kinding_typ_subst.
+  - apply type_equal_core_or_join_distribution;
+      eauto using kinding_typ_subst.
+Qed.
+
+Lemma type_equal_symm_typ_subst : forall E1 E2 Xs Rs Us T1 T2 K,
+  type_equal_symm (E1 & Xs ~* Rs & E2) T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  rangings (tenv_subst Xs Us (E1 & E2))
+    Us (rng_subst_list Xs Us Rs) ->
+  type_equal_symm (tenv_subst Xs Us (E1 & E2))
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte Hl He Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E3.
+  destruct Hte; subst; simpl;
+    eauto using type_equal_core_typ_subst.
+Qed.
+
+Lemma type_equal_cong_typ_subst : forall E1 E2 Xs Rs Us T1 T2 K,
+  type_equal_cong (E1 & Xs ~* Rs & E2) T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  rangings (tenv_subst Xs Us (E1 & E2))
+    Us (rng_subst_list Xs Us Rs) ->
+  type_equal_cong (tenv_subst Xs Us (E1 & E2))
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte Hl He Hrs.
+  assert (kindings (tenv_subst Xs Us (E1 & E2))
+            Us (rngs_knds (rng_subst_list Xs Us Rs)))
+    by eauto using kinding_typ_subst, rangings_kindings.
+  remember (E1 & Xs ~* Rs & E2) as E3.
+  induction Hte; subst; simpl;
+    eauto using type_equal_symm_typ_subst, kinding_typ_subst.
+Qed.
+
+Lemma type_equal_typ_subst : forall E1 E2 Xs Rs Us T1 T2 K,
+  type_equal (E1 & Xs ~* Rs & E2) T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  rangings (tenv_subst Xs Us (E1 & E2))
+    Us (rng_subst_list Xs Us Rs) ->
+  type_equal (tenv_subst Xs Us (E1 & E2))
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte Hl He Hrs.
+  assert (kindings (tenv_subst Xs Us (E1 & E2))
+            Us (rngs_knds (rng_subst_list Xs Us Rs)))
+    by eauto using kinding_typ_subst, rangings_kindings.
+  remember (E1 & Xs ~* Rs & E2) as E3.
+  induction Hte; subst; simpl; eauto using kinding_typ_subst.
+  apply type_equal_step
+    with (T2 := typ_subst Xs Us T2);
+      eauto using type_equal_cong_typ_subst.
+Qed.
+
+Lemma type_equal_typ_subst_l : forall E Xs Rs Us T1 T2 K,
+  type_equal (E & Xs ~* Rs) T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E & Xs ~* Rs) ->
+  rangings (tenv_subst Xs Us E)
+    Us (rng_subst_list Xs Us Rs) ->
+  type_equal (tenv_subst Xs Us E)
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte Hl He Hrs.
+  rewrite <- (concat_empty_r E).
+  rewrite <- (concat_empty_r E) in Hrs.
+  rewrite <- (concat_empty_r (E & Xs ~* Rs)) in Hte, He.
+  eauto using type_equal_typ_subst.
+Qed.
+
+Lemma subtype_typ_subst : forall E1 E2 Xs Rs Us T1 T2 cs,
+  subtype (E1 & Xs ~* Rs & E2) T1 T2 cs ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  rangings (tenv_subst Xs Us (E1 & E2))
+    Us (rng_subst_list Xs Us Rs) ->
+  subtype (tenv_subst Xs Us (E1 & E2))
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) cs.
+Proof.
+  introv Hsb Hl He Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E3.
+  destruct Hsb; subst.
+  apply subtype_c.
+  replace (typ_meet (typ_subst Xs Us T1) (typ_subst Xs Us T2))
+    with (typ_subst Xs Us (typ_meet T1 T2)) by auto.
+  eauto using type_equal_typ_subst.
+Qed.
+
+Lemma subtype_typ_subst_l : forall E Xs Rs Us T1 T2 cs,
+  subtype (E & Xs ~* Rs) T1 T2 cs ->
+  length Xs = length Rs ->
+  type_environment (E & Xs ~* Rs) ->
+  rangings (tenv_subst Xs Us E)
+    Us (rng_subst_list Xs Us Rs) ->
+  subtype (tenv_subst Xs Us E)
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) cs.
+Proof.
+  introv Hsb Hl He Hrs.
+  rewrite <- (concat_empty_r E).
+  rewrite <- (concat_empty_r E) in Hrs.
+  rewrite <- (concat_empty_r (E & Xs ~* Rs)) in Hsb, He.
+  eauto using subtype_typ_subst.
+Qed.
+
+(* **************************************************** *)
+(** Type equality is an equivalence *)
+
+Lemma type_equal_reflexive : forall E T K,
+    kinding E T K ->
+    type_equal E T T K.
+Proof.
+  auto.
+Qed.
+
+Lemma type_equal_transitive : forall E T1 T2 T3 K,
+    type_equal E T1 T2 K ->
+    type_equal E T2 T3 K ->
+    type_equal E T1 T3 K.
 Proof.
   introv Hte1 Hte2.
+  induction Hte1; eauto.
+Qed.
+
+Lemma type_equal_symm_symmetric : forall E T1 T2 K,
+    type_equal_symm E T1 T2 K ->
+    type_equal_symm E T2 T1 K.
+Proof.
+  introv Hte.
+  destruct Hte; auto.
+Qed.
+
+Lemma type_equal_cong_symmetric : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K ->
+    type_equal_cong E T2 T1 K.
+Proof.
+  introv Hte.
+  induction Hte; auto using type_equal_symm_symmetric.
+Qed.
+  
+Lemma type_equal_symmetric_ind : forall E T1 T2 T3 K,
+    type_equal E T2 T1 K ->
+    type_equal E T2 T3 K ->
+    type_equal E T3 T1 K.
+Proof.
+  introv Hacc Hte.
+  induction Hte; eauto using type_equal_cong_symmetric. 
+Qed.  
+
+Lemma type_equal_symmetric : forall E T1 T2 K,
+    type_equal E T1 T2 K ->
+    type_environment E ->
+    type_equal E T2 T1 K.
+Proof.
+  introv Hte He.
+  destruct Hte; auto.
+  eauto using type_equal_symmetric_ind with kinding.
+Qed.
+
+(* ****************************************************** *)
+(** Convenient lemmas for single-step equality proofs *)
+
+Lemma type_equal_single : forall E T1 T2 K,
+    type_equal_cong E T1 T2 K ->
+    type_environment E ->
+    type_equal E T1 T2 K.
+Proof.
+  introv Hte.
+  eauto with kinding.
+Qed.
+
+Lemma type_equal_post_step : forall E T1 T2 T3 K,
+    type_equal E T1 T2 K ->
+    type_equal_cong E T2 T3 K ->
+    type_environment E ->
+    type_equal E T1 T3 K.
+Proof.
+  introv Hte1 Hte2 He.
   eauto using type_equal_transitive, type_equal_single.
 Qed.
 
-(* *************************************************************** *)
+(* ***************************************************** *)
 (** Idempotence of join and meet *)
 
-Lemma type_equal_join_idempotent : forall chk E T cs,
-    kinding chk E T (knd_row cs) ->
-    type_equal chk E T (typ_join T T) (knd_row cs).
+Lemma type_equal_join_idempotent : forall E T cs,
+    type_environment E ->
+    kinding E T (knd_row cs) ->
+    type_equal E T (typ_join T T) (knd_row cs).
 Proof.
-  introv Hk.
+  introv He Hk.
+  assert (kind (knd_row cs)) as Hknd
+    by eauto using output_kinding.
+  inversion Hknd; subst.
   apply type_equal_step
-    with (T2 := typ_join T (typ_meet T (typ_top cs)));
-    auto with kinding_validated kinding_regular.
-  apply type_equal_step with (T2 := typ_join T T); auto.
+    with (T2 := typ_join T (typ_meet T (typ_top cs))); auto.
+  apply type_equal_single; auto.
 Qed.    
 
-Lemma type_equal_meet_idempotent : forall chk E T cs,
-    kinding chk E T (knd_row cs) ->
-    type_equal chk E T (typ_meet T T) (knd_row cs).
+Lemma type_equal_meet_idempotent : forall E T cs,
+    type_environment E ->
+    kinding E T (knd_row cs) ->
+    type_equal E T (typ_meet T T) (knd_row cs).
 Proof.
-  introv Hte.
-  apply type_equal_unvalidated_meet_idempotent;
-    auto with kinding_validated.
-Qed.
-
-(* *************************************************************** *)
-(** Projection on top and bottom *)
-
-Lemma type_equal_proj_bot : forall chk E cs1 cs2,
-    valid_env chk E ->
-    CSet.Subset cs2 cs1 ->
-    CSet.Nonempty cs2 ->
-    type_equal chk E
-      (typ_proj cs1 (typ_bot cs1) cs2) (typ_bot cs2) (knd_row cs2).
-Proof.
-  introv Hv Hs Hn.
-  remember (CSet.is_empty (CSet.diff cs1 cs2)) as emp.
-  destruct emp.
-  - symmetry in Heqemp.
-    rewrite CSet.is_empty_spec1 in Heqemp.
-    assert (CSet.Equal cs1 cs2) as Heq by csetdec.
-    apply CSet.eq_leibniz in Heq; subst.
-    apply type_equal_single; auto.
-  - symmetry in Heqemp.
-    rewrite CSet.is_empty_spec2 in Heqemp.
-    apply type_equal_step
-      with (T2 :=
-              typ_proj
-                cs1 (typ_or cs2 (typ_bot cs2)
-                (CSet.diff cs1 cs2) (typ_bot (CSet.diff cs1 cs2)))
-                cs2);
-      auto with csetdec.
-    apply type_equal_step
-      with (T2 := typ_proj cs2 (typ_bot cs2) cs2);
-      auto with csetdec.
-    apply type_equal_single; auto.
-Qed.
-
-Lemma type_equal_proj_top : forall chk E cs1 cs2,
-    valid_env chk E ->
-    CSet.Subset cs2 cs1 ->
-    CSet.Nonempty cs2 ->
-    type_equal chk E
-      (typ_proj cs1 (typ_top cs1) cs2) (typ_top cs2) (knd_row cs2).
-Proof.
-  introv Hv Hs Hn.
-  remember (CSet.is_empty (CSet.diff cs1 cs2)) as emp.
-  destruct emp.
-  - symmetry in Heqemp.
-    rewrite CSet.is_empty_spec1 in Heqemp.
-    assert (CSet.Equal cs1 cs2) as Heq by csetdec.
-    apply CSet.eq_leibniz in Heq; subst.
-    apply type_equal_single; auto.
-  - symmetry in Heqemp.
-    rewrite CSet.is_empty_spec2 in Heqemp.
-    apply type_equal_step
-      with (T2 :=
-              typ_proj
-                cs1 (typ_or cs2 (typ_top cs2)
-                (CSet.diff cs1 cs2) (typ_top (CSet.diff cs1 cs2)))
-                cs2);
-      auto with csetdec.
-    apply type_equal_step
-      with (T2 := typ_proj cs2 (typ_top cs2) cs2);
-      auto with csetdec.
-    apply type_equal_single; auto.
-Qed.
-
-(* *************************************************************** *)
-(** Subtyping is a partial order *)
-
-Lemma subtype_refl : forall chk E T cs,
-    kinding chk E T (knd_row cs) ->
-    subtype chk E T T cs.
-Proof.
-  introv Hk.
-  apply subtype_unvalidated_refl;
-    auto with kinding_validated.
-Qed.
-
-Lemma subtype_reflexive : forall chk E T1 T2 cs,
-    type_equal chk E T1 T2 (knd_row cs) ->
-    subtype chk E T1 T2 cs.
-Proof.
-  introv Hte.
-  apply subtype_unvalidated_reflexive;
-    auto with type_equal_validated.
-Qed.
-     
-Lemma subtype_transitive : forall chk E T1 T2 T3 cs,
-    subtype chk E T1 T2 cs ->
-    subtype chk E T2 T3 cs ->
-    subtype chk E T1 T3 cs.
-Proof.
-  introv Hs1 Hs2.
-  eapply subtype_unvalidated_transitive;
-    auto with subtype_validated.
-Qed.
-
-Lemma subtype_antisymmetric : forall chk E T1 T2 cs,
-    subtype chk E T1 T2 cs ->
-    subtype chk E T2 T1 cs ->
-    type_equal chk E T1 T2 (knd_row cs).
-Proof.
-  introv Hs1 Hs2.
-  apply subtype_unvalidated_antisymmetric;
-    auto with subtype_validated.
+  introv He Hk.
+  assert (kind (knd_row cs)) as Hknd
+    by eauto using output_kinding.
+  inversion Hknd; subst.
+  apply type_equal_step
+    with (T2 := typ_meet T (typ_join T (typ_bot cs))); auto.
+  apply type_equal_single; auto.
 Qed.
 
 (* *************************************************************** *)
 (** Congruence of type equality *)
 
-Lemma type_equal_range_subsumption : forall chk E T1 T2 T3 T4 T3' T4',
-    type_equal chk E T1 T2 (knd_range T3 T4) ->
-    subtype chk E T3 T3' CSet.universe ->
-    subtype chk E T4' T4 CSet.universe ->
-    type_equal chk E T1 T2 (knd_range T3' T4').
-Proof.
-  introv Hte Hs1 Hs2.
-  remember (knd_range T3 T4) as K.
-  induction Hte; subst.
-  - eauto.
-  - assert (type_equal_cong chk E T1 T2 (knd_range T3 T4))
-      as Hec by assumption.
-    inversion Hec; subst.
-    assert (type_equal_symm chk E T1 T2 (knd_range T3 T4))
-      as Hes by assumption.
-    inversion Hes; subst.
-    + assert (type_equal_core chk E T1 T2 (knd_range T3 T4))
-        as Her by assumption.
-      inversion Her; subst.
-    + assert (type_equal_core chk E T2 T1 (knd_range T3 T4))
-        as Her by assumption.
-      inversion Her; subst.
-Qed.
-
-Lemma type_equal_constructor : forall chk E c T1 T1' cs,
-    type_equal chk E T1 T1' knd_type ->
+Lemma type_equal_constructor : forall E c T1 T1' cs,
+    type_equal E T1 T1' knd_type ->
     cs = CSet.singleton c ->
-    type_equal chk E
+    type_equal E
       (typ_constructor c T1) (typ_constructor c T1')
       (knd_row cs).
 Proof.
@@ -221,651 +653,700 @@ Proof.
   induction Hte; subst; eauto.
 Qed.
 
-Lemma type_equal_proj : forall chk E T1 T1' cs1 cs2,
-    type_equal chk E T1 T1' (knd_row cs1) ->
+Lemma type_equal_proj : forall E T1 T1' cs1 cs2,
+    type_equal E T1 T1' (knd_row cs1) ->
     CSet.Subset cs2 cs1 ->
     CSet.Nonempty cs2 ->
-    type_equal chk E
-      (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2)
-      (knd_row cs2).
+    type_equal E (typ_proj cs1 T1 cs2)
+      (typ_proj cs1 T1' cs2) (knd_row cs2).
 Proof.
   introv Hte Hs Hn.
   remember (knd_row cs1) as K.
   induction Hte; subst; eauto.
 Qed.
 
-Lemma type_equal_variant : forall chk E T1 T1',
-    type_equal chk E T1 T1'
-      (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
-    type_equal chk E (typ_variant T1) (typ_variant T1') knd_type.
+Lemma type_equal_variant : forall E T1 T1',
+    type_equal E T1 T1' knd_range ->
+    type_equal E (typ_variant T1) (typ_variant T1') knd_type.
 Proof.
   introv Hte.
-  remember
-    (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) as K.
-  induction Hte; subst.
-  - eauto.  
-  - assert
-      (type_equal_cong chk E T1 T2
-        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)))
-      as Hec by assumption.
-    inversion Hec; subst.
-    assert
-      (type_equal_symm chk E T1 T2
-        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)))
-      as Hes by assumption.
-    inversion Hes; subst.
-    + assert
-        (type_equal_core chk E T1 T2
-          (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)))
-        as Her by assumption.
-      inversion Her.
-    + assert
-        (type_equal_core chk E T2 T1
-          (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)))
-        as Her by assumption.
-      inversion Her.
+  remember knd_range as K.
+  induction Hte; subst; eauto.
 Qed.
  
-Lemma type_equal_or : forall chk E T1 T1' T2 T2' cs1 cs2 cs,
-    type_equal chk E T1 T1' (knd_row cs1) ->
-    type_equal chk E T2 T2' (knd_row cs2) ->
+Lemma type_equal_or : forall E T1 T1' T2 T2' cs1 cs2 cs3,
+    type_equal E T1 T1' (knd_row cs1) ->
+    type_equal E T2 T2' (knd_row cs2) ->
     CSet.Disjoint cs1 cs2 ->
-    cs = CSet.union cs1 cs2 ->
-    type_equal chk E
-      (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1' cs2 T2') (knd_row cs).
+    cs3 = CSet.union cs1 cs2 ->
+    type_environment E ->
+    type_equal E (typ_or cs1 T1 cs2 T2)
+      (typ_or cs1 T1' cs2 T2') (knd_row cs3).
 Proof.
-  introv Hte1 Hte2 Hd Heq.
+  introv Hte1 Hte2 Hd Heq He.
   apply type_equal_transitive with (typ_or cs1 T1' cs2 T2).
   - remember (knd_row cs1) as K.
-    induction Hte1; subst;
-      eauto with type_equal_validated.
+    induction Hte1; subst; eauto with kinding.
   - remember (knd_row cs2) as K.
-    induction Hte2; subst;
-      eauto with type_equal_validated.
-Qed.
+    induction Hte2; subst; eauto with kinding.
+Qed.    
 
-Lemma type_equal_arrow : forall chk E T1 T1' T2 T2',
-    type_equal chk E T1 T1' knd_type ->
-    type_equal chk E T2 T2' knd_type ->
-    type_equal chk E (typ_arrow T1 T2) (typ_arrow T1' T2') knd_type.
+Lemma type_equal_arrow : forall E T1 T1' T2 T2',
+    type_equal E T1 T1' knd_type ->
+    type_equal E T2 T2' knd_type ->
+    type_environment E ->
+    type_equal E (typ_arrow T1 T2) (typ_arrow T1' T2') knd_type.
 Proof.
-  introv Hte1 Hte2.
-  remember knd_type as K.
+  introv Hte1 Hte2 He.
   apply type_equal_transitive with (typ_arrow T1' T2).
-  - induction Hte1; subst; eauto with type_equal_validated.
-  - induction Hte2; subst; eauto with type_equal_validated.
+  - remember knd_type as K.
+    induction Hte1; subst; eauto with kinding.
+  - remember knd_type as K.
+    induction Hte2; subst; eauto with kinding.
 Qed.
 
-Lemma type_equal_meet : forall chk E T1 T1' T2 T2' cs,
-    type_equal chk E T1 T1' (knd_row cs) ->
-    type_equal chk E T2 T2' (knd_row cs) ->
-    type_equal chk E (typ_meet T1 T2) (typ_meet T1' T2') (knd_row cs).
+Lemma type_equal_meet : forall E T1 T1' T2 T2' cs,
+    type_equal E T1 T1' (knd_row cs) ->
+    type_equal E T2 T2' (knd_row cs) ->
+    type_environment E ->
+    type_equal E (typ_meet T1 T2) (typ_meet T1' T2') (knd_row cs).
 Proof.
-  introv Hte1 Hte2.
-  remember (knd_row cs) as K.
+  introv Hte1 Hte2 Hke.
   apply type_equal_transitive with (typ_meet T1' T2).
-  - induction Hte1; subst; eauto with type_equal_validated.
-  - induction Hte2; subst; eauto with type_equal_validated.
+  - remember (knd_row cs) as K.
+    induction Hte1; subst; eauto with kinding.
+  - remember (knd_row cs) as K.
+    induction Hte2; subst; eauto with kinding.
 Qed.
 
-Lemma type_equal_join : forall chk E T1 T1' T2 T2' cs,
-    type_equal chk E T1 T1' (knd_row cs) ->
-    type_equal chk E T2 T2' (knd_row cs) ->
-    type_equal chk E (typ_join T1 T2) (typ_join T1' T2') (knd_row cs).
+Lemma type_equal_join : forall E T1 T1' T2 T2' cs,
+    type_equal E T1 T1' (knd_row cs) ->
+    type_equal E T2 T2' (knd_row cs) ->
+    type_environment E ->
+    type_equal E (typ_join T1 T2) (typ_join T1' T2') (knd_row cs).
 Proof.
-  introv Hte1 Hte2.
-  remember (knd_row cs) as K.
+  introv Hte1 Hte2 He.
   apply type_equal_transitive with (typ_join T1' T2).
-  - induction Hte1; subst; eauto with type_equal_validated.
-  - induction Hte2; subst; eauto with type_equal_validated.
+  - remember (knd_row cs) as K.
+    induction Hte1; subst; eauto with kinding.
+  - remember (knd_row cs) as K.
+    induction Hte2; subst; eauto with kinding.
 Qed.
 
-(* *************************************************************** *)
-(** Congruence of subtyping *)
+(* ****************************************************** *)
+(** Subtyping is a partial order *)
 
-Lemma subtype_proj : forall chk E T1 T1' cs1 cs2,
-    subtype chk E T1 T1' cs1 ->
-    CSet.Subset cs2 cs1 ->
-    CSet.Nonempty cs2 ->
-    subtype chk E (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) cs2.
+Lemma subtype_refl : forall E T cs,
+    type_environment E ->
+    kinding E T (knd_row cs) ->
+    subtype E T T cs.
 Proof.
-  introv Hs Hsb Hn.
-  remember Hs as Hs'.
-  destruct Hs.
+  intros He Hk.
+  auto using type_equal_meet_idempotent.
+Qed.
+
+Lemma subtype_reflexive : forall E T1 T2 cs,
+    type_equal E T1 T2 (knd_row cs) ->
+    type_environment E ->
+    subtype E T1 T2 cs.
+Proof.
+  introv Hte He.
   apply subtype_c.
-  apply type_equal_post_step
-    with (T2 := typ_proj cs (typ_meet T1 T2) cs2);
-    auto using type_equal_proj with subtype_validated.
+  apply type_equal_transitive with (typ_meet T1 T1);
+    eauto using type_equal_meet_idempotent, type_equal_meet
+      with kinding.
 Qed.
-
-Lemma subtype_or : forall chk E T1 T1' T2 T2' cs1 cs2 cs,
-    subtype chk E T1 T1' cs1 ->
-    subtype chk E T2 T2' cs2 ->
-    CSet.Disjoint cs1 cs2 ->
-    cs = CSet.union cs1 cs2 ->
-    subtype chk E (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1' cs2 T2') cs.
+     
+Lemma subtype_transitive : forall E T1 T2 T3 cs,
+    subtype E T1 T2 cs ->
+    subtype E T2 T3 cs ->
+    type_environment E ->
+    subtype E T1 T3 cs.
 Proof.
-  introv Hs1 Hs2 Hd Heq.
-  remember Hs1 as Hs1'.
+  introv Hs1 Hs2 He.
   destruct Hs1.
-  remember Hs2 as Hs2'.
   destruct Hs2.
   apply subtype_c.
-  apply type_equal_post_step
-    with (T2 := typ_or cs0 (typ_meet T1 T0) cs1 (typ_meet T2 T3));
-    auto using type_equal_or with subtype_validated.
+  apply type_equal_transitive with (typ_meet T1 T0); auto.
+  apply type_equal_transitive with (typ_meet T1 (typ_meet T0 T2));
+    eauto using type_equal_meet, subtype_kinding_1,
+      subtype_kinding_2.
+  apply type_equal_step with (typ_meet (typ_meet T1 T0) T2);
+    auto with kinding.
+  auto using type_equal_meet, type_equal_symmetric with kinding.
 Qed.
 
-Lemma subtype_meet : forall chk E T1 T1' T2 T2' cs,
-    subtype chk E T1 T1' cs ->
-    subtype chk E T2 T2' cs ->
-    subtype chk E (typ_meet T1 T2) (typ_meet T1' T2') cs.
+Lemma subtype_antisymmetric : forall E T1 T2 cs,
+    subtype E T1 T2 cs ->
+    subtype E T2 T1 cs ->
+    type_environment E ->
+    type_equal E T1 T2 (knd_row cs).
 Proof.
-  introv Hs1 Hs2.
-  remember Hs1 as Hs1'.
-  destruct Hs1.
-  remember Hs2 as Hs2'.
-  destruct Hs2.
-  apply subtype_c.
-  apply type_equal_transitive
-    with (T2 := typ_meet (typ_meet T1 T0) (typ_meet T2 T3));
-    auto using type_equal_meet.
-  apply type_equal_step
-    with (T2 := typ_meet (typ_meet (typ_meet T1 T0) T2) T3);
-    auto with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_meet (typ_meet (typ_meet T0 T1) T2) T3);
-    auto 6 with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_meet (typ_meet T0 (typ_meet T1 T2)) T3);
-    auto with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_meet (typ_meet (typ_meet T1 T2) T0) T3);
-    auto 6 with subtype_validated.
-  apply type_equal_single; auto with subtype_validated.
-Qed.
-
-Lemma subtype_join : forall chk E T1 T1' T2 T2' cs,
-    subtype chk E T1 T1' cs ->
-    subtype chk E T2 T2' cs ->
-    subtype chk E (typ_join T1 T2) (typ_join T1' T2') cs.
-Proof.
-  introv Hs1 Hs2.
-  remember Hs1 as Hs1'.
-  destruct Hs1.
-  remember Hs2 as Hs2'.
-  destruct Hs2.
-  apply subtype_c.
-  apply type_equal_transitive
-    with (T2 := typ_join (typ_meet T1 T0) (typ_meet T2 T3));
-    auto using type_equal_join.
-  apply type_equal_step
-    with (T2 := typ_join (typ_meet T1 (typ_meet T0 (typ_join T0 T3)))
-                         (typ_meet T2 T3));
-    auto 6 with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
-                         (typ_meet T2 T3));
-    auto 6 with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
-                  (typ_meet T2 (typ_meet T3 (typ_join T3 T0))));
-    auto 6 with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
-                  (typ_meet (typ_meet T2 T3) (typ_join T3 T0)));
-    auto 6 with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
-                  (typ_meet (typ_meet T2 T3) (typ_join T0 T3)));
-    auto 6 with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_join (typ_meet (typ_join T0 T3) (typ_meet T1 T0))
-                  (typ_meet (typ_meet T2 T3) (typ_join T0 T3)));
-    auto 6 with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_join (typ_meet (typ_join T0 T3) (typ_meet T1 T0))
-                  (typ_meet (typ_join T0 T3) (typ_meet T2 T3)));
-    auto 6 with subtype_validated.
-  apply type_equal_transitive
-    with (T2 := typ_join (typ_meet (typ_join T0 T3) T1)
-                         (typ_meet (typ_join T0 T3) T2));
-    auto using type_equal_join, type_equal_meet, type_equal_symmetric
-      with subtype_validated.
-  apply type_equal_step
-    with (T2 := typ_meet (typ_join T0 T3) (typ_join T1 T2));
-    auto 6 with subtype_validated.
-  apply type_equal_single;
-    auto with subtype_validated.
+  introv Hs1 Hs2 He.
+  destruct Hs1; destruct Hs2.
+  apply type_equal_transitive with (typ_meet T2 T1); auto.
+  apply type_equal_step with (typ_meet T1 T2);
+    eauto with kinding.
+  apply type_equal_symmetric; auto.
 Qed.
 
 (* *************************************************************** *)
 (** Typing lattice is bounded *)
 
-Lemma subtype_top : forall chk E T cs,
-    kinding chk E T (knd_row cs) ->
-    subtype chk E T (typ_top cs) cs.
+Lemma subtype_top : forall E T cs,
+    type_environment E ->
+    kinding E T (knd_row cs) ->
+    subtype E T (typ_top cs) cs.
 Proof.
-  introv Hk.
-  apply subtype_unvalidated_top;
-    auto with kinding_validated.
+  introv He Hk.
+  assert (kind (knd_row cs)) as Hknd
+    by eauto using output_kinding.
+  inversion Hknd; subst.
+  auto 6 using type_equal_single.
 Qed.
 
-Lemma subtype_bot : forall chk E T cs,
-    kinding chk E T (knd_row cs) ->
-    subtype chk E (typ_bot cs) T cs.
+Lemma subtype_bot : forall E T cs,
+    type_environment E ->
+    kinding E T (knd_row cs) ->
+    subtype E (typ_bot cs) T cs.
 Proof.
-  introv Hk.
-  apply subtype_unvalidated_bot;
-    auto with kinding_validated.
+  introv He Hk.
+  assert (kind (knd_row cs)) as Hknd
+    by eauto using output_kinding.
+  inversion Hknd; subst.
+  apply subtype_c.
+  apply type_equal_step
+    with (typ_meet (typ_bot cs) (typ_join (typ_bot cs) T)); auto.
+  apply type_equal_step
+    with (typ_meet (typ_bot cs) (typ_join T (typ_bot cs))); auto 6.
+  apply type_equal_single; auto.
 Qed.  
 
-Lemma kinding_range_top_bot : forall E T1 T2 T3,
-    kinding true E T1 (knd_range T2 T3) ->
-    kinding true E T1
-      (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)).
+(* ****************************************************** *)
+(** Convenient lemmas for subtyping proofs *)
+
+Lemma subtype_reflexive_single : forall E T1 T2 cs,
+    type_equal_cong E T1 T2 (knd_row cs) ->
+    type_environment E ->
+    subtype E T1 T2 cs.
 Proof.
-  introv Hk.
-  assert (valid_kind true E (knd_range T2 T3)) as Hv
-    by auto with kinding_validated. 
-  inversion Hv; subst.
-  apply kinding_unvalidated_range_top_bot with (T2 := T2) (T3 := T3);
-    auto with kinding_validated subtype_validated.
-Qed.  
+  introv Hte He.
+  apply subtype_reflexive; auto.
+  apply type_equal_single; auto.
+Qed.
+
+Lemma subtype_reflexive_step : forall E T1 T2 T3 cs,
+    subtype E T1 T2 cs ->
+    type_equal_cong E T1 T3 (knd_row cs) ->
+    type_environment E ->
+    subtype E T3 T2 cs.
+Proof.
+  introv Hs He Hte.
+  destruct Hs.
+  apply subtype_c.
+  apply type_equal_step with T1;
+    auto using type_equal_cong_symmetric.
+  apply type_equal_transitive with (typ_meet T1 T2); auto.
+  apply type_equal_single; auto with kinding.
+Qed.
+
+Lemma subtype_reflexive_post_step : forall E T1 T2 T3 cs,
+    subtype E T1 T2 cs ->
+    type_equal_cong E T2 T3 (knd_row cs) ->
+    type_environment E ->
+    subtype E T1 T3 cs.
+Proof.
+  introv Hs Hte He.
+  destruct Hs.
+  apply subtype_c.
+  apply type_equal_transitive with (typ_meet T1 T2); auto.
+  apply type_equal_single; eauto with kinding.
+Qed.
 
 (* *************************************************************** *)
-(** Kinding respects type equality *)
-(*
-Lemma kinding_type_equal_core_l : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal_core E T1 T2 K2 ->
-    kinding E T2 K1.
+(** Congruence of subtyping *)
+
+Lemma subtype_proj : forall E T1 T1' cs1 cs2,
+    subtype E T1 T1' cs1 ->
+    CSet.Subset cs2 cs1 ->
+    CSet.Nonempty cs2 ->
+    type_environment E ->
+    subtype E (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) cs2.
 Proof.
-  introv Hk Hte.
-  generalize dependent K2.
-  generalize dependent T2.
-  induction Hk; introv Hte;
-    eauto; inversion Hte; subst; auto; auto with csetdec;
-    inversion Hk2; subst; auto.
+  introv Hs Hsb Hn He.
+  destruct Hs.
+  apply subtype_c.
+  apply type_equal_post_step
+    with (typ_proj cs (typ_meet T1 T2) cs2);
+      eauto using type_equal_proj with kinding. 
 Qed.
 
-Lemma kinding_type_equal_core_r : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal_core E T2 T1 K2 ->
-    kinding E T2 K1.
+Lemma subtype_or : forall E T1 T1' T2 T2' cs1 cs2 cs,
+    subtype E T1 T1' cs1 ->
+    subtype E T2 T2' cs2 ->
+    CSet.Disjoint cs1 cs2 ->
+    cs = CSet.union cs1 cs2 ->
+    type_environment E ->
+    subtype E (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1' cs2 T2') cs.
 Proof.
-  introv Hk Hte.
-  generalize dependent K1.
-  induction Hte; introv Hk.
-  - remember (typ_or cs2 T2 cs1 T1) as T.
-    induction Hk; inversion HeqT; subst; eauto with csetdec.
-  - remember (typ_or cs12 (typ_or cs1 T1 cs2 T2) cs3 T3) as T.
-    induction Hk; inversion HeqT; subst; eauto with csetdec.
-  - remember (typ_bot cs12) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_top cs12) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember
-      (typ_meet (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4)) as T.
-    induction Hk; inversion HeqT; subst; eauto;
-      inversion Hk1; inversion Hk2; subst; auto.
-  - remember
-      (typ_join (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4)) as T.
-    induction Hk; inversion HeqT; subst; eauto;
-      inversion Hk1; inversion Hk2; subst; auto.
-  - remember (typ_proj cs1 T cs23) as Tk.
-    induction Hk; inversion HeqTk; subst; eauto.
-  - induction Hk; eauto; inversion H; subst;
-      auto with csetdec kinding_regular.
-    + assert (bind_knd K = bind_knd (knd_row cs)) as Heq
-        by eauto using binds_func.
-      inversion Heq; subst.
-      auto with csetdec kinding_regular.
-    + apply IHHk1.
-
-  induction Hk; introv Hte.
-  - inversion Hte; subst.
-    + assert (kinding E (typ_fvar X) (knd_row cs)) as Hk2
-        by assumption.
-      inversion Hk2; subst.
-      assert (bind_knd K = bind_knd (knd_row cs)) as Heq
-        by eauto using binds_func.
-      inversion Heq; subst.
-      apply kinding_proj; auto with csetdec kinding_regular.
-    + 
+  introv Hs1 Hs2 Hd Heq He.
+  destruct Hs1.
+  destruct Hs2.
+  apply subtype_c.
+  apply type_equal_post_step
+    with (typ_or cs0 (typ_meet T1 T0) cs1 (typ_meet T2 T3));
+    eauto using type_equal_or with kinding.
 Qed.
 
-Lemma kinding_type_equal_cong : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal_cong E T1 T2 K2 ->
-    kinding E T2 K1.
+Lemma subtype_meet : forall E T1 T1' T2 T2' cs,
+    subtype E T1 T1' cs ->
+    subtype E T2 T2' cs ->
+    type_environment E ->
+    subtype E (typ_meet T1 T2) (typ_meet T1' T2') cs.
 Proof.
-  introv Hk Hte.
-  generalize dependent K1.
-  induction Hte; introv Hk.
-  - remember (typ_constructor c T1) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_or cs1 T1 cs2 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_or cs1 T1 cs2 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_row T1) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-    apply kinding_range_subsumption
-      with (T1 := T1') (T2 := T1'); auto;
-      apply subtype_reflexive; eauto using type_equal_symmetric.
-  - remember (typ_variant T1) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_arrow T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_arrow T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_meet T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_meet T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_join T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - remember (typ_join T1 T2) as T.
-    induction Hk; inversion HeqT; subst; eauto.
-  - auto.
-  - eauto using kinding_type_equal_core.
+  introv Hs1 Hs2 He.
+  destruct Hs1.
+  destruct Hs2.
+  apply subtype_c.
+  apply type_equal_transitive
+    with (typ_meet (typ_meet T1 T0) (typ_meet T2 T3));
+    auto using type_equal_meet.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_meet (typ_meet T1 T0) T2) T3);
+    auto with kinding.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_meet (typ_meet T0 T1) T2) T3);
+    auto 6 with kinding.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_meet T0 (typ_meet T1 T2)) T3);
+    auto with kinding.
+  apply type_equal_step
+    with (T2 := typ_meet (typ_meet (typ_meet T1 T2) T0) T3);
+    auto 6 with kinding.
+  apply type_equal_single; auto with kinding.
 Qed.
 
-Lemma kinding_type_equal_symm : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal_symm E T1 T2 K2 ->
-    kinding E T2 K1.
+Lemma subtype_join : forall E T1 T1' T2 T2' cs,
+    subtype E T1 T1' cs ->
+    subtype E T2 T2' cs ->
+    type_environment E ->
+    subtype E (typ_join T1 T2) (typ_join T1' T2') cs.
 Proof.
-  introv Hk Hte.
-  destruct Hte;
-    eauto using kinding_type_equal_cong.
+  introv Hs1 Hs2 He.
+  destruct Hs1.
+  destruct Hs2.
+  apply subtype_c.
+  apply type_equal_transitive
+    with (typ_join (typ_meet T1 T0) (typ_meet T2 T3));
+    auto using type_equal_join.
+  apply type_equal_step
+    with (typ_join (typ_meet T1 (typ_meet T0 (typ_join T0 T3)))
+            (typ_meet T2 T3)); auto 6 with kinding.
+  apply type_equal_step
+    with (typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
+            (typ_meet T2 T3)); auto 6 with kinding.
+  apply type_equal_step
+    with (typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
+           (typ_meet T2 (typ_meet T3 (typ_join T3 T0))));
+    auto 6 with kinding.
+  apply type_equal_step
+    with (typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
+            (typ_meet (typ_meet T2 T3) (typ_join T3 T0)));
+    auto 6 with kinding.
+  apply type_equal_step
+    with (typ_join (typ_meet (typ_meet T1 T0) (typ_join T0 T3))
+            (typ_meet (typ_meet T2 T3) (typ_join T0 T3)));
+    auto 6 with kinding.
+  apply type_equal_step
+    with (typ_join (typ_meet (typ_join T0 T3) (typ_meet T1 T0))
+            (typ_meet (typ_meet T2 T3) (typ_join T0 T3)));
+    auto 6 with kinding.
+  apply type_equal_step
+    with (typ_join (typ_meet (typ_join T0 T3) (typ_meet T1 T0))
+            (typ_meet (typ_join T0 T3) (typ_meet T2 T3)));
+    auto 6 with kinding.
+  apply type_equal_transitive
+    with (typ_join (typ_meet (typ_join T0 T3) T1)
+            (typ_meet (typ_join T0 T3) T2));
+    auto using type_equal_join, type_equal_meet,
+      type_equal_symmetric with kinding.
+  apply type_equal_step
+    with (typ_meet (typ_join T0 T3) (typ_join T1 T2));
+    auto with kinding.
+  apply type_equal_single; auto with kinding.
+Qed.
 
+(* ****************************************************** *)
+(** Projection on top and bottom *)
 
-Lemma kinding_type_equal : forall E T1 T2 K1 K2,
-    kinding E T1 K1 ->
-    type_equal E T1 T2 K2 ->
-    kinding E T2 K1.
+Lemma type_equal_proj_bot : forall E cs1 cs2,
+    CSet.Subset cs2 cs1 ->
+    CSet.Nonempty cs2 ->
+    type_environment E ->
+    type_equal E
+      (typ_proj cs1 (typ_bot cs1) cs2) (typ_bot cs2) (knd_row cs2).
 Proof.
-  introv Hk Hte.
-  induction Hk.
-*)  
+  introv Hs Hn He.
+  remember (CSet.is_empty (CSet.diff cs1 cs2)) as emp.
+  destruct emp.
+  - symmetry in Heqemp.
+    rewrite CSet.is_empty_spec1 in Heqemp.
+    assert (CSet.Equal cs1 cs2) as Heq by csetdec.
+    apply CSet.eq_leibniz in Heq; subst.
+    apply type_equal_single; auto.
+  - symmetry in Heqemp.
+    rewrite CSet.is_empty_spec2 in Heqemp.
+    assert (kinding E
+              (typ_proj cs1
+                 (typ_or cs2 (typ_bot cs2)
+                    (CSet.diff cs1 cs2)
+                    (typ_bot (CSet.diff cs1 cs2))) cs2)
+              (knd_row cs2))
+      by (apply kinding_proj with (cs1 := cs1);
+          auto with csetdec;
+          apply kinding_or
+            with (cs1 := cs2) (cs2 := CSet.diff cs1 cs2);
+          auto with csetdec).
+    apply type_equal_step
+      with (typ_proj cs1
+              (typ_or cs2 (typ_bot cs2)
+                (CSet.diff cs1 cs2)
+                (typ_bot (CSet.diff cs1 cs2))) cs2);
+      auto with csetdec.
+    apply type_equal_step
+      with (T2 := typ_proj cs2 (typ_bot cs2) cs2);
+      auto 6 with csetdec.
+    apply type_equal_single; auto.
+Qed.
 
-(* *************************************************************** *)
-(** Different ranges for the same type are subtypes *)
-
-Lemma subtype_from_ranges : forall E T1 T2 T3 T4 T5,
-    kinding true E T1 (knd_range T2 T3) ->
-    kinding true E T1 (knd_range T4 T5) ->
-    subtype true E T5 T2 CSet.universe.
+Lemma type_equal_proj_top : forall E cs1 cs2,
+    CSet.Subset cs2 cs1 ->
+    CSet.Nonempty cs2 ->
+    type_environment E ->
+    type_equal E
+      (typ_proj cs1 (typ_top cs1) cs2) (typ_top cs2) (knd_row cs2).
 Proof.
-  introv Hk1 Hk2.
-  apply validated_kinding in Hk1.
-  remember true as chk.
-  remember (knd_range T2 T3) as K.
-  generalize dependent T2.
-  generalize dependent T3.
-  induction Hk1; introv HeqK; inversion HeqK; subst.
-  - remember true as chk.
-    remember (knd_range T4 T5) as K.
-    remember (typ_fvar X) as T.
-    generalize dependent T4.
-    generalize dependent T5.
-    induction Hk2; introv HeqK; inversion HeqK; inversion HeqT; subst.
-    + assert
-        (bind_knd (knd_range T2 T3) = bind_knd (knd_range T4 T5))
-        as Heq by eauto using binds_func.
-      inversion Heq; subst.
-      assert (valid_kind true E (knd_range T4 T5)) as Hv
-        by auto.
-      inversion Hv; subst.
-      auto.
-    + eauto using subtype_transitive.
-  - eauto using subtype_transitive.
+  introv Hs Hn He.
+  remember (CSet.is_empty (CSet.diff cs1 cs2)) as emp.
+  destruct emp.
+  - symmetry in Heqemp.
+    rewrite CSet.is_empty_spec1 in Heqemp.
+    assert (CSet.Equal cs1 cs2) as Heq by csetdec.
+    apply CSet.eq_leibniz in Heq; subst.
+    apply type_equal_single; auto.
+  - symmetry in Heqemp.
+    rewrite CSet.is_empty_spec2 in Heqemp.
+    assert (kinding E
+              (typ_proj cs1
+                 (typ_or cs2 (typ_top cs2)
+                         (CSet.diff cs1 cs2)
+                         (typ_top (CSet.diff cs1 cs2))) cs2)
+              (knd_row cs2))
+      by (apply kinding_proj with (cs1 := cs1);
+          auto with csetdec;
+          apply kinding_or
+            with (cs1 := cs2) (cs2 := CSet.diff cs1 cs2);
+          auto with csetdec).
+    apply type_equal_step
+      with (typ_proj cs1
+              (typ_or cs2 (typ_top cs2)
+                 (CSet.diff cs1 cs2)
+                 (typ_top (CSet.diff cs1 cs2))) cs2);
+      auto with csetdec.
+    apply type_equal_step with (typ_proj cs2 (typ_top cs2) cs2);
+      auto with csetdec.
+    apply type_equal_single; auto.
 Qed.
 
 (* *************************************************************** *)
 (** Subtyping of projections can be restricted to a subset *)
 
-Lemma subtype_proj_subset : forall chk E T1 T2 cs1 cs2 cs3,
-    subtype chk E (typ_proj cs1 T1 cs2) (typ_proj cs1 T2 cs2) cs2 ->
-    CSet.Subset cs3 cs2 ->
-    CSet.Nonempty cs3 ->
-    subtype chk E (typ_proj cs1 T1 cs3) (typ_proj cs1 T2 cs3) cs3.
+Lemma subtype_proj_subset : forall E T1 T2 cs1 cs2 cs3 cs4,
+    subtype E (typ_proj cs1 T1 cs3) (typ_proj cs2 T2 cs3) cs3 ->
+    CSet.Subset cs4 cs3 ->
+    CSet.Nonempty cs4 ->
+    type_environment E ->
+    subtype E (typ_proj cs1 T1 cs4) (typ_proj cs2 T2 cs4) cs4.
 Proof.
-  introv Hs Hsb Hn.
-  assert
-      (kinding chk E (typ_proj cs2 (typ_proj cs1 T1 cs2) cs3)
-               (knd_row cs3))
-      as Hk by auto with subtype_validated.
-  inversion Hk; subst.
-  assert (kinding chk E (typ_proj cs1 T1 cs2) (knd_row cs2)) as Hk2
-    by assumption.
-  inversion Hk2; subst.
-  assert
-      (kinding chk E (typ_proj cs2 (typ_proj cs1 T2 cs2) cs3)
-               (knd_row cs3))
-      as Hk3 by auto with subtype_validated.
-  inversion Hk3; subst.
-  assert (kinding chk E (typ_proj cs1 T2 cs2) (knd_row cs2)) as Hk4
-    by assumption.
-  inversion Hk4; subst.
-  apply subtype_proj with (cs2 := cs3) in Hs; auto.
+  introv Hs Hsb Hn He.
+  assert (kinding E (typ_proj cs1 T1 cs3) (knd_row cs3)) as Hk1
+    by auto with kinding.
+  assert (kinding E (typ_proj cs2 T2 cs3) (knd_row cs3)) as Hk2
+    by auto with kinding.
+  inversion Hk1; inversion Hk2; subst.
+  apply subtype_proj with (cs2 := cs4) in Hs; auto.
+  apply subtype_reflexive_step
+    with (typ_proj cs3 (typ_proj cs1 T1 cs3) cs4); auto.
   apply subtype_transitive
-    with (T2 := typ_proj cs2 (typ_proj cs1 T1 cs2) cs3);
-    auto 6 using subtype_reflexive, type_equal_single.
-  apply subtype_transitive
-    with (T2 := typ_proj cs2 (typ_proj cs1 T2 cs2) cs3);
-    auto 6 using subtype_reflexive, type_equal_single.
+    with (T2 := typ_proj cs3 (typ_proj cs2 T2 cs3) cs4); eauto.
+  apply subtype_reflexive_single; auto. 
 Qed.
 
-Lemma subtype_proj_subset_bottom : forall chk E T cs1 cs2 cs3,
-    subtype chk E (typ_proj cs1 T cs2) (typ_bot cs2) cs2 ->
+Lemma subtype_proj_subset_bottom : forall E T cs1 cs2 cs3,
+    subtype E (typ_proj cs1 T cs2) (typ_bot cs2) cs2 ->
     CSet.Subset cs3 cs2 ->
     CSet.Nonempty cs3 ->
-    subtype chk E (typ_proj cs1 T cs3) (typ_bot cs3) cs3.
+    type_environment E ->
+    subtype E (typ_proj cs1 T cs3) (typ_bot cs3) cs3.
 Proof.
-  introv Hs Hsb Hn.
-  assert
-      (kinding chk E (typ_proj cs2 (typ_proj cs1 T cs2) cs3)
-               (knd_row cs3))
-      as Hk by auto with subtype_validated.
+  introv Hs Hsb Hn He.
+  assert (kinding E (typ_proj cs1 T cs2) (knd_row cs2)) as Hk
+    by auto with kinding.
   inversion Hk; subst.
-  assert (kinding chk E (typ_proj cs1 T cs2) (knd_row cs2)) as Hk2
-    by assumption.
-  inversion Hk2; subst.
-  apply subtype_proj with (cs2 := cs3) in Hs; auto.
   apply subtype_transitive
-    with (T2 := typ_proj cs2 (typ_proj cs1 T cs2) cs3);
-    auto 6 using subtype_reflexive, type_equal_single.
-  apply subtype_transitive
-    with (T2 := typ_proj cs2 (typ_bot cs2) cs3); auto.
-  apply subtype_reflexive.
-  apply type_equal_proj_bot; auto with kinding_validated.
+    with (typ_proj cs1 (typ_bot cs1) cs3);
+    auto using subtype_reflexive, type_equal_proj_bot with csetdec.
+  apply subtype_proj_subset with cs2; auto with csetdec.
+  apply subtype_transitive with (typ_bot cs2); auto. 
+  auto using subtype_reflexive,
+    type_equal_symmetric, type_equal_proj_bot.
 Qed.  
 
 (* *************************************************************** *)
 (** Subtyping preserves the argument type of constructors *)
 
-Inductive preserves : bool -> env -> nat -> typ -> typ -> Prop :=
-  | preserves_top : forall chk E c T cs,
-      preserves chk E c T (typ_top cs)
-  | preserves_equal : forall chk E c T1 T2,
-      type_equal chk E T1 T2 knd_type ->
-      preserves chk E c T1 (typ_constructor c T2)
-  | preserves_other : forall chk E c1 c2 T1 T2,
-      c1 <> c2 ->
-      preserves chk E c1 T1 (typ_constructor c2 T2)
-  | preserves_or_l : forall chk E c T1 T2 T3 cs1 cs2,
-      CSet.In c cs1 ->
-      preserves chk E c T1 T2 ->
-      preserves chk E c T1 (typ_or cs1 T2 cs2 T3)
-  | preserves_or_r : forall chk E c T1 T2 T3 cs1 cs2,
+Inductive preserves : tenv -> nat -> typ -> typ -> Prop :=
+  | preserves_top : forall E c T cs,
+      CSet.In c cs ->
+      preserves E c T (typ_top cs)
+  | preserves_constructor : forall E c T1 T2,
+      type_equal E T1 T2 knd_type ->
+      preserves E c T1 (typ_constructor c T2)
+  | preserves_or_l : forall E c T1 cs2 T2 cs3 T3,
+      preserves E c T1 T2 ->
+      preserves E c T1 (typ_or cs2 T2 cs3 T3)
+  | preserves_or_r : forall E c T1 cs2 T2 cs3 T3,
+      preserves E c T1 T3 ->
+      preserves E c T1 (typ_or cs2 T2 cs3 T3)
+  | preserves_proj : forall E c T1 T2 cs1 cs2,
+      preserves E c T1 T2 ->
       CSet.In c cs2 ->
-      preserves chk E c T1 T3 ->
-      preserves chk E c T1 (typ_or cs1 T2 cs2 T3)
-  | preserves_proj : forall chk E c T1 T2 cs1 cs2,
-      preserves chk E c T1 T2 ->
-      preserves chk E c T1 (typ_proj cs1 T2 cs2)
-  | preserves_meet : forall chk E c T1 T2 T3,
-      preserves chk E c T1 T2 ->
-      preserves chk E c T1 T3 ->
-      preserves chk E c T1 (typ_meet T2 T3)
-  | preserves_join_l : forall chk E c T1 T2 T3,
-      preserves chk E c T1 T2 ->
-      preserves chk E c T1 (typ_join T2 T3)
-  | preserves_join_r : forall chk E c T1 T2 T3,
-      preserves chk E c T1 T3 ->
-      preserves chk E c T1 (typ_join T2 T3).
+      preserves E c T1 (typ_proj cs1 T2 cs2)
+  | preserves_meet : forall E c T1 T2 T3,
+      preserves E c T1 T2 ->
+      preserves E c T1 T3 ->
+      preserves E c T1 (typ_meet T2 T3)
+  | preserves_join_l : forall E c T1 T2 T3,
+      preserves E c T1 T2 ->
+      preserves E c T1 (typ_join T2 T3)
+  | preserves_join_r : forall E c T1 T2 T3,
+      preserves E c T1 T3 ->
+      preserves E c T1 (typ_join T2 T3).
 
 Hint Constructors preserves.
 
-Lemma type_equal_core_preserves_l : forall chk E c T1 T2 T3 cs,
-    preserves chk E c T1 T2 ->
-    type_equal_core chk E T2 T3 (knd_row cs) ->
-    CSet.In c cs ->
-    preserves chk E c T1 T3.
+Lemma in_preserves : forall E c T1 T2 cs,
+    preserves E c T1 T2 ->
+    kinding E T2 (knd_row cs) ->
+    CSet.In c cs.
 Proof.
-  introv Hp Hte Hin.
-  remember (knd_row cs) as K.
+  introv Hp Hk.
+  generalize dependent cs.
+  induction Hp; introv Hk; inversion Hk;
+    subst; auto with csetdec.
+  - assert (CSet.In c cs2) by auto.
+    auto with csetdec.
+  - assert (CSet.In c cs3) by auto.
+    auto with csetdec.
+Qed.
+
+Ltac invert_preserves :=
+  repeat match goal with
+  | H : preserves _ _ _ (typ_constructor _ _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_or _ _ _ _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_proj _ _ _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_variant _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_arrow _ _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_ref _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_prod _ _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_top _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_bot _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_meet _ _) |- _ =>
+    inversion H; clear H
+  | H : preserves _ _ _ (typ_join _ _) |- _ =>
+    inversion H; clear H
+  end.
+
+Ltac invert_kinding :=
+  repeat match goal with
+  | H : kinding _ (typ_constructor _ _) (knd_row _) |- _ =>
+    inversion H; clear H
+  | H : kinding _ (typ_or _ _ _ _) (knd_row _) |- _ =>
+    inversion H; clear H
+  | H : kinding _ (typ_meet _ _) (knd_row _) |- _ =>
+    inversion H; clear H
+  | H : kinding _ (typ_join _ _) (knd_row _) |- _ =>
+    inversion H; clear H
+  | H : kinding _ (typ_proj _ _ _) (knd_row _) |- _ =>
+    inversion H; clear H
+  | H : kinding _ (typ_top _) (knd_row _) |- _ =>
+    inversion H; clear H
+  end.
+
+Ltac in_preserves :=
+  repeat match goal with
+  | H1 : preserves _ ?c _ ?T2,
+      H2 : kinding _ ?T2 (knd_row ?cs) |- _ =>
+    assert (CSet.In c cs) by eauto using in_preserves;
+    clear H2
+  end.
+
+Lemma type_equal_core_preserves_l : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal_core E T2 T3 (knd_row cs) ->
+    type_environment E ->
+    preserves E c T1 T3.
+Proof.
+  introv Hp Hte He.
   induction Hte;
-    inversion HeqK; inversion Hp; subst; clear Hp;
-      repeat match goal with
-      | [ H : preserves _ _ _ _ (typ_or _ _ _ _) |- _] =>
-        inversion H; clear H
-      | [ H : preserves _ _ _ _ (typ_meet _ _) |- _] =>
-        inversion H; clear H
-      | [ H : preserves _ _ _ _ (typ_join _ _) |- _] =>
-        inversion H; clear H
-      | [ H : preserves _ _ _ _ (typ_proj _ _ _) |- _] =>
-        inversion H; clear H
-      | [ H : preserves _ _ _ _ (typ_bot _) |- _] =>
-        inversion H; clear H
-      end; subst; auto with csetdec.
+    inversion Hp; subst; clear Hp; invert_preserves;
+      in_preserves; subst; auto with csetdec.
   - assert (not (CSet.In c cs2)) by csetdec.
     contradiction.
   - assert (not (CSet.In c cs1)) by csetdec.
     contradiction.
 Qed.
 
-Lemma type_equal_core_preserves_r : forall chk E c T1 T2 T3 cs,
-    preserves chk E c T1 T2 ->
-    type_equal_core chk E T3 T2 (knd_row cs) ->
-    CSet.In c cs ->
-    preserves chk E c T1 T3.
+Lemma type_equal_core_preserves_r : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal_core E T3 T2 (knd_row cs) ->
+    type_environment E ->
+    preserves E c T1 T3.
 Proof.
-  introv Hp Hte Hin.
-  remember (knd_row cs) as K.
+  introv Hp Hte He.
   induction Hte;
-    inversion HeqK; inversion Hp; subst; clear Hp;
-      repeat match goal with
-      | [ H : preserves _ _ _ _ (typ_or _ _ _ _) |- _] =>
-        inversion H; clear H
-      | [ H : preserves _ _ _ _ (typ_meet _ _) |- _] =>
-        inversion H; clear H
-      | [ H : preserves _ _ _ _ (typ_join _ _) |- _] =>
-        inversion H; clear H
-      | [ H : preserves _ _ _ _ (typ_proj _ _ _) |- _] =>
-        inversion H; clear H
-      | [ H : preserves _ _ _ _ (typ_bot _) |- _] =>
-        inversion H; clear H
-      end; subst; auto with csetdec.
+    inversion Hp; subst; clear Hp;
+      invert_preserves; invert_kinding;
+        in_preserves; subst; auto with csetdec.
   - destruct (CSet.In_dec c cs1); auto.
-    assert (CSet.In c cs2) by csetdec.
-    auto.
+    assert (CSet.In c cs2) by csetdec; auto.
   - assert (not (CSet.In c cs2)) by csetdec.
     contradiction.
   - assert (not (CSet.In c cs2)) by csetdec.
     contradiction.
   - destruct (CSet.In_dec c cs2); auto.
-    assert (CSet.In c cs3) by csetdec.
-    auto.
+    assert (CSet.In c cs3); auto with csetdec.
 Qed.
 
-Lemma type_equal_symm_preserves : forall chk E c T1 T2 T3 cs,
-    preserves chk E c T1 T2 ->
-    type_equal_symm chk E T2 T3 (knd_row cs) ->
-    CSet.In c cs ->
-    preserves chk E c T1 T3.
+Lemma type_equal_symm_preserves : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal_symm E T2 T3 (knd_row cs) ->
+    type_environment E ->
+    preserves E c T1 T3.
 Proof.
-  introv Hp Hte Hin.
+  introv Hp Hte He.
   remember (knd_row cs) as K.
   destruct Hte; subst.
   - eauto using type_equal_core_preserves_l.
   - eauto using type_equal_core_preserves_r.
 Qed.    
 
-Lemma type_equal_cong_preserves : forall chk E c T1 T2 T3 cs,
-    preserves chk E c T1 T2 ->
-    type_equal_cong chk E T2 T3 (knd_row cs) ->
-    CSet.In c cs ->
-    preserves chk E c T1 T3.
+Lemma type_equal_cong_preserves : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal_cong E T2 T3 (knd_row cs) ->
+    type_environment E ->
+    preserves E c T1 T3.
 Proof.
-  introv Hp Hte Hin.
+  introv Hp Hte He.
   remember (knd_row cs) as K.
   generalize dependent cs.
-  induction Hte; introv HeqK Hin; inversion HeqK; subst;
-    try solve [inversion Hp; subst; eauto].
-  - destruct (Nat.eq_dec c c0); subst;
-      inversion Hp; subst; eauto using type_equal_post_step.
+  induction Hte; introv Heq; invert_preserves; subst; eauto.
+  - eauto using type_equal_post_step.
   - eauto using type_equal_symm_preserves.
 Qed.
 
-Lemma type_equal_preserves : forall chk E c T1 T2 T3 cs,
-    preserves chk E c T1 T2 ->
-    type_equal chk E T2 T3 (knd_row cs) ->
-    CSet.In c cs ->
-    preserves chk E c T1 T3.
+Lemma type_equal_preserves : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    type_equal E T2 T3 (knd_row cs) ->
+    type_environment E ->
+    preserves E c T1 T3.
 Proof.
-  introv Hp Hte Hin.
+  introv Hp Hte He.
   remember (knd_row cs) as K.
   induction Hte; subst;
     eauto using type_equal_cong_preserves.
 Qed.
 
-Lemma subtype_preserves : forall chk E c T1 T2 T3 cs,
-    preserves chk E c T1 T2 ->
-    subtype chk E T2 T3 cs ->
-    CSet.In c cs ->
-    preserves chk E c T1 T3.
+Lemma subtype_preserves : forall E c T1 T2 T3 cs,
+    preserves E c T1 T2 ->
+    subtype E T2 T3 cs ->
+    type_environment E ->
+    preserves E c T1 T3.
 Proof.
-  introv Hp Hs Hin.
+  introv Hp Hs He.
   destruct Hs.
   apply type_equal_preserves with (c := c) (T1 := T1) in H; auto.
   inversion H; subst; auto.
 Qed.
 
-Lemma subtype_preserves_constructor : forall chk E T1 T2 c,
-    subtype chk E
+Lemma subtype_preserves_constructor : forall E T1 T2 c,
+    subtype E
       (typ_constructor c T1) (typ_constructor c T2)
       (CSet.singleton c) ->
-    type_equal chk E T1 T2 knd_type.
+    type_environment E ->
+    type_equal E T1 T2 knd_type.
 Proof.
-  introv Hs.
-  assert
-    (kinding chk E (typ_constructor c T1)
-       (knd_row (CSet.singleton c)))
-    as Hk by auto with subtype_validated.
+  introv Hs He.
+  assert (kinding E (typ_constructor c T1)
+           (knd_row (CSet.singleton c))) as Hk
+      by auto with kinding.
   inversion Hk; subst.
-  assert (preserves chk E c T1 (typ_constructor c T1)) by auto.
-  assert (preserves chk E c T1 (typ_constructor c T2))
-    as Hp by eauto using subtype_preserves with csetdec.
+  assert (preserves E c T1 (typ_constructor c T1)) by auto.
+  assert (preserves E c T1 (typ_constructor c T2)) as Hp
+    by eauto using subtype_preserves.
   inversion Hp; subst; try solve [exfalso; auto]; auto.
 Qed.
 
-Lemma no_subtype_constructor_bot : forall chk E T c,
-    subtype chk E
+Lemma no_subtype_constructor_bot : forall E T c,
+    subtype E
       (typ_constructor c T) (typ_bot (CSet.singleton c))
       (CSet.singleton c) ->
+    type_environment E ->
     False.
 Proof.
-  introv Hs.
-  assert
-    (kinding chk E (typ_constructor c T) (knd_row (CSet.singleton c)))
-    as Hk by auto with subtype_validated.
+  introv Hs He.
+  assert (kinding E (typ_constructor c T)
+            (knd_row (CSet.singleton c))) as Hk
+      by auto with kinding.
   inversion Hk; subst.
-  assert (preserves chk E c T (typ_constructor c T)) by auto.
-  assert (preserves chk E c T (typ_bot (CSet.singleton c)))
-    as Hp by eauto using subtype_preserves with csetdec.
+  assert (preserves E c T (typ_constructor c T)) by auto.
+  assert (preserves E c T (typ_bot (CSet.singleton c))) as Hp
+    by eauto using subtype_preserves.
   inversion Hp.
+Qed.
+
+(* *************************************************************** *)
+(** No interesting equalities at kinds other than knd_row *)
+
+Lemma type_equal_symm_inv_type : forall E T1 T2,
+    type_equal_symm E T1 T2 knd_type ->
+    False.
+Proof.
+  introv Hte.
+  inversion Hte; subst.
+  - assert (type_equal_core E T1 T2 knd_type) as Hte2 by assumption.
+    inversion Hte2.
+  - assert (type_equal_core E T2 T1 knd_type) as Hte2 by assumption.
+    inversion Hte2.
+Qed.
+
+Lemma type_equal_symm_inv_range : forall E T1 T2,
+    type_equal_symm E T1 T2 knd_range ->
+    False.
+Proof.
+  introv Hte.
+  inversion Hte; subst.
+  - assert (type_equal_core E T1 T2 knd_range) as Hte2 by assumption.
+    inversion Hte2.
+  - assert (type_equal_core E T2 T1 knd_range) as Hte2 by assumption.
+    inversion Hte2.
 Qed.

@@ -37,20 +37,35 @@ Definition typ_fvars Xs :=
 Inductive knd : Type :=
   | knd_type : knd
   | knd_row : cset -> knd
-  | knd_range : typ -> typ -> knd.
+  | knd_range : knd.
 
-Definition typ_nil := typ_bot (CSet.empty).
+(* Range kinds *)
+
+Inductive rng : Type :=
+  | rng_type : rng
+  | rng_row : cset -> rng
+  | rng_range : typ -> typ -> rng.
+
+Notation rng_range_all :=
+  (rng_range (typ_top CSet.universe)
+             (typ_bot CSet.universe)).
+
+Notation rng_range_below T :=
+  (rng_range T (typ_bot CSet.universe)).
+
+Notation rng_range_above T :=
+  (rng_range (typ_top CSet.universe) T).
 
 (** Type schemes. *)
 
 Inductive sch : Type := Sch { 
-  sch_kinds : list knd ; 
+  sch_ranges : list rng ; 
   sch_body  : typ }.
 
 Definition sch_empty T := Sch nil T.
 
 Fixpoint sch_arity (M : sch) : nat :=
-  List.length (sch_kinds M).
+  List.length (sch_ranges M).
 
 (** Opening a type. *)
 
@@ -79,23 +94,23 @@ Fixpoint typ_open (T : typ) (Us : list typ) : typ :=
 
 Definition typ_open_vars T Xs := typ_open T (typ_fvars Xs).
 
-(** Opening a kind. *)
+(** Opening a range. *)
 
-Definition knd_open (K : knd) (Us : list typ) : knd :=
-  match K with
-  | knd_type => knd_type
-  | knd_row cs => knd_row cs
-  | knd_range T1 T2 =>
-    knd_range (typ_open T1 Us) (typ_open T2 Us)
+Definition rng_open (R : rng) (Us : list typ) : rng :=
+  match R with
+  | rng_type => rng_type
+  | rng_row cs => rng_row cs
+  | rng_range T1 T2 =>
+    rng_range (typ_open T1 Us) (typ_open T2 Us)
   end.
 
-Definition knd_open_vars K Xs := knd_open K (typ_fvars Xs).
+Definition rng_open_vars R Xs := rng_open R (typ_fvars Xs).
 
-Definition knd_open_list Ks Us :=
-  List.map (fun K => knd_open K Us) Ks.
+Definition rng_open_list Rs Us :=
+  List.map (fun R => rng_open R Us) Rs.
 
-Definition knd_open_vars_list Ks Xs :=
-  knd_open_list Ks (typ_fvars Xs).
+Definition rng_open_vars_list Rs Xs :=
+  rng_open_list Rs (typ_fvars Xs).
 
 (** Instanciation of a type scheme *)
 
@@ -105,7 +120,7 @@ Definition instance (M : sch) (Us : list typ) : typ :=
 Definition instance_vars M Xs :=
   instance M (typ_fvars Xs).
 
-(** Locally closed types *)
+(** Well-formed types *)
 
 Inductive type : typ -> Prop :=
   | type_fvar : forall X, 
@@ -117,7 +132,7 @@ Inductive type : typ -> Prop :=
       type T1 ->
       type T2 ->
       type (typ_or cs1 T1 cs2 T2)
-  | type_proj : forall cs1 T cs2,
+  | type_proj : forall T cs1 cs2,
       type T ->
       type (typ_proj cs1 T cs2)
   | type_variant : forall T,
@@ -162,10 +177,7 @@ Inductive kind : knd -> Prop :=
   | kind_type : kind knd_type
   | kind_row : forall cs,
       CSet.Nonempty cs -> kind (knd_row cs)
-  | kind_range : forall T1 T2,
-      type T1 ->
-      type T2 ->
-      kind (knd_range T1 T2).
+  | kind_range : kind knd_range.
 
 Inductive kinds : list knd -> Prop :=
   | kinds_nil : kinds nil
@@ -174,20 +186,38 @@ Inductive kinds : list knd -> Prop :=
       kinds Ks ->
       kinds (K :: Ks).
 
-(** Definition of a well-formed scheme *)
+(** Well-formed ranges *)
 
-Inductive kinds_and_type : list knd -> typ -> Prop :=
-  | kinds_and_type_c : forall Ks T,
-      kinds Ks ->
+Inductive range : rng -> Prop :=
+  | range_type : range rng_type
+  | range_row : forall cs,
+      CSet.Nonempty cs -> range (rng_row cs)
+  | range_range : forall T1 T2,
+      type T1 ->
+      type T2 ->
+      range (rng_range T1 T2).
+
+Inductive ranges : list rng -> Prop :=
+  | ranges_nil : ranges nil
+  | ranges_cons : forall R Rs,
+      range R ->
+      ranges Rs ->
+      ranges (R :: Rs).
+
+(** Well-formed schemes *)
+
+Inductive ranges_and_type : list rng -> typ -> Prop :=
+  | ranges_and_type_c : forall Rs T,
+      ranges Rs ->
       type T ->
-      kinds_and_type Ks T.
+      ranges_and_type Rs T.
 
 Inductive scheme : sch -> Prop :=
   | scheme_c : forall L M,
       (forall Xs,
           fresh L (sch_arity M) Xs ->
-          kinds_and_type
-            (knd_open_vars_list (sch_kinds M) Xs)
+          ranges_and_type
+            (rng_open_vars_list (sch_ranges M) Xs)
             (typ_open_vars (sch_body M) Xs)) ->
       scheme M.
 
@@ -358,554 +388,636 @@ Definition term_body2 t :=
   exists L, forall x y,
   x \notin L -> y \notin (L \u \{x}) -> term (t ^* (x::y::nil)).
 
-(* ************************************************************* *)
-(** ** Description of typing environments *)
-
-(** A binding is either mapping type or term variables. 
- [X ~:: K] is a kinding asumption and [x ~: T] is
- a typing assumption *)
-
-Inductive bind : Type :=
-  | bind_knd : knd -> bind
-  | bind_typ : sch -> bind.
+(* ****************************************************** *)
+(** ** Description of range environments *)
 
 (** Pre-environment is an associative list of bindings. *)
 
-Definition env := LibEnv.env bind.
+Definition tenv := LibEnv.env rng.
 
-Function bind_typs (xs : list var) (Ms : list sch) : env :=
-  match xs with
-  | nil => empty
-  | x :: xs =>
-    match Ms with
-    | nil => empty
-    | M :: Ms =>
-      (x ~ bind_typ M) & bind_typs xs Ms
-    end
-  end.
+Definition bind_sch_ranges (Xs : list var) (M : sch) : tenv :=
+  Xs ~* (rng_open_vars_list (sch_ranges M) Xs).
 
-Function bind_knds (Xs : list var) (Ks : list knd) : env :=
-  match Xs with
-  | nil => empty
-  | X :: Xs =>
-    match Ks with
-    | nil => empty
-    | K :: Ks =>
-      (X ~ bind_knd K) & bind_knds Xs Ks
-    end
-  end.
-
-Definition bind_sch_kinds (Xs : list var) (M : sch) : env :=
-  bind_knds Xs (knd_open_vars_list (sch_kinds M) Xs).
-
-Notation "X ~:: K" := (X ~ bind_knd K)
+Notation "Xs ~: M" := (bind_sch_ranges Xs M)
   (at level 23, left associativity) : env_scope.
-Notation "x ~: T" := (x ~ bind_typ T)
-  (at level 23, left associativity) : env_scope.
-Notation "Xs ~::* M" := (bind_sch_kinds Xs M)
-  (at level 23, left associativity) : env_scope.
+
+(** Environment is a pre-environment with unique bindings *)
+
+Inductive type_environment : tenv -> Prop :=
+  | type_environment_empty :
+      type_environment empty
+  | type_environment_push : forall E X R,
+      type_environment E ->
+      range R ->
+      X # E ->
+      type_environment (E & X ~ R).
+
+(* ****************************************************** *)
+(** ** Description of typing environments *)
+
+(** Pre-environment is an associative list of bindings. *)
+
+Definition env := LibEnv.env sch.
 
 (** Environment is a pre-environment with unique bindings *)
 
 Inductive environment : env -> Prop :=
   | environment_empty :
       environment empty
-  | environment_knd : forall E X K,
-      environment E ->
-      kind K ->
-      X # E ->
-      environment (E & X ~:: K)
-  | environment_typ : forall E x M,
+  | environment_push : forall E x M,
       environment E ->
       scheme M ->
       x # E ->
-      environment (E & x ~: M).
+      environment (E & x ~ M).
 
-Definition no_term_bindings E :=
-  forall x M, not (binds x (bind_typ M) E).
+(** ************************************************** *)
+(** ** Judgements *)
+(* The parameters of judgements are either "inputs",
+   "subjects" or "outputs". The subject of a judgement
+   is the parameter whose "validity" is being checked
+   by the judgement (e.g. [valid_range] checks that a
+   [range] is valid). Not all judgements have a subject,
+   some of them are instead checking a relationship
+   between parameters. The inputs of a judgement are
+   assumed to be valid by the judgement and that validity
+   is not re-checked by the judgement. The outputs of
+   a judgement have their validity ensured by the judgement
+   (assuming that the inputs are valid).
+*)
 
-(* ************************************************************* *)
-(** ** Description of kinding and equality *)
+(** ************************************************** *)
+(** Kinding *)
 
-(* Validity of kinds *)
+Definition rng_knd R :=
+  match R with
+  | rng_type => knd_type
+  | rng_row cs => knd_row cs
+  | rng_range _ _ => knd_range
+  end.
 
-Inductive valid_kind : bool -> env -> knd -> Prop :=
-  | valid_kind_type : forall chk E,
-      valid_env chk E ->
-      valid_kind chk E knd_type
-  | valid_kind_row :  forall chk E cs,
-      valid_env chk E ->
-      CSet.Nonempty cs ->
-      valid_kind chk E (knd_row cs)
-  | valid_kind_range : forall chk E T1 T2,
-      subtype chk E T2 T1 CSet.universe ->
-      valid_kind chk E (knd_range T1 T2)
+Definition rngs_knds Rs :=
+  List.map rng_knd Rs.
 
-(** The kinding judgement *)
-
-with kinding : bool -> env -> typ -> knd -> Prop :=
-  | kinding_var : forall chk E X K,
-      valid_env chk E ->
-      binds X (bind_knd K) E ->
-      kinding chk E (typ_fvar X) K
-  | kinding_constructor : forall chk E c T cs,
-      kinding chk E T knd_type ->
+(* inputs: tenv
+   subject: typ
+   outputs: knd *)
+Inductive kinding : tenv -> typ -> knd -> Prop :=
+  | kinding_var : forall E X R K,
+      binds X R E ->
+      K = rng_knd R ->
+      kinding E (typ_fvar X) K
+  | kinding_constructor : forall E c T cs,
+      kinding E T knd_type ->
       cs = CSet.singleton c ->
-      kinding chk E (typ_constructor c T) (knd_row cs)
-  | kinding_or : forall chk E T1 T2 cs1 cs2 cs12,
-      kinding chk E T1 (knd_row cs1) ->
-      kinding chk E T2 (knd_row cs2) ->
+      kinding E (typ_constructor c T) (knd_row cs)
+  | kinding_or : forall E T1 T2 cs1 cs2 cs12,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      kinding chk E (typ_or cs1 T1 cs2 T2) (knd_row cs12)
-  | kinding_proj : forall chk E T cs1 cs2,
-      kinding chk E T (knd_row cs1) ->
+      kinding E (typ_or cs1 T1 cs2 T2) (knd_row cs12)
+  | kinding_proj : forall E T cs1 cs2,
+      kinding E T (knd_row cs1) ->
       CSet.Subset cs2 cs1 ->
       CSet.Nonempty cs2 ->
-      kinding chk E (typ_proj cs1 T cs2) (knd_row cs2)
-  | kinding_variant : forall chk E T,
-      kinding chk E T
-        (knd_range (typ_top CSet.universe) (typ_bot CSet.universe)) ->
-      kinding chk E (typ_variant T) knd_type
-  | kinding_arrow : forall chk E T1 T2,
-      kinding chk E T1 knd_type -> 
-      kinding chk E T2 knd_type -> 
-      kinding chk E (typ_arrow T1 T2) knd_type
-  | kinding_ref : forall chk E T,
-      kinding chk E T knd_type ->
-      kinding chk E (typ_ref T) knd_type
-  | kinding_unit : forall chk E,
-      valid_env chk E ->
-      kinding chk E typ_unit knd_type
-  | kinding_prod : forall chk E T1 T2,
-      kinding chk E T1 knd_type -> 
-      kinding chk E T2 knd_type -> 
-      kinding chk E (typ_prod T1 T2) knd_type
-  | kinding_top : forall chk E cs,
-      valid_env chk E ->
+      kinding E (typ_proj cs1 T cs2) (knd_row cs2)
+  | kinding_variant : forall E T,
+      kinding E T knd_range ->
+      kinding E (typ_variant T) knd_type
+  | kinding_arrow : forall E T1 T2,
+      kinding E T1 knd_type -> 
+      kinding E T2 knd_type -> 
+      kinding E (typ_arrow T1 T2) knd_type
+  | kinding_ref : forall E T,
+      kinding E T knd_type ->
+      kinding E (typ_ref T) knd_type
+  | kinding_unit : forall E,
+      kinding E typ_unit knd_type
+  | kinding_prod : forall E T1 T2,
+      kinding E T1 knd_type -> 
+      kinding E T2 knd_type -> 
+      kinding E (typ_prod T1 T2) knd_type
+  | kinding_top : forall E cs,
       CSet.Nonempty cs ->
-      kinding chk E (typ_top cs) (knd_row cs)
-  | kinding_bot : forall chk E cs,
-      valid_env chk E ->
+      kinding E (typ_top cs) (knd_row cs)
+  | kinding_bot : forall E cs,
       CSet.Nonempty cs ->
-      kinding chk E (typ_bot cs) (knd_row cs)
-  | kinding_meet : forall chk E T1 T2 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      kinding chk E (typ_meet T1 T2) (knd_row cs)
-  | kinding_join : forall chk E T1 T2 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      kinding chk E (typ_join T1 T2) (knd_row cs)
-  | kinding_range_subsumption : forall chk E T T1 T2 T1' T2',
-      kinding chk E T (knd_range T1 T2) ->
-      subtype chk E T1 T1' CSet.universe ->
-      subtype chk E T2' T2 CSet.universe ->
-      kinding chk E T (knd_range T1' T2')
+      kinding E (typ_bot cs) (knd_row cs)
+  | kinding_meet : forall E T1 T2 cs,
+      kinding E T1 (knd_row cs) ->
+      kinding E T2 (knd_row cs) ->
+      kinding E (typ_meet T1 T2) (knd_row cs)
+  | kinding_join : forall E T1 T2 cs,
+      kinding E T1 (knd_row cs) ->
+      kinding E T2 (knd_row cs) ->
+      kinding E (typ_join T1 T2) (knd_row cs).
 
-(* Validity of type schemes *)
+(* inputs: tenv
+   subject: list typ
+   outputs: list knd *)
+Inductive kindings : tenv -> list typ -> list knd -> Prop :=
+  | kindings_nil : forall E,
+      kindings E nil nil
+  | kindings_cons : forall E T Ts K Ks,
+      kinding E T K ->
+      kindings E Ts Ks ->
+      kindings E (T :: Ts) (K :: Ks).
 
-with valid_kinds : bool -> env -> list knd -> Prop :=
-  | valid_kinds_nil : forall chk E,
-      valid_env chk E ->
-      valid_kinds chk E nil
-  | valid_kinds_cons : forall chk E K Ks,
-      valid_kind chk E K ->
-      valid_kinds chk E Ks ->
-      valid_kinds chk E (K :: Ks)
-
-with valid_kinds_and_type : bool -> env -> list knd -> typ -> Prop :=
-  | valid_kinds_and_type_c : forall chk E Ks T,
-      valid_kinds chk E Ks ->
-      kinding chk E T knd_type ->
-      valid_kinds_and_type chk E Ks T
-
-with valid_scheme : bool -> env -> sch -> Prop :=
-  | valid_scheme_c : forall L chk E M,
-      valid_env chk E ->
-      (forall Xs,
-          fresh L (sch_arity M) Xs ->
-          valid_kinds_and_type chk (E & Xs ~::* M)
-            (knd_open_vars_list (sch_kinds M) Xs)
-            (typ_open_vars (sch_body M) Xs)) ->
-      valid_scheme chk E M
-
-(* Validity of environments *)
-
-with valid_env_aux : env -> env -> Prop :=
-  | valid_env_aux_empty : forall E,
-      environment E ->
-      valid_env_aux E empty
-  | valid_env_aux_kind : forall E F X K,
-      valid_env_aux E F ->
-      valid_kind false E K ->
-      X # F ->
-      valid_env_aux E (F & X ~:: K)
-  | valid_env_aux_type : forall E F x M,
-      valid_env_aux E F ->
-      valid_scheme false E M ->
-      x # F ->
-      valid_env_aux E (F & x ~: M)
-
-with valid_env : bool -> env -> Prop :=
-  | valid_env_check : forall E,
-      valid_env_aux E E ->
-      valid_env true E
-  | valid_env_no_check : forall E,
-      environment E ->
-      valid_env false E
+(** ************************************************** *)
+(** ** Equality *)
 
 (** Core of the equality relation on types *)
 
-with type_equal_core : bool -> env -> typ -> typ -> knd -> Prop :=
-  | type_equal_core_or_commutative : forall chk E T1 T2 cs1 cs2 cs12,
-      kinding chk E T1 (knd_row cs1) ->
-      kinding chk E T2 (knd_row cs2) ->
+(* inputs: tenv
+   subjects: typ(1), typ(2)
+   outputs: knd *)
+Inductive type_equal_core
+  : tenv -> typ -> typ -> knd -> Prop :=
+  | type_equal_core_or_commutative :
+      forall E T1 T2 cs1 cs2 cs12,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_core chk E
-        (typ_or cs1 T1 cs2 T2) (typ_or cs2 T2 cs1 T1) (knd_row cs12)
+      type_equal_core E
+        (typ_or cs1 T1 cs2 T2) (typ_or cs2 T2 cs1 T1)
+        (knd_row cs12)
   | type_equal_core_or_associative :
-      forall chk E T1 cs1 T2 cs2 T3 cs3 cs12 cs23 cs123,
-      kinding chk E T1 (knd_row cs1) ->
-      kinding chk E T2 (knd_row cs2) ->
-      kinding chk E T3 (knd_row cs3) ->
+      forall E T1 T2 T3 cs1 cs2 cs3 cs12 cs23 cs123,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
+      kinding E T3 (knd_row cs3) ->
       CSet.Disjoint cs1 cs2 ->
       CSet.Disjoint cs1 cs3 ->
       CSet.Disjoint cs2 cs3 ->
       cs12 = CSet.union cs1 cs2 ->
       cs23 = CSet.union cs2 cs3 ->
       cs123 = CSet.union cs1 cs23 ->
-      type_equal_core chk E
+      type_equal_core E
         (typ_or cs1 T1 cs23 (typ_or cs2 T2 cs3 T3))
         (typ_or cs12 (typ_or cs1 T1 cs2 T2) cs3 T3)
         (knd_row cs123)
-  | type_equal_core_or_bot : forall chk E cs1 cs2 cs12,
-      valid_env chk E ->
+  | type_equal_core_or_bot : forall E cs1 cs2 cs12,
       CSet.Nonempty cs1 ->
       CSet.Nonempty cs2 ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_core chk E
-        (typ_or cs1 (typ_bot cs1) cs2 (typ_bot cs2)) (typ_bot cs12)
-        (knd_row cs12)
-  | type_equal_core_or_top : forall chk E cs1 cs2 cs12,
-      valid_env chk E ->
+      type_equal_core E
+        (typ_or cs1 (typ_bot cs1) cs2 (typ_bot cs2))
+        (typ_bot cs12) (knd_row cs12)
+  | type_equal_core_or_top : forall E cs1 cs2 cs12,
       CSet.Nonempty cs1 ->
       CSet.Nonempty cs2 ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_core chk E
-        (typ_or cs1 (typ_top cs1) cs2 (typ_top cs2)) (typ_top cs12)
-        (knd_row cs12)
+      type_equal_core E
+        (typ_or cs1 (typ_top cs1) cs2 (typ_top cs2))
+        (typ_top cs12) (knd_row cs12)
   | type_equal_core_or_meet_distribution :
-      forall chk E T1 T2 T3 T4 cs1 cs2 cs12,
-      kinding chk E T1 (knd_row cs1) ->
-      kinding chk E T2 (knd_row cs2) ->
-      kinding chk E T3 (knd_row cs1) ->
-      kinding chk E T4 (knd_row cs2) ->
+      forall E T1 T2 T3 T4 cs1 cs2 cs12,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
+      kinding E T3 (knd_row cs1) ->
+      kinding E T4 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_core chk E
+      type_equal_core E
         (typ_or cs1 (typ_meet T1 T3) cs2 (typ_meet T2 T4))
-        (typ_meet (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4))
+        (typ_meet (typ_or cs1 T1 cs2 T2)
+                  (typ_or cs1 T3 cs2 T4))
         (knd_row cs12)
   | type_equal_core_or_join_distribution :
-      forall chk E T1 T2 T3 T4 cs1 cs2 cs12,
-      kinding chk E T1 (knd_row cs1) ->
-      kinding chk E T2 (knd_row cs2) ->
-      kinding chk E T3 (knd_row cs1) ->
-      kinding chk E T4 (knd_row cs2) ->
+      forall E T1 T2 T3 T4 cs1 cs2 cs12,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
+      kinding E T3 (knd_row cs1) ->
+      kinding E T4 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_core chk E
+      type_equal_core E
         (typ_or cs1 (typ_join T1 T3) cs2 (typ_join T2 T4))
-        (typ_join (typ_or cs1 T1 cs2 T2) (typ_or cs1 T3 cs2 T4))
+        (typ_join (typ_or cs1 T1 cs2 T2)
+                  (typ_or cs1 T3 cs2 T4))
         (knd_row cs12)
-  | type_equal_core_or_proj : forall chk E T cs1 cs2 cs3 cs23,
-      kinding chk E T (knd_row cs1) ->
-      CSet.Disjoint cs2 cs3 ->
-      CSet.Subset cs2 cs1 ->
+  | type_equal_core_or_proj :
+      forall E T cs1 cs2 cs3 cs23,
+      kinding E T (knd_row cs1) ->
       CSet.Nonempty cs2 ->
-      CSet.Subset cs3 cs1 ->
       CSet.Nonempty cs3 ->
+      CSet.Subset cs2 cs1 ->
+      CSet.Subset cs3 cs1 ->
+      CSet.Disjoint cs2 cs3 ->
       cs23 = CSet.union cs2 cs3 ->
-      type_equal_core chk E
-        (typ_or cs2 (typ_proj cs1 T cs2) cs3 (typ_proj cs1 T cs3))
-        (typ_proj cs1 T cs23)
-        (knd_row cs23)
-  | type_equal_core_proj_id : forall chk E T cs,
-      kinding chk E T (knd_row cs) ->
-      type_equal_core chk E (typ_proj cs T cs) T (knd_row cs)
-  | type_equal_core_proj_compose : forall chk E T cs1 cs2 cs3,
-      kinding chk E T (knd_row cs1) ->
+      type_equal_core E
+        (typ_or cs2 (typ_proj cs1 T cs2)
+                cs3 (typ_proj cs1 T cs3))
+        (typ_proj cs1 T cs23) (knd_row cs23)
+  | type_equal_core_proj_id : forall E T cs1,
+      kinding E T (knd_row cs1) ->
+      type_equal_core E
+        (typ_proj cs1 T cs1) T (knd_row cs1)
+  | type_equal_core_proj_compose : forall E T cs1 cs2 cs3,
+      kinding E T (knd_row cs1) ->
       CSet.Subset cs2 cs1 ->
       CSet.Subset cs3 cs2 ->
       CSet.Nonempty cs3 ->
-      type_equal_core chk E
+      type_equal_core E
         (typ_proj cs2 (typ_proj cs1 T cs2) cs3)
-        (typ_proj cs1 T cs3)
-        (knd_row cs3)
-  | type_equal_core_proj_or_l : forall chk E T1 T2 cs1 cs1' cs2 cs12,
-      kinding chk E T1 (knd_row cs1) ->
-      kinding chk E T2 (knd_row cs2) ->
+        (typ_proj cs1 T cs3) (knd_row cs3)
+  | type_equal_core_proj_or_l :
+      forall E T1 T2 cs1 cs2 cs3 cs12,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
+      CSet.Subset cs3 cs1 ->
+      CSet.Nonempty cs3 ->
       CSet.Disjoint cs1 cs2 ->
-      CSet.Subset cs1' cs1 ->
-      CSet.Nonempty cs1' ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_core chk E
-        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs1')
-        (typ_proj cs1 T1 cs1')
-        (knd_row cs1')
-  | type_equal_core_proj_or_r : forall chk E T1 T2 cs1 cs2 cs2' cs12,
-      kinding chk E T1 (knd_row cs1) ->
-      kinding chk E T2 (knd_row cs2) ->
+      type_equal_core E
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs3)
+        (typ_proj cs1 T1 cs3) (knd_row cs3)
+  | type_equal_core_proj_or_r :
+      forall E T1 T2 cs1 cs2 cs3 cs12,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
+      CSet.Subset cs3 cs2 ->
+      CSet.Nonempty cs3 ->
       CSet.Disjoint cs1 cs2 ->
-      CSet.Subset cs2' cs2 ->
-      CSet.Nonempty cs2' ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_core chk E
-        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs2')
-        (typ_proj cs2 T2 cs2')
-        (knd_row cs2')
+      type_equal_core E
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs3)
+        (typ_proj cs2 T2 cs3) (knd_row cs3)
   | type_equal_core_proj_or_both :
-      forall chk E T1 T2 cs1 cs2 cs1' cs2' cs12 cs12',
-      kinding chk E T1 (knd_row cs1) ->
-      kinding chk E T2 (knd_row cs2) ->
+      forall E T1 T2 cs1 cs2 cs3 cs4 cs12 cs34,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
+      CSet.Subset cs3 cs1 ->
+      CSet.Subset cs4 cs2 ->
+      CSet.Nonempty cs3 ->
+      CSet.Nonempty cs4 ->
       CSet.Disjoint cs1 cs2 ->
-      CSet.Subset cs1' cs1 ->
-      CSet.Nonempty cs1' ->
-      CSet.Subset cs2' cs2 ->
-      CSet.Nonempty cs2' ->
+      CSet.Disjoint cs3 cs4 ->
       cs12 = CSet.union cs1 cs2 ->
-      cs12' = CSet.union cs1' cs2' ->
-      type_equal_core chk E
-        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs12')
-        (typ_or cs1' (typ_proj cs1 T1 cs1')
-                cs2' (typ_proj cs2 T2 cs2'))
-        (knd_row cs12')
-  | type_equal_core_proj_meet : forall chk E T1 T2 cs cs',
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      CSet.Subset cs' cs ->
-      CSet.Nonempty cs' ->
-      type_equal_core chk E
-        (typ_proj cs (typ_meet T1 T2) cs')
-        (typ_meet (typ_proj cs T1 cs') (typ_proj cs T2 cs'))
-        (knd_row cs')
-  | type_equal_core_proj_join : forall chk E T1 T2 cs cs',
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      CSet.Subset cs' cs ->
-      CSet.Nonempty cs' ->
-      type_equal_core chk E
-        (typ_proj cs (typ_join T1 T2) cs')
-        (typ_join (typ_proj cs T1 cs') (typ_proj cs T2 cs'))
-        (knd_row cs')
-  | type_equal_core_meet_commutative : forall chk E T1 T2 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      type_equal_core chk E (typ_meet T1 T2) (typ_meet T2 T1) (knd_row cs)
-  | type_equal_core_meet_associative : forall chk E T1 T2 T3 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      kinding chk E T3 (knd_row cs) ->
-      type_equal_core chk E
+      cs34 = CSet.union cs3 cs4 ->
+      type_equal_core E
+        (typ_proj cs12 (typ_or cs1 T1 cs2 T2) cs34)
+        (typ_or cs3 (typ_proj cs1 T1 cs3)
+                cs4 (typ_proj cs2 T2 cs4))
+        (knd_row cs34)
+  | type_equal_core_proj_meet : forall E T1 T2 cs1 cs2,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      CSet.Subset cs2 cs1 ->
+      CSet.Nonempty cs2 ->
+      type_equal_core E
+        (typ_proj cs1 (typ_meet T1 T2) cs2)
+        (typ_meet (typ_proj cs1 T1 cs2)
+                  (typ_proj cs1 T2 cs2))
+        (knd_row cs2)
+  | type_equal_core_proj_join : forall E T1 T2 cs1 cs2,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      CSet.Subset cs2 cs1 ->
+      CSet.Nonempty cs2 ->
+      type_equal_core E
+        (typ_proj cs1 (typ_join T1 T2) cs2)
+        (typ_join (typ_proj cs1 T1 cs2)
+                  (typ_proj cs1 T2 cs2))
+        (knd_row cs2)
+  | type_equal_core_meet_commutative : forall E T1 T2 cs1,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      type_equal_core E (typ_meet T1 T2) (typ_meet T2 T1)
+        (knd_row cs1)
+  | type_equal_core_meet_associative : forall E T1 T2 T3 cs1,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      kinding E T3 (knd_row cs1) ->
+      type_equal_core E
         (typ_meet T1 (typ_meet T2 T3))
         (typ_meet (typ_meet T1 T2) T3)
-        (knd_row cs)
-  | type_equal_core_meet_identity : forall chk E T1 cs,
-      kinding chk E T1 (knd_row cs) ->
-      type_equal_core chk E (typ_meet T1 (typ_top cs)) T1 (knd_row cs)
-  | type_equal_core_meet_absorption : forall chk E T1 T2 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      type_equal_core chk E (typ_meet T1 (typ_join T1 T2)) T1 (knd_row cs)
-  | type_equal_core_meet_distribution : forall chk E T1 T2 T3 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      kinding chk E T3 (knd_row cs) ->
-      type_equal_core chk E
+        (knd_row cs1)
+  | type_equal_core_meet_identity : forall E T1 cs1,
+      kinding E T1 (knd_row cs1) ->
+      type_equal_core E (typ_meet T1 (typ_top cs1)) T1
+        (knd_row cs1)
+  | type_equal_core_meet_absorption : forall E T1 T2 cs1,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      type_equal_core E (typ_meet T1 (typ_join T1 T2)) T1
+        (knd_row cs1)
+  | type_equal_core_meet_distribution :
+      forall E T1 T2 T3 cs1,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      kinding E T3 (knd_row cs1) ->
+      type_equal_core E
         (typ_meet T1 (typ_join T2 T3))
         (typ_join (typ_meet T1 T2) (typ_meet T1 T3))
-        (knd_row cs)
-  | type_equal_core_join_commutative : forall chk E T1 T2 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      type_equal_core chk E (typ_join T1 T2) (typ_join T2 T1) (knd_row cs)
-  | type_equal_core_join_associative : forall chk E T1 T2 T3 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      kinding chk E T3 (knd_row cs) ->
-      type_equal_core chk E
+        (knd_row cs1)
+  | type_equal_core_join_commutative : forall E T1 T2 cs1,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      type_equal_core E (typ_join T1 T2) (typ_join T2 T1)
+        (knd_row cs1)
+  | type_equal_core_join_associative : forall E T1 T2 T3 cs1,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      kinding E T3 (knd_row cs1) ->
+      type_equal_core E
         (typ_join T1 (typ_join T2 T3))
         (typ_join (typ_join T1 T2) T3)
-        (knd_row cs)
-  | type_equal_core_join_identity : forall chk E T1 cs,
-      kinding chk E T1 (knd_row cs) ->
-      type_equal_core chk E (typ_join T1 (typ_bot cs)) T1 (knd_row cs)
-  | type_equal_core_join_absorption : forall chk E T1 T2 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      type_equal_core chk E (typ_join T1 (typ_meet T1 T2)) T1 (knd_row cs)
-  | type_equal_core_join_distribution : forall chk E T1 T2 T3 cs,
-      kinding chk E T1 (knd_row cs) ->
-      kinding chk E T2 (knd_row cs) ->
-      kinding chk E T3 (knd_row cs) ->
-      type_equal_core chk E
+        (knd_row cs1)
+  | type_equal_core_join_identity : forall E T1 cs1,
+      kinding E T1 (knd_row cs1) ->
+      type_equal_core E (typ_join T1 (typ_bot cs1)) T1
+        (knd_row cs1)
+  | type_equal_core_join_absorption : forall E T1 T2 cs1,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      type_equal_core E (typ_join T1 (typ_meet T1 T2)) T1
+        (knd_row cs1)
+  | type_equal_core_join_distribution :
+      forall E T1 T2 T3 cs1,
+      kinding E T1 (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      kinding E T3 (knd_row cs1) ->
+      type_equal_core E
         (typ_join T1 (typ_meet T2 T3))
         (typ_meet (typ_join T1 T2) (typ_join T1 T3))
-        (knd_row cs)
+        (knd_row cs1).
 
 (* Symetric closure of type_equal_core *)
 
-with type_equal_symm : bool -> env -> typ -> typ -> knd -> Prop :=
-  | type_equal_symm_l : forall chk E T1 T2 K,
-      type_equal_core chk E T1 T2 K ->
-      type_equal_symm chk E T1 T2 K
-  | type_equal_symm_r : forall chk E T1 T2 K,
-      type_equal_core chk E T1 T2 K ->
-      type_equal_symm chk E T2 T1 K
+(* inputs: tenv
+   subjects: typ(1), typ(2)
+   outputs: knd *)
+Inductive type_equal_symm
+  : tenv -> typ -> typ -> knd -> Prop :=
+  | type_equal_symm_l : forall E T1 T2 K,
+      type_equal_core E T1 T2 K ->
+      type_equal_symm E T1 T2 K
+  | type_equal_symm_r : forall E T1 T2 K,
+      type_equal_core E T1 T2 K ->
+      type_equal_symm E T2 T1 K.
 
 (* Congruence closure of type_equal_symm *)
 
-with type_equal_cong : bool -> env -> typ -> typ -> knd -> Prop :=
-  | type_equal_cong_constructor : forall chk E c T1 T1' cs,
-      type_equal_cong chk E T1 T1' knd_type ->
+(* inputs: tenv
+   subjects: typ(1), typ(2)
+   outputs: knd *)
+Inductive type_equal_cong
+  : tenv -> typ -> typ -> knd -> Prop :=
+  | type_equal_cong_constructor : forall E c T1 T1' cs,
+      type_equal_cong E T1 T1' knd_type ->
       cs = CSet.singleton c ->
-      type_equal_cong chk E
+      type_equal_cong E
         (typ_constructor c T1) (typ_constructor c T1')
         (knd_row cs)
-  | type_equal_cong_or_l : forall chk E T1 T1' T2 cs1 cs2 cs12,
-      kinding chk E T2 (knd_row cs2) ->
+  | type_equal_cong_or_l : forall E T1 T1' T2 cs1 cs2 cs12,
+      type_equal_cong E T1 T1' (knd_row cs1) ->
+      kinding E T2 (knd_row cs2) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_cong chk E T1 T1' (knd_row cs1) ->
-      type_equal_cong chk E
-        (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1' cs2 T2) (knd_row cs12)
-  | type_equal_cong_or_r : forall chk E T1 T2 T2' cs1 cs2 cs12,
-      kinding chk E T1 (knd_row cs1) ->
+      type_equal_cong E
+        (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1' cs2 T2)
+        (knd_row cs12)
+  | type_equal_cong_or_r : forall E T1 T2 T2' cs1 cs2 cs12,
+      type_equal_cong E T2 T2' (knd_row cs2) ->
+      kinding E T1 (knd_row cs1) ->
       CSet.Disjoint cs1 cs2 ->
       cs12 = CSet.union cs1 cs2 ->
-      type_equal_cong chk E T2 T2' (knd_row cs2) ->
-      type_equal_cong chk E
-        (typ_or cs1 T1 cs2 T2) (typ_or cs1 T1 cs2 T2') (knd_row cs12)
-  | type_equal_cong_proj : forall chk E T1 T1' cs1 cs2,
+      type_equal_cong E (typ_or cs1 T1 cs2 T2)
+        (typ_or cs1 T1 cs2 T2') (knd_row cs12)
+  | type_equal_cong_proj : forall E T1 T1' cs1 cs2,
+      type_equal_cong E T1 T1' (knd_row cs1) ->
       CSet.Subset cs2 cs1 ->
       CSet.Nonempty cs2 ->
-      type_equal_cong chk E T1 T1' (knd_row cs1) ->
-      type_equal_cong chk E
-        (typ_proj cs1 T1 cs2) (typ_proj cs1 T1' cs2) (knd_row cs2)
-  | type_equal_cong_arrow_l : forall chk E T1 T1' T2,
-      kinding chk E T2 knd_type ->
-      type_equal_cong chk E T1 T1' knd_type ->
-      type_equal_cong chk E (typ_arrow T1 T2) (typ_arrow T1' T2) knd_type
-  | type_equal_cong_arrow_r : forall chk E T1 T2 T2',
-      kinding chk E T1 knd_type ->
-      type_equal_cong chk E T2 T2' knd_type ->
-      type_equal_cong chk E (typ_arrow T1 T2) (typ_arrow T1 T2') knd_type
-  | type_equal_cong_prod_l : forall chk E T1 T1' T2,
-      kinding chk E T2 knd_type ->
-      type_equal_cong chk E T1 T1' knd_type ->
-      type_equal_cong chk E (typ_prod T1 T2) (typ_prod T1' T2) knd_type
-  | type_equal_cong_prod_r : forall chk E T1 T2 T2',
-      kinding chk E T1 knd_type ->
-      type_equal_cong chk E T2 T2' knd_type ->
-      type_equal_cong chk E (typ_prod T1 T2) (typ_prod T1 T2') knd_type
-  | type_equal_cong_ref : forall chk E T1 T1',
-      type_equal_cong chk E T1 T1' knd_type ->
-      type_equal_cong chk E (typ_ref T1) (typ_ref T1') knd_type
-  | type_equal_cong_meet_l : forall chk E T1 T1' T2 cs,
-      kinding chk E T2 (knd_row cs) ->
-      type_equal_cong chk E T1 T1' (knd_row cs) ->
-      type_equal_cong chk E
-        (typ_meet T1 T2) (typ_meet T1' T2) (knd_row cs)
-  | type_equal_cong_meet_r : forall chk E T1 T2 T2' cs,
-      kinding chk E T1 (knd_row cs) ->
-      type_equal_cong chk E T2 T2' (knd_row cs) -> 
-      type_equal_cong chk E
-        (typ_meet T1 T2) (typ_meet T1 T2') (knd_row cs)
-  | type_equal_cong_join_l : forall chk E T1 T1' T2 cs,
-      kinding chk E T2 (knd_row cs) ->
-      type_equal_cong chk E T1 T1' (knd_row cs) ->
-      type_equal_cong chk E
-        (typ_join T1 T2) (typ_join T1' T2) (knd_row cs)
-  | type_equal_cong_join_r : forall chk E T1 T2 T2' cs,
-      kinding chk E T1 (knd_row cs) ->
-      type_equal_cong chk E T2 T2' (knd_row cs) ->
-      type_equal_cong chk E
-        (typ_join T1 T2) (typ_join T1 T2') (knd_row cs)
-  | type_equal_cong_symm : forall chk E T1 T1' K,
-      type_equal_symm chk E T1 T1' K ->
-      type_equal_cong chk E T1 T1' K
+      type_equal_cong E (typ_proj cs1 T1 cs2)
+        (typ_proj cs1 T1' cs2) (knd_row cs2)
+  | type_equal_cong_variant : forall E T1 T1',
+      type_equal_cong E T1 T1' knd_range ->
+      type_equal_cong E (typ_variant T1)
+        (typ_variant T1') knd_type
+  | type_equal_cong_arrow_l : forall E T1 T1' T2,
+      type_equal_cong E T1 T1' knd_type ->
+      kinding E T2 knd_type ->
+      type_equal_cong E (typ_arrow T1 T2)
+        (typ_arrow T1' T2) knd_type
+  | type_equal_cong_arrow_r : forall E T1 T2 T2',
+      kinding E T1 knd_type ->
+      type_equal_cong E T2 T2' knd_type ->
+      type_equal_cong E (typ_arrow T1 T2)
+        (typ_arrow T1 T2') knd_type
+  | type_equal_cong_prod_l : forall E T1 T1' T2,
+      type_equal_cong E T1 T1' knd_type ->
+      kinding E T2 knd_type ->
+      type_equal_cong E (typ_prod T1 T2)
+        (typ_prod T1' T2) knd_type
+  | type_equal_cong_prod_r : forall E T1 T2 T2',
+      type_equal_cong E T2 T2' knd_type ->
+      kinding E T1 knd_type ->
+      type_equal_cong E (typ_prod T1 T2)
+        (typ_prod T1 T2') knd_type
+  | type_equal_cong_ref : forall E T1 T1',
+      type_equal_cong E T1 T1' knd_type ->
+      type_equal_cong E (typ_ref T1) (typ_ref T1') knd_type
+  | type_equal_cong_meet_l : forall E T1 T1' T2 cs1,
+      type_equal_cong E T1 T1' (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      type_equal_cong E (typ_meet T1 T2)
+        (typ_meet T1' T2) (knd_row cs1)
+  | type_equal_cong_meet_r : forall E T1 T2 T2' cs1,
+      type_equal_cong E T2 T2' (knd_row cs1) -> 
+      kinding E T1 (knd_row cs1) ->
+      type_equal_cong E (typ_meet T1 T2)
+        (typ_meet T1 T2') (knd_row cs1)
+  | type_equal_cong_join_l : forall E T1 T1' T2 cs1,
+      type_equal_cong E T1 T1' (knd_row cs1) ->
+      kinding E T2 (knd_row cs1) ->
+      type_equal_cong E (typ_join T1 T2)
+        (typ_join T1' T2) (knd_row cs1)
+  | type_equal_cong_join_r : forall E T1 T2 T2' cs1,
+      type_equal_cong E T2 T2' (knd_row cs1) ->
+      kinding E T1 (knd_row cs1) ->
+      type_equal_cong E (typ_join T1 T2)
+        (typ_join T1 T2') (knd_row cs1)
+  | type_equal_cong_symm : forall E T1 T1' K,
+      type_equal_symm E T1 T1' K ->
+      type_equal_cong E T1 T1' K.
 
 (* Reflexive transitive closure of type_equal_cong *)
 
-with type_equal : bool -> env -> typ -> typ -> knd -> Prop :=
-  | type_equal_refl : forall chk E T K,
-      kinding chk E T K ->
-      type_equal chk E T T K
-  | type_equal_step : forall chk E T1 T2 T3 K,
-      type_equal_cong chk E T1 T2 K ->
-      type_equal chk E T2 T3 K ->
-      type_equal chk E T1 T3 K
+(* inputs: tenv
+   subject: typ(1), typ(2)
+   outputs: knd *)
+Inductive type_equal : tenv -> typ -> typ -> knd -> Prop :=
+  | type_equal_refl : forall E T K,
+      kinding E T K ->
+      type_equal E T T K
+  | type_equal_step : forall E T1 T2 T3 K,
+      type_equal_cong E T1 T2 K ->
+      type_equal E T2 T3 K ->
+      type_equal E T1 T3 K.
 
-with subtype : bool -> env -> typ -> typ -> cset -> Prop :=
-  | subtype_c : forall chk E T1 T2 cs,
-      type_equal chk E T1 (typ_meet T1 T2) (knd_row cs) ->
-      subtype chk E T1 T2 cs.
+(* Subtyping *)
 
-Scheme valid_kind_mutind := Induction for valid_kind Sort Prop
-  with kinding_mutind := Induction for kinding Sort Prop
-  with valid_kinds_mutind := Induction for valid_kinds Sort Prop
-  with valid_kinds_and_type_mutind :=
-         Induction for valid_kinds_and_type Sort Prop
-  with valid_scheme_mutind := Induction for valid_scheme Sort Prop
-  with valid_env_aux_mutind := Induction for valid_env_aux Sort Prop
-  with valid_env_mutind := Induction for valid_env Sort Prop
-  with type_equal_core_mutind :=
-         Induction for type_equal_core Sort Prop
-  with type_equal_symm_mutind :=
-         Induction for type_equal_symm Sort Prop
-  with type_equal_cong_mutind :=
-         Induction for type_equal_cong Sort Prop
-  with type_equal_mutind := Induction for type_equal Sort Prop
-  with subtype_mutind := Induction for subtype Sort Prop.
+(* inputs: tenv
+   subject: typ(1), typ(2)
+   outputs: cset *)
+Inductive subtype : tenv -> typ -> typ -> cset -> Prop :=
+  | subtype_c : forall E T1 T2 cs,
+      type_equal E T1 (typ_meet T1 T2) (knd_row cs) ->
+      subtype E T1 T2 cs.
 
-Combined Scheme combined_kinding_mutind
-  from valid_kind_mutind, kinding_mutind,
-       valid_kinds_mutind, valid_kinds_and_type_mutind,
-       valid_scheme_mutind, valid_env_aux_mutind, valid_env_mutind,
-       type_equal_core_mutind,
-       type_equal_symm_mutind, type_equal_cong_mutind,
-       type_equal_mutind, subtype_mutind.
+(** ************************************************** *)
+(* Validity of ranges, schemes and kinding environments *)
 
-Inductive kindings : bool -> env -> list typ -> list knd -> Prop :=
-  | kindings_nil : forall chk E,
-      valid_env chk E ->
-      kindings chk E nil nil
-  | kindings_cons : forall chk E T Ts K Ks,
-      kinding chk E T K ->
-      kindings chk E Ts Ks ->
-      kindings chk E (T :: Ts) (K :: Ks).
+(* Validity of ranges *)
 
-Inductive valid_schemes : bool -> env -> list sch -> Prop :=
-  | valid_schemes_nil : forall chk E,
-      valid_env chk E ->
-      valid_schemes chk E nil
-  | valid_schemes_cons : forall chk E M Ms,
-      valid_scheme chk E M ->
-      valid_schemes chk E Ms ->
-      valid_schemes chk E (M :: Ms).
+(* inputs: tenv
+   subject: rng
+   outputs: *)
+Inductive valid_range : tenv -> rng -> Prop :=
+  | valid_range_type : forall E,
+      valid_range E rng_type
+  | valid_range_row : forall E cs,
+      CSet.Nonempty cs ->
+      valid_range E (rng_row cs)
+  | valid_range_range : forall E T1 T2,
+      subtype E T2 T1 CSet.universe ->
+      valid_range E (rng_range T1 T2).
 
-Inductive valid_instance : env -> list typ -> sch -> Prop :=
-  | valid_instance_c : forall E Ts M,
-      kindings true E Ts (knd_open_list (sch_kinds M) Ts) ->
-      kinding true E (typ_open (sch_body M) Ts) knd_type ->
+(* inputs: tenv
+   subject: list rng
+   outputs: *)
+Inductive valid_ranges : tenv -> list rng -> Prop :=
+  | valid_ranges_nil : forall E,
+      valid_ranges E nil
+  | valid_ranges_cons : forall E R Rs,
+      valid_range E R ->
+      valid_ranges E Rs ->
+      valid_ranges E (R :: Rs).
+
+(* Validity of type schemes *)
+
+(* inputs: tenv
+   subjects: list rng, typ
+   outputs: *)
+Inductive valid_ranges_and_type
+  : tenv -> list rng -> typ -> Prop :=
+  | valid_ranges_and_type_c : forall E Rs T,
+      valid_ranges E Rs ->
+      kinding E T knd_type ->
+      valid_ranges_and_type E Rs T.
+
+(* inputs: tenv
+   subject: sch
+   outputs: *)
+Inductive valid_scheme : tenv -> sch -> Prop :=
+  | valid_scheme_c : forall L E M,
+      (forall Xs,
+          fresh L (sch_arity M) Xs ->
+          valid_ranges_and_type (E & Xs ~: M)
+            (rng_open_vars_list (sch_ranges M) Xs)
+            (typ_open_vars (sch_body M) Xs)) ->
+      valid_scheme E M.
+
+(* inputs: tenv
+   subject: list sch
+   outputs: *)
+Inductive valid_schemes : tenv -> list sch -> Prop :=
+  | valid_schemes_nil : forall E,
+      valid_schemes E nil
+  | valid_schemes_cons : forall E M Ms,
+      valid_scheme E M ->
+      valid_schemes E Ms ->
+      valid_schemes E (M :: Ms).
+
+(* Validity of kinding environments *)
+
+(* inputs: tenv(1)
+   subject: tenv(2)
+   outputs: *)
+Inductive valid_tenv_aux : tenv -> tenv -> Prop :=
+  | valid_tenv_aux_empty : forall E,
+      valid_tenv_aux E empty
+  | valid_tenv_aux_push : forall E1 E2 X R,
+      valid_tenv_aux E1 E2 ->
+      valid_range E1 R ->
+      X # E2 ->
+      valid_tenv_aux E1 (E2 & X ~ R).
+
+(* inputs:
+   subject: tenv
+   outputs: *)
+Inductive valid_tenv : tenv -> Prop :=
+  | valid_tenv_c : forall E,
+      valid_tenv_aux E E ->
+      valid_tenv E.
+
+(** ************************************************** *)
+(** Ranging *)
+
+(* inputs: tenv
+   subject: typ
+   outputs: rng *)
+Inductive ranging : tenv -> typ -> rng -> Prop :=
+  | ranging_kinding_type : forall E T,
+      kinding E T knd_type ->
+      ranging E T rng_type
+  | ranging_kinding_row : forall E T cs,
+      kinding E T (knd_row cs) ->
+      ranging E T (rng_row cs)
+  | ranging_var : forall E X R ,
+      binds X R E ->
+      ranging E (typ_fvar X) R
+  | ranging_range_subsumption : forall E T T1 T2 T1' T2',
+      ranging E T (rng_range T1 T2) ->
+      subtype E T1 T1' CSet.universe ->
+      subtype E T2' T2 CSet.universe ->
+      ranging E T (rng_range T1' T2').
+
+(* inputs: tenv
+   subject: list typ
+   outputs: list rng *)
+Inductive rangings : tenv -> list typ -> list rng -> Prop :=
+  | rangings_nil : forall E,
+      rangings E nil nil
+  | rangings_cons : forall E T Ts R Rs,
+      ranging E T R ->
+      rangings E Ts Rs ->
+      rangings E (T :: Ts) (R :: Rs).
+
+(** Validity of instances *)
+
+(* inputs: tenv, sch
+   subject: list typ
+   outputs: *)
+Inductive valid_instance : tenv -> list typ -> sch -> Prop :=
+  | valid_instance_c : forall E Ts Rs M,
+      rangings E Ts Rs ->
+      Rs = rng_open_list (sch_ranges M) Ts ->
       valid_instance E Ts M.
 
-(* ************************************************************* *)
-(** ** Description of stores *)
+(* ****************************************************** *)
+(** ** Environments *)
+
+(* Validity of typing environments *)
+
+(* inputs: tenv
+   subject: env
+   outputs: *)
+Inductive valid_env : tenv -> env -> Prop :=
+  | valid_env_empty : forall E,
+      valid_env E empty
+  | valid_env_push : forall E D x M,
+      valid_env E D ->
+      valid_scheme E M ->
+      x # D ->
+      valid_env E (D & x ~ M).
+
+(* ****************************************************** *)
+(** ** Stores *)
 
 (** Grammar of values *)
 
@@ -955,241 +1067,263 @@ Inductive store_type : styp -> Prop :=
 
 (** Validity of store typings *)
 
-Inductive valid_store_type : env -> styp -> Prop :=
+(* inputs: tenv
+   subject: styp
+   outputs: *)
+Inductive valid_store_type : tenv -> styp -> Prop :=
   | valid_store_type_empty : forall E,
-      valid_env true E ->
       valid_store_type E empty
   | valid_store_type_push : forall E P l T,
       valid_store_type E P ->
-      kinding true E T knd_type ->
+      kinding E T knd_type ->
       l # P ->
       valid_store_type E (P & l ~ T).
 
-(* ************************************************************* *)
+(* ****************************************************** *)
 (** ** Description of typing *)
 
-Inductive typing : env -> styp -> trm -> typ -> Prop :=
-  | typing_var : forall E P x M T Us,
-      valid_env true E ->
-      valid_store_type E P ->
-      binds x (bind_typ M) E -> 
+(* inputs: tenv, env, styp
+   subject: trm
+   outputs: typ *)
+Inductive typing
+  : tenv -> env -> styp -> trm -> typ -> Prop :=
+  | typing_var : forall E D P x M T Us,
+      binds x M D -> 
       valid_instance E Us M ->
-      type_equal true E T (instance M Us) knd_type ->
-      typing E P (trm_fvar x) T
-  | typing_abs : forall L E P T1 T2 t1,
-      kinding true E T1 knd_type ->
+      type_equal E T (instance M Us) knd_type ->
+      typing E D P (trm_fvar x) T
+  | typing_abs : forall L E D P T1 T2 t1,
+      kinding E T1 knd_type ->
       (forall x, x \notin L -> 
-        typing (E & x ~: sch_empty T1) P (t1 ^ x) T2) -> 
-      typing E P (trm_abs t1) (typ_arrow T1 T2)
-  | typing_app : forall E P S T t1 t2, 
-      typing E P t1 (typ_arrow S T) ->
-      typing E P t2 S ->   
-      typing E P (trm_app t1 t2) T
-  | typing_let_val : forall L M E P T2 t1 t2,
+        typing E (D & x ~ sch_empty T1) P (t1 ^ x) T2) -> 
+      typing E D P (trm_abs t1) (typ_arrow T1 T2)
+  | typing_app : forall E P D S T t1 t2, 
+      typing E D P t1 (typ_arrow S T) ->
+      typing E D P t2 S ->   
+      typing E D P (trm_app t1 t2) T
+  | typing_let_val : forall L M E D P T2 t1 t2,
       value t1 ->
-      (forall Xs, fresh L (sch_arity M) Xs ->
-         typing
-           (E & Xs ~::* M) P
-           t1 (instance_vars M Xs)) ->
-      (forall x, x \notin L -> typing (E & x ~: M) P (t2 ^ x) T2) -> 
-      typing E P (trm_let t1 t2) T2
-  | typing_let : forall L E P T1 T2 t1 t2, 
-      typing E P t1 T1 ->
-      (forall x, x \notin L -> typing (E & x ~: sch_empty T1) P (t2 ^ x) T2) ->
-      typing E P (trm_let t1 t2) T2
-  | typing_constructor : forall c E P T1 T2 T3 t,
-      kinding true E T1 (knd_range (typ_top CSet.universe) T2) ->
-      subtype true E
+      valid_scheme E M ->
+      (forall Xs,
+          fresh L (sch_arity M) Xs ->
+          typing
+            (E & Xs ~: M) D P
+            t1 (instance_vars M Xs)) ->
+      (forall x,
+          x \notin L ->
+          typing E (D & x ~ M) P (t2 ^ x) T2) -> 
+      typing E D P (trm_let t1 t2) T2
+  | typing_let : forall L E D P T1 T2 t1 t2, 
+      typing E D P t1 T1 ->
+      (forall x,
+          x \notin L ->
+          typing E (D & x ~ sch_empty T1) P (t2 ^ x) T2) ->
+      typing E D P (trm_let t1 t2) T2
+  | typing_constructor : forall c E D P T1 T2 T3 t,
+      ranging E T1 (rng_range_above T2) ->
+      subtype E
         (typ_constructor c T3)
         (typ_proj CSet.universe T2 (CSet.singleton c))
         (CSet.singleton c) ->
-      typing E P t T3 ->
-      typing E P (trm_constructor c t) (typ_variant T1)
-  | typing_match : forall L c E P T1 T2 T3 T4 T5 T6 T7 T8 t1 t2 t3,
-      kinding true E T1 (knd_range T2 (typ_bot CSet.universe)) ->
-      kinding true E T3 (knd_range (typ_top CSet.universe) T4) ->
-      kinding true E T5 (knd_range (typ_top CSet.universe) T6) ->
-      subtype true E
+      typing E D P t T3 ->
+      typing E D P (trm_constructor c t) (typ_variant T1)
+  | typing_match :
+      forall L c E D P T1 T2 T3 T4 T5 T6 T7 T8 t1 t2 t3,
+      (* Ranging already kinded type here. Should
+         be replaced by subtyping when we merge rows
+         and ranges. *)
+      ranging E T1 (rng_range_below T2) ->
+      ranging E T3 (rng_range_above T4) ->
+      ranging E T5 (rng_range_above T6) ->
+      subtype E
         (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T7)
         (CSet.singleton c) ->
-      subtype true E
+      subtype E
         (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_proj CSet.universe T4 (CSet.singleton c))
         (CSet.singleton c) ->
-      subtype true E
+      subtype E
         (typ_proj CSet.universe T2 (CSet.cosingleton c))
         (typ_proj CSet.universe T6 (CSet.cosingleton c))
         (CSet.cosingleton c) ->
-      typing E P t1 (typ_variant T1) ->
+      typing E D P t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing (E & x ~: (sch_empty (typ_variant T3))) P
+         typing E (D & x ~ (sch_empty (typ_variant T3))) P
                 (t2 ^ x) T8) ->
       (forall y, y \notin L -> 
-         typing (E & y ~: (sch_empty (typ_variant T5))) P
+         typing E (D & y ~ (sch_empty (typ_variant T5))) P
                 (t3 ^ y) T8) ->
-      typing E P (trm_match t1 c t2 t3) T8
-  | typing_destruct : forall L c E P T1 T2 T3 T4 t1 t2,
-      kinding true E T1 (knd_range T2 (typ_bot CSet.universe)) ->
-      subtype true E
+      typing E D P (trm_match t1 c t2 t3) T8
+  | typing_destruct : forall L c E D P T1 T2 T3 T4 t1 t2,
+      (* Ranging already kinded type here. Should
+         be replaced by subtyping when we merge rows
+         and ranges. *)
+      ranging E T1 (rng_range_below T2) ->
+      subtype E
         (typ_proj CSet.universe T2 (CSet.singleton c))
         (typ_constructor c T3)
         (CSet.singleton c) ->
-      subtype true E
+      subtype E
         (typ_proj CSet.universe T2 (CSet.cosingleton c))
         (typ_bot (CSet.cosingleton c))
         (CSet.cosingleton c) ->
-      typing E P t1 (typ_variant T1) ->
+      typing E D P t1 (typ_variant T1) ->
       (forall x, x \notin L ->
-         typing (E & x ~: (sch_empty T3)) P
+         typing E (D & x ~ (sch_empty T3)) P
                 (t2 ^ x) T4) ->
-      typing E P (trm_destruct t1 c t2) T4
-  | typing_absurd : forall E P T1 T2 t1,
-      kinding true E T1 (knd_range (typ_bot CSet.universe)
-                              (typ_bot CSet.universe)) ->
-      kinding true E T2 knd_type ->
-      typing E P t1 (typ_variant T1) ->
-      typing E P (trm_absurd t1) T2
-  | typing_fix : forall L E P T1 T2 t1,
+      typing E D P (trm_destruct t1 c t2) T4
+  | typing_absurd : forall E D P T1 T2 t1,
+      kinding E T2 knd_type ->
+      (* Ranging already kinded type here. Should
+         be replaced by subtyping when we merge rows
+         and ranges. *)
+      ranging E T1
+        (rng_range_below (typ_bot CSet.universe)) ->
+      typing E D P t1 (typ_variant T1) ->
+      typing E D P (trm_absurd t1) T2
+  | typing_fix : forall L E D P T1 T2 t1,
+      kinding E T1 knd_type ->
+      kinding E T2 knd_type ->
       (forall x y,
           x \notin L -> y \notin (L \u \{x}) ->
           typing
-            (E & x ~: sch_empty (typ_arrow T1 T2) & y ~: sch_empty T1)
-            P (t1 ^* (x::y::nil)) T2) -> 
-      typing E P (trm_fix t1) (typ_arrow T1 T2)      
-  | typing_unit : forall E P,
-      valid_env true E ->
-      valid_store_type E P ->
-      typing E P trm_unit typ_unit
-  | typing_prod : forall E P T1 T2 t1 t2,
-      typing E P t1 T1 ->
-      typing E P t2 T2 ->
-      typing E P (trm_prod t1 t2) (typ_prod T1 T2)
-  | typing_fst : forall E P T1 T2 t1,
-      typing E P t1 (typ_prod T1 T2) ->
-      typing E P (trm_fst t1) T1
-  | typing_snd : forall E P T1 T2 t1,
-      typing E P t1 (typ_prod T1 T2) ->
-      typing E P (trm_snd t1) T2
-  | typing_loc : forall E P l T1 T2,
-      valid_env true E ->
-      valid_store_type E P ->
+            E (D & x ~ sch_empty (typ_arrow T1 T2)
+                 & y ~ sch_empty T1)
+            P (t1 ^* (y::x::nil)) T2) -> 
+      typing E D P (trm_fix t1) (typ_arrow T1 T2)      
+  | typing_unit : forall E D P,
+      typing E D P trm_unit typ_unit
+  | typing_prod : forall E D P T1 T2 t1 t2,
+      typing E D P t1 T1 ->
+      typing E D P t2 T2 ->
+      typing E D P (trm_prod t1 t2) (typ_prod T1 T2)
+  | typing_fst : forall E D P T1 T2 t1,
+      typing E D P t1 (typ_prod T1 T2) ->
+      typing E D P (trm_fst t1) T1
+  | typing_snd : forall E D P T1 T2 t1,
+      typing E D P t1 (typ_prod T1 T2) ->
+      typing E D P (trm_snd t1) T2
+  | typing_loc : forall E D P l T1 T2,
       binds l T1 P ->
-      type_equal true E T1 T2 knd_type ->
-      typing E P (trm_loc l) (typ_ref T2)
-  | typing_ref : forall E P t1 T,
-      typing E P t1 T ->
-      typing E P (trm_ref t1) (typ_ref T)
-  | typing_get : forall E P t1 T,
-      typing E P t1 (typ_ref T) ->
-      typing E P (trm_get t1) T
-  | typing_set : forall E P t1 t2 T,
-      typing E P t1 (typ_ref T) ->
-      typing E P t2 T ->
-      typing E P (trm_set t1 t2) typ_unit.
+      type_equal E T1 T2 knd_type ->
+      typing E D P (trm_loc l) (typ_ref T2)
+  | typing_ref : forall E D P t1 T,
+      typing E D P t1 T ->
+      typing E D P (trm_ref t1) (typ_ref T)
+  | typing_get : forall E D P t1 T,
+      typing E D P t1 (typ_ref T) ->
+      typing E D P (trm_get t1) T
+  | typing_set : forall E D P t1 t2 T,
+      typing E D P t1 (typ_ref T) ->
+      typing E D P t2 T ->
+      typing E D P (trm_set t1 t2) typ_unit.
 
-Inductive typing_scheme : env -> styp -> trm -> sch -> Prop :=
-  | typing_scheme_c : forall L E P t M,
-      valid_scheme true E M ->
-      valid_store_type E P ->
+(* inputs: tenv, env, styp
+   subject: trm
+   outputs: sch *)
+Inductive typing_scheme
+  : tenv -> env -> styp -> trm -> sch -> Prop :=
+  | typing_scheme_c : forall L E D P t M,
+      valid_scheme E M ->
       (forall Xs,
           fresh L (sch_arity M) Xs ->
-          typing (E & Xs ~::* M) P t (instance_vars M Xs)) ->
-      typing_scheme E P t M.
+          typing
+            (E & Xs ~: M) D P
+            t (instance_vars M Xs)) ->
+      typing_scheme E D P t M.
 
+(* inputs: tenv, env, styp
+   subject: list trm
+   outputs: list sch *)
 Inductive typing_schemes
-  : env -> styp -> list trm -> list sch -> Prop :=
-  | typing_schemes_nil : forall E P,
-      valid_env true E ->
-      valid_store_type E P ->
-      typing_schemes E P nil nil
-  | typing_schemes_cons : forall E P t ts M Ms,
-      typing_scheme E P t M ->
-      typing_schemes E P ts Ms ->
-      typing_schemes E P (t :: ts) (M :: Ms).
+  : tenv -> env -> styp -> list trm -> list sch -> Prop :=
+  | typing_schemes_nil : forall E D P,
+      typing_schemes E D P nil nil
+  | typing_schemes_cons : forall E D P t ts M Ms,
+      typing_scheme E D P t M ->
+      typing_schemes E D P ts Ms ->
+      typing_schemes E D P (t :: ts) (M :: Ms).
 
-Definition typing_store E V P :=
-     store V
-  /\ valid_store_type E P
-  /\ (forall l, l # V -> l # P)
-  /\ (forall l T, binds l T P -> 
-        exists t, binds l t V
-               /\ typing E P t T).
+(* inputs: tenv, env, loc, sto, styp
+   subject:
+   outputs: *)
+Inductive typing_store_loc
+  : loc -> tenv -> env -> sto -> styp -> Prop :=
+  | typing_store_loc_fresh : forall l E D V P,
+      l # V ->
+      l # P ->
+      typing_store_loc l E D V P
+  | typing_store_loc_bound : forall E D P l V T t,
+      binds l t V ->
+      binds l T P ->
+      typing E D P t T ->
+      typing_store_loc l E D V P.
+
+(* inputs: tenv, env, loc, sto, styp
+   subject:
+   outputs: *)
+Inductive typing_store : tenv -> env -> sto -> styp -> Prop :=
+  | typing_store_c : forall E D V P,
+     (forall l, typing_store_loc l E D V P) ->
+     typing_store E D V P.
 
 (* ************************************************************* *)
 (** ** Description of the semantics *)
 
 (** Reduction rules *)
 
+(* inputs: trm(1), sto(1)
+   subject:
+   outputs: trm(2), sto(2) *)
 Inductive red : trm -> sto -> trm -> sto -> Prop :=
   | red_let_1 : forall V t1 t2,
-      store V ->
-      term (trm_let t1 t2) ->
       value t1 -> 
       red (trm_let t1 t2) V (t2 ^^ t1) V
   | red_let_2 : forall V V' t1 t1' t2,
-      term_body t2 ->
       red t1 V t1' V' -> 
       red (trm_let t1 t2) V (trm_let t1' t2) V'
   | red_app_1 : forall V V' t1 t1' t2,
-      term t2 ->
       red t1 V t1' V' -> 
       red (trm_app t1 t2) V (trm_app t1' t2) V'
   | red_app_2 : forall V V' t1 t2 t2', 
-      value t1 ->
       red t2 V t2' V' ->
       red (trm_app t1 t2) V (trm_app t1 t2') V'
   | red_app_3 : forall V t1 t2, 
-      store V ->
-      term_body t1 -> 
       value t2 ->  
       red (trm_app (trm_abs t1) t2) V (t1 ^^ t2) V
   | red_app_4 : forall V t1 t2,
-      store V ->
-      term_body2 t1 -> 
       value t2 ->
       red (trm_app (trm_fix t1) t2) V 
-          (t1 ^^* ((trm_fix t1)::t2::nil)) V
+          (t1 ^^* (t2::(trm_fix t1)::nil)) V
   | red_constructor : forall V V' c t t',
       red t V t' V' ->
       red (trm_constructor c t) V (trm_constructor c t') V'
   | red_match_1 : forall V V' c t1 t1' t2 t3,
-      term_body t2 ->
-      term_body t3 ->
       red t1 V t1' V' ->
       red (trm_match t1 c t2 t3) V (trm_match t1' c t2 t3) V'
   | red_match_2 : forall V c1 c2 t1 t2 t3,
-      store V ->
       c1 = c2 ->
-      value (trm_constructor c1 t1) ->
-      term_body t2 ->
-      term_body t3 ->
+      value t1 ->
       red (trm_match (trm_constructor c1 t1) c2 t2 t3) V
           (t2 ^^ (trm_constructor c1 t1)) V
   | red_match_3 : forall V c1 c2 t1 t2 t3,
-      store V ->
       c1 <> c2 ->
-      value (trm_constructor c1 t1) ->
-      term_body t2 ->
-      term_body t3 ->
+      value t1 ->
       red (trm_match (trm_constructor c1 t1) c2 t2 t3) V
           (t3 ^^ (trm_constructor c1 t1)) V
   | red_destruct_1 : forall V V' c t1 t1' t2,
-      term_body t2 ->
       red t1 V t1' V' ->
       red (trm_destruct t1 c t2) V (trm_destruct t1' c t2) V'
   | red_destruct_2 : forall V c1 c2 t1 t2,
-      store V ->
       c1 = c2 ->
-      value (trm_constructor c1 t1) ->
-      term_body t2 ->
+      value t1 ->
       red (trm_destruct (trm_constructor c1 t1) c2 t2) V
           (t2 ^^ t1) V
   | red_absurd : forall V V' t t',
       red t V t' V' ->
       red (trm_absurd t) V (trm_absurd t') V'
   | red_prod_1 : forall V V' t1 t1' t2,
-      term t2 ->
       red t1 V t1' V' -> 
       red (trm_prod t1 t2) V (trm_prod t1' t2) V'
   | red_prod_2 : forall V V' t1 t2 t2', 
@@ -1200,7 +1334,6 @@ Inductive red : trm -> sto -> trm -> sto -> Prop :=
       red t V t' V' ->
       red (trm_fst t) V (trm_fst t') V'
   | red_fst_2 : forall V t1 t2, 
-      store V ->
       value t1 -> 
       value t2 ->  
       red (trm_fst (trm_prod t1 t2)) V t1 V
@@ -1208,7 +1341,6 @@ Inductive red : trm -> sto -> trm -> sto -> Prop :=
       red t V t' V' ->
       red (trm_snd t) V (trm_snd t') V'
   | red_snd_2 : forall V t1 t2, 
-      store V ->
       value t1 -> 
       value t2 ->  
       red (trm_snd (trm_prod t1 t2)) V t2 V
@@ -1216,7 +1348,6 @@ Inductive red : trm -> sto -> trm -> sto -> Prop :=
       red t V t' V' ->
       red (trm_ref t) V (trm_ref t') V'
   | red_ref_2 : forall V t l,
-      store V ->
       value t ->
       l # V ->
       red (trm_ref t) V (trm_loc l) (V & l ~ t)
@@ -1224,11 +1355,9 @@ Inductive red : trm -> sto -> trm -> sto -> Prop :=
       red t V t' V' ->
       red (trm_get t) V (trm_get t') V'
   | red_get_2 : forall V t l,
-      store V ->
       binds l t V ->
       red (trm_get (trm_loc l)) V t V
   | red_set_1 : forall V V' t1 t1' t2,
-      term t2 ->
       red t1 V t1' V' ->
       red (trm_set t1 t2) V (trm_set t1' t2) V'
   | red_set_2 : forall V V' t1 t2 t2',
@@ -1236,28 +1365,34 @@ Inductive red : trm -> sto -> trm -> sto -> Prop :=
       red t2 V t2' V' ->
       red (trm_set t1 t2) V (trm_set t1 t2') V'
   | red_set_3 : forall V l t2,
-      store V ->
       value t2 ->
       red (trm_set (trm_loc l) t2) V trm_unit (V & l ~ t2).
 
-(* ************************************************************** *)
+(* ***************************************************** *)
 (** ** Description of the results *)
 
 (** Goal is to prove preservation and progress *)
 
-Definition preservation := forall E P t t' V V' T,
-  typing E P t T ->
-  typing_store E V P ->
+Definition preservation := forall E D P t t' V V' T,
+  valid_tenv E ->
+  valid_env E D ->
+  valid_store_type E P ->
+  store V ->
+  typing E D P t T ->
+  typing_store E D V P ->
   red t V t' V' ->
   exists P',
     extends P P'
-    /\ typing E P' t' T
-    /\ typing_store E V' P'.
-
+    /\ valid_store_type E P'
+    /\ store V'
+    /\ typing E D P' t' T
+    /\ typing_store E D V' P'.
 
 Definition progress := forall E P V t T,
-  no_term_bindings E ->
-  typing E P t T ->
-  typing_store E V P ->
+  valid_tenv E ->
+  valid_store_type E P ->
+  store V ->
+  typing E empty P t T ->
+  typing_store E empty V P ->
      value t 
   \/ exists t' V', red t V t' V'.
