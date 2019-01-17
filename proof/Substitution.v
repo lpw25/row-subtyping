@@ -1,1813 +1,1236 @@
 (************************************************
- *          Row Subtyping - Substitution        *
+ *       Row Subtyping - Substitution           *
  *                 Leo White                    *
  ************************************************)
 
+(* Lemmas for preservation under substitution *)
+
 Set Implicit Arguments.
-Require Import List LibLN Disjoint Utilities Definitions.
-
-(* ****************************************************** *)
-(** ** Free Variables *)
-
-Fixpoint typ_fv (T : typ) : vars :=
-  match T with
-  | typ_bvar i => \{}
-  | typ_fvar x => \{x}
-  | typ_constructor c T1 => typ_fv T1
-  | typ_or cs1 T1 cs2 T2 => (typ_fv T1) \u (typ_fv T2)
-  | typ_proj cs1 T1 cs2 => typ_fv T1
-  | typ_variant T1 => typ_fv T1
-  | typ_arrow T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  | typ_ref T1 => typ_fv T1
-  | typ_unit => \{}
-  | typ_prod T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  | typ_top cs => \{}
-  | typ_bot cs => \{}
-  | typ_meet T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  | typ_join T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  end.
-
-Definition typ_fv_list Ts :=
-  fold_right (fun T acc => typ_fv T \u acc) \{} Ts.
-
-Definition rng_fv R :=
-  match R with
-  | rng_type => \{}
-  | rng_row _ => \{}
-  | rng_range T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  end.
-
-Definition rng_fv_list Rs :=
-  fold_right (fun R acc => rng_fv R \u acc) \{} Rs.
-
-Fixpoint sch_fv (M : sch) : vars :=
-  rng_fv_list (sch_ranges M) \u typ_fv (sch_body M).
-
-Definition sch_fv_list Ms :=
-  fold_right (fun M acc => sch_fv M \u acc) \{} Ms.
-
-Definition tenv_fv := 
-  fv_in_values rng_fv.
-
-Definition env_fv := 
-  fv_in_values sch_fv.
-
-Definition styp_fv :=
-  fv_in_values typ_fv.
-
-Fixpoint trm_fv (t : trm) {struct t} : vars :=
-  match t with
-  | trm_bvar i => \{}
-  | trm_fvar x => \{x}
-  | trm_abs t1 => trm_fv t1
-  | trm_let t1 t2 => (trm_fv t1) \u (trm_fv t2)
-  | trm_app t1 t2 => (trm_fv t1) \u (trm_fv t2)
-  | trm_constructor c t1 => trm_fv t1
-  | trm_match t1 c t2 t3 => (trm_fv t1) \u (trm_fv t2) \u (trm_fv t3)
-  | trm_destruct t1 c t2 => (trm_fv t1) \u (trm_fv t2)
-  | trm_absurd t1 => trm_fv t1
-  | trm_fix t1 => trm_fv t1
-  | trm_unit => \{}
-  | trm_prod t1 t2 => (trm_fv t1) \u (trm_fv t2)
-  | trm_fst t1 => trm_fv t1
-  | trm_snd t1 => trm_fv t1
-  | trm_loc l => \{}
-  | trm_ref t1 => trm_fv t1
-  | trm_get t1 => trm_fv t1
-  | trm_set t1 t2 => (trm_fv t1) \u (trm_fv t2)
-  end.
-
-Definition trm_fv_list Ts :=
-  fold_right (fun T acc => trm_fv T \u acc) \{} Ts.
-
-(* ****************************************************** *)
-(** ** Types *)
-
-Fixpoint typ_var_subst Zs Us (X : var) :=
-  match Zs with
-  | nil => typ_fvar X
-  | Z :: Zs =>
-    match Us with
-    | nil => typ_fvar X
-    | U :: Us =>
-        If X = Z then U else typ_var_subst Zs Us X
-    end
-  end.
-
-Fixpoint typ_subst Zs Us (T : typ) {struct T} : typ :=
-  match T with
-  | typ_bvar i => typ_bvar i
-  | typ_fvar X => typ_var_subst Zs Us X
-  | typ_constructor c T1 =>
-      typ_constructor c (typ_subst Zs Us T1)
-  | typ_or cs1 T1 cs2 T2 =>
-      typ_or cs1 (typ_subst Zs Us T1)
-             cs2 (typ_subst Zs Us T2)
-  | typ_proj cs1 T1 cs2 =>
-      typ_proj cs1 (typ_subst Zs Us T1) cs2
-  | typ_variant T1 => typ_variant (typ_subst Zs Us T1)
-  | typ_arrow T1 T2 =>
-      typ_arrow (typ_subst Zs Us T1) (typ_subst Zs Us T2)
-  | typ_ref T1 => typ_ref (typ_subst Zs Us T1)
-  | typ_unit => typ_unit
-  | typ_prod T1 T2 =>
-      typ_prod (typ_subst Zs Us T1) (typ_subst Zs Us T2)
-  | typ_top cs => typ_top cs
-  | typ_bot cs => typ_bot cs
-  | typ_meet T1 T2 =>
-      typ_meet (typ_subst Zs Us T1) (typ_subst Zs Us T2)
-  | typ_join T1 T2 =>
-      typ_join (typ_subst Zs Us T1) (typ_subst Zs Us T2)
-  end.
-
-Definition typ_subst_list Zs Us Ts :=
-  List.map (fun T => typ_subst Zs Us T) Ts.
-
-(** Substitution for names for ranges. *)
-
-Definition rng_subst Zs Us R :=
-  match R with
-  | rng_type => rng_type
-  | rng_row cs => rng_row cs
-  | rng_range T1 T2 =>
-      rng_range (typ_subst Zs Us T1) (typ_subst Zs Us T2)
-  end.
-
-Definition rng_subst_list Zs Us Rs :=
-  List.map (fun R => rng_subst Zs Us R) Rs.
-
-(** Substitution for names for schemes. *)
-
-Definition sch_subst Zs Us M :=
-  Sch
-    (rng_subst_list Zs Us (sch_ranges M))
-    (typ_subst Zs Us (sch_body M)).
-
-Definition sch_subst_list Zs Us Ms :=
-  List.map (fun M => sch_subst Zs Us M) Ms.
-
-(** Substitution for type environments *)
-Definition tenv_subst Zs Us E :=
-  map (rng_subst Zs Us) E.
-
-(** Substitution for environments *)
-Definition env_subst Zs Us D :=
-  map (sch_subst Zs Us) D.
-
-(** Substitution for store types *)
-Definition styp_subst Zs Us P :=
-  map (typ_subst Zs Us) P.
-
-(** Substitution for name in a term. *)
-
-Fixpoint trm_var_subst zs us (x : var) :=
-  match zs with
-  | nil => trm_fvar x
-  | z :: zs =>
-    match us with
-    | nil => trm_fvar x
-    | u :: us =>
-        If x = z then u else trm_var_subst zs us x
-    end
-  end.
-
-Fixpoint trm_subst (zs : list var) (us : list trm) (t : trm)
-         {struct t} : trm :=
-  match t with
-  | trm_bvar i => trm_bvar i 
-  | trm_fvar x => trm_var_subst zs us x
-  | trm_abs t1 => trm_abs (trm_subst zs us t1) 
-  | trm_let t1 t2 => trm_let (trm_subst zs us t1) (trm_subst zs us t2) 
-  | trm_app t1 t2 => trm_app (trm_subst zs us t1) (trm_subst zs us t2)
-  | trm_constructor c t1 => trm_constructor c (trm_subst zs us t1)
-  | trm_match t1 c t2 t3 =>
-      trm_match (trm_subst zs us t1) c
-                (trm_subst zs us t2) (trm_subst zs us t3)
-  | trm_destruct t1 c t2 =>
-      trm_destruct (trm_subst zs us t1) c (trm_subst zs us t2)
-  | trm_absurd t1 => trm_absurd (trm_subst zs us t1)
-  | trm_fix t1 => trm_fix (trm_subst zs us t1)
-  | trm_unit => trm_unit
-  | trm_prod t1 t2 => trm_prod (trm_subst zs us t1) (trm_subst zs us t2)
-  | trm_fst t1 => trm_fst (trm_subst zs us t1)
-  | trm_snd t1 => trm_snd (trm_subst zs us t1)
-  | trm_loc l => trm_loc l
-  | trm_ref t1 => trm_ref (trm_subst zs us t1)
-  | trm_get t1 => trm_get (trm_subst zs us t1)
-  | trm_set t1 t2 => trm_set (trm_subst zs us t1) (trm_subst zs us t2)
-  end.
-
-Definition trm_subst_single z u t :=
-  trm_subst (z::nil) (u::nil) t.
-
-Definition trm_subst_list zs us ts :=
-  List.map (fun t => trm_subst zs us t) ts.
-
-(* ****************************************************** *)
-(** ** Instanciation of Tactics *)
-
-Ltac gather_vars :=
-  let A := gather_vars_with (fun x : vars => x) in
-  let B := gather_vars_with (fun x : var => \{x}) in
-  let C := gather_vars_with (fun x : list var => from_list x) in
-  let D := gather_vars_with (fun x : tenv => tenv_fv x) in
-  let E := gather_vars_with (fun x : tenv => dom x) in
-  let F := gather_vars_with (fun x : trm => trm_fv x) in
-  let G := gather_vars_with (fun x : list trm => trm_fv_list x) in
-  let H := gather_vars_with (fun x : typ => typ_fv x) in
-  let I := gather_vars_with (fun x : list typ => typ_fv_list x) in
-  let J := gather_vars_with (fun x : rng => rng_fv x) in
-  let K := gather_vars_with (fun x : list rng => rng_fv_list x) in
-  let L := gather_vars_with (fun x : env => env_fv x) in
-  let M := gather_vars_with (fun x : env => dom x) in
-  let N := gather_vars_with (fun x : styp => styp_fv x) in
-  let O := gather_vars_with (fun x : sch => sch_fv x) in
-  let P := gather_vars_with (fun x : list sch => sch_fv_list x) in
-  constr:(A \u B \u C \u D \u E \u F \u G \u H
-            \u I \u J \u K \u L \u M \u N \u O \u P).
-
-Tactic Notation "pick_fresh" ident(x) :=
-  let L := gather_vars in (pick_fresh_gen L x).
-
-Tactic Notation "pick_freshes" constr(n) ident(x) :=
-  let L := gather_vars in (pick_freshes_gen L n x).
-
-Tactic Notation "apply_fresh" constr(T) "as" ident(x) :=
-  apply_fresh_base T gather_vars x.
-
-Tactic Notation "exists_fresh" ident(x) ident(Hfr) :=
-  exists_fresh_gen gather_vars x Hfr.
-
-Ltac spec_fresh :=
-  let L := gather_vars in spec_fresh_gen L.
-
-(* **************************************************** *)
-(** ** Terms *)
-
-Lemma trm_fv_list_fvars : forall xs,
-    trm_fv_list (trm_fvars xs) = from_list xs.
-Proof.
-  induction xs; auto; simpl.
-  rewrite from_list_cons.
-  rewrite IHxs.
-  reflexivity.
-Qed.
-
-(** Substitution on indices is identity on well-formed
-    terms. *)
-
-Lemma var_open_below_domain : forall n k us t,
-    n < k ->
-    var_open k us n t = t.
-Proof.
-  unfold lt.
-  introv Hle.
-  generalize dependent n.
-  induction k; introv Hle.
-  - inversion Hle.
-  - destruct n; simpl; auto with arith.
-Qed.
-
-Lemma var_open_above_domain : forall n k us t,
-    n >= k + length us ->
-    var_open k us n t = t.
-Proof.
-  unfold gt, lt.
-  introv Hle.
-  generalize dependent n.
-  induction k; introv Hle; simpl.
-  - auto using nth_overflow.
-  - destruct n; simpl; auto with arith.
-Qed.
-    
-Lemma var_open_rec_core :forall n j vs i us,
-    j + length vs <= i ->
-    var_open j vs n (trm_bvar n)
-    = {i ~> us}(var_open j vs n (trm_bvar n)) ->
-    trm_bvar n = var_open i us n (trm_bvar n).
-Proof.
-  introv Hlt Heq.
-  destruct (Compare_dec.le_lt_dec (j + length vs) n).
-  - rewrite var_open_above_domain in Heq; auto.
-  - rewrite var_open_below_domain; auto.
-    Omega.omega.
-Qed.    
-
-Lemma trm_open_rec_core :forall t j vs i us,
-    j + length vs <= i ->
-    {j ~> vs}t = {i ~> us}({j ~> vs}t) ->
-    t = {i ~> us}t.
-Proof.
-  induction t; introv Hl Heq; simpl in *;
-    assert (S j + length vs <= S i) by Omega.omega;
-    assert (S (S j) + length vs <= S (S i)) by Omega.omega;
-    inversion Heq; f_equal; eauto using var_open_rec_core.
-Qed.
-
-Lemma trm_open_rec : forall t us,
-  term t -> forall k, t = {k ~> us}t.
-Proof.
-  introv Ht.
-  induction Ht; intro; simpl; f_equal; auto.
-  - pick_fresh x.
-    apply trm_open_rec_core with (j := 0) (vs := (trm_fvar x)::nil);
-      simpl; try Omega.omega; eauto.
-  - pick_fresh x.
-    apply trm_open_rec_core with (j := 0) (vs := (trm_fvar x)::nil);
-      simpl; try Omega.omega; eauto.
-  - pick_fresh x.
-    apply trm_open_rec_core with (j := 0) (vs := (trm_fvar x)::nil);
-      simpl; try Omega.omega; eauto.
-  - pick_fresh x.
-    apply trm_open_rec_core with (j := 0) (vs := (trm_fvar x)::nil);
-      simpl; try Omega.omega; eauto.
-  - pick_fresh x.
-    apply trm_open_rec_core with (j := 0) (vs := (trm_fvar x)::nil);
-      simpl; try Omega.omega; eauto.
-  - pick_fresh x. pick_fresh y.
-    apply trm_open_rec_core
-      with (j := 0) (vs := (trm_fvar y)::(trm_fvar x)::nil);
-      simpl; try Omega.omega.
-    assert
-      (forall k : nat,
-        t ^* y :: x :: nil = {k ~> us} (t ^* y :: x :: nil)) as IH
-        by auto.
-    apply IH; auto.
-Qed.
-
-(** Substitution for a fresh name is identity. *)
-
-Lemma trm_var_subst_fresh : forall xs us y,
-  y \notin (from_list xs) ->
-  trm_var_subst xs us y = trm_fvar y.
-Proof.
-  introv Hf.
-  generalize dependent us.
-  induction xs; intros; induction us; simpl; auto.
-  rewrite from_list_cons in Hf.
-  apply notin_union in Hf.
-  destruct Hf as [Hf1 Hf2].
-  rewrite notin_singleton in Hf1.
-  case_var.
-  auto.
-Qed.    
-
-Lemma trm_subst_fresh : forall xs us t, 
-  disjoint (trm_fv t) (from_list xs) ->
-  trm_subst xs us t = t.
-Proof.
-  introv Hf.
-  induction t; simpls; f_equal; auto.
-  apply trm_var_subst_fresh.
-  apply disjoint_singleton_l.
-  auto.
-Qed.
-
-Lemma trm_subst_fresh_list : forall xs us ts,
-  disjoint (trm_fv_list ts) (from_list xs) -> 
-  trm_subst_list xs us ts = ts.
-Proof.
-  induction ts; simpl; intros Fr.
-  - easy.
-  - f_equal*.
-    auto using trm_subst_fresh.
-Qed.
-
-Lemma trm_subst_fresh_trm_fvars : forall xs us ys,
-  disjoint (from_list ys) (from_list xs) ->
-  trm_subst_list xs us (trm_fvars ys) = trm_fvars ys.
-Proof.
-  introv Hf.
-  apply trm_subst_fresh_list.
-  rewrite trm_fv_list_fvars.
-  assumption.
-Qed.
-
-(** Substitution distributes on the open operation. *)
-
-Lemma trm_subst_var_open : forall xs us k n ts t,
-    terms us ->
-    trm_subst xs us (var_open k ts n t)
-    = var_open k (trm_subst_list xs us ts) n (trm_subst xs us t).
-Proof.
-  introv Ht.
-  generalize dependent n.
-  generalize dependent ts.
-  induction k; intros; induction n; induction ts; simpl; auto.
-  - unfold trm_subst_list.
-    rewrite map_nth.
-    auto.
-  - rewrite IHk; simpl; auto.
-  - rewrite IHk; simpl; auto.
-Qed.
-
-Lemma trm_var_subst_open : forall xs us y k ts,
-  terms us ->
-  trm_var_subst xs us y
-  = {k ~> ts} trm_var_subst xs us y.
-Proof.
-  introv Hts.
-  generalize dependent us.
-  induction xs; intros; induction us; simpl; auto.
-  inversion Hts; subst.
-  case_var; auto using trm_open_rec.
-Qed.
-
-Lemma trm_subst_open : forall xs us t ts,
-    terms us -> 
-    trm_subst xs us (t ^^* ts)
-    = (trm_subst xs us t) ^^* (trm_subst_list xs us ts).
-Proof.
-  unfold trm_open.
-  introv Hts.
-  generalize 0 as k.
-  induction t; intros; simpl; f_equal; auto.
-  - rewrite trm_subst_var_open; auto.
-  - apply trm_var_subst_open; auto.
-Qed.
-
-(** Substitution and open_var for distinct names commute. *)
-
-Lemma trm_subst_open_vars : forall xs us ys t,
-  disjoint (from_list ys) (from_list xs) ->
-  terms us ->
-  (trm_subst xs us t) ^* ys = trm_subst xs us (t ^* ys).
-Proof.
-  introv Hf Hts.
-  rewrite trm_subst_open; auto.
-  rewrite trm_subst_fresh_trm_fvars; auto.
-Qed.
-
-Lemma trm_subst_open_var : forall xs us y t,
-  y \notin (from_list xs) ->
-  terms us ->
-  (trm_subst xs us t) ^ y = trm_subst xs us (t ^ y).
-Proof.
-  introv Hn Hts.
-  replace (trm_fvar y :: nil) with (trm_fvars (y::nil)); auto.
-  apply trm_subst_open_vars; auto.
-Qed.
-
-Lemma trm_subst_cons : forall x xs u us t,
-    x \notin trm_fv t ->
-    trm_subst (x :: xs) (u :: us) t = trm_subst xs us t.
-Proof.
-  introv Hn.
-  induction t; simpl; simpl in Hn;
-    rewrite? IHt; rewrite? IHt1; rewrite? IHt2; rewrite? IHt3;
-      auto.
-  case_var; auto.
-Qed.
-
-Lemma trm_subst_list_cons : forall x xs u us ts,
-    x \notin trm_fv_list ts ->
-    trm_subst_list (x :: xs) (u :: us) ts = trm_subst_list xs us ts.
-Proof.
-  introv Hn.
-  induction ts; auto.
-  simpl in *.
-  rewrite trm_subst_cons; f_equal; auto.
-Qed.
-
-Lemma trm_subst_fvars : forall xs us,
-    fresh \{} (length us) xs ->
-    trm_subst_list xs us (trm_fvars xs) = us.
-Proof.
-  introv Hf.
-  fresh_length Hf as Hl.
-  generalize dependent us.
-  induction xs; introv Hf Hl; induction us; try discriminate; auto.
-  - simpl; case_var; f_equal.
-    destruct Hf.
-    rewrite trm_subst_list_cons; auto.
-    rewrite trm_fv_list_fvars.
-    eauto using fresh_single_notin.
-Qed.
-
-(** Opening up an abstraction of body t with a term u is the same as
-  opening up the abstraction with a fresh name x and then substituting
-  u for x. *)
-
-Lemma trm_subst_intro : forall xs us t, 
-  fresh (trm_fv t) (length us) xs -> terms us ->
-  t ^^* us = trm_subst xs us (t ^* xs).
-Proof.
-  introv Hf Hts.
-  rewrite trm_subst_open; auto.
-  rewrite trm_subst_fresh; auto.
-  rewrite trm_subst_fvars; auto.
-Qed.
-
-Lemma trm_subst_single_intro : forall x u t,
-    x \notin (trm_fv t) -> term u ->
-    t ^^ u = trm_subst_single x u (t ^ x).
-Proof.
-  introv Hn Ht.
-  rewrite trm_subst_intro with (xs := x :: nil); auto using terms.
-Qed.
+Require Import LibLN Utilities Cofinite Disjoint Definitions
+        Opening FreeVars Environments Subst Wellformedness
+        Weakening.
 
 (* *************************************************************** *)
-(** * Properties of types *)
+(** Kinding preserved by type substitution *)
 
-Lemma typ_fv_list_fvars : forall Xs,
-    typ_fv_list (typ_fvars Xs) = from_list Xs.
+Lemma kinding_typ_subst_var : forall E1 E2 E3 E4 Xs Rs Us X R,
+    binds X R (E1 & Xs ~* Rs & E2) ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    kindings E3 E4 Us (rngs_kinds Rs) ->
+    kinding E3 E4 (typ_var_subst Xs Us X) (rng_kind R)
+    \/ (binds X R (E1 & E2)
+        /\ typ_var_subst Xs Us X = typ_fvar X).
 Proof.
-  induction Xs; auto; simpl.
-  rewrite from_list_cons.
-  rewrite IHXs.
-  reflexivity.
+  introv Hb Hl1 He Hks.
+  assert (length Us = length Rs) as Hl2
+    by (rewrite length_rngs_kinds; eauto using kindings_length).
+  generalize dependent Rs.
+  generalize dependent Us.
+  induction Xs; introv Hb Hl1 He Hks Hl2; destruct Rs; destruct Us;
+    try discriminate; simpl in *;
+    autorewrite with rew_env_concat in *; auto.
+  inversion Hks; subst.
+  case_var.
+  - apply binds_middle_eq_inv in Hb; subst;
+      auto using ok_from_type_environment.
+  - eauto using binds_subst, type_environment_remove.     
 Qed.
 
-Lemma typ_fv_nth : forall Ts S i,
-    subset (typ_fv (nth i Ts S)) (typ_fv S \u typ_fv_list Ts).
+(* Lemma for applying the inductive hypothesis in
+   the contractive recursive cases. *)
+
+Lemma kinding_typ_subst_rec :
+  forall E1 E2 E3 Xs Us Rs T K,
+  (type_environment (E1 & Xs ~* Rs & E2 & E3) ->
+   type_environment_extension
+     (E1 & Xs ~* Rs & E2 & E3) empty ->
+   forall E4 : LibEnv.env rng,
+     E1 & Xs ~* Rs & E2 & E3 = E1 & Xs ~* Rs & E4 ->
+     kindings (tenv_subst Xs Us (E1 & E4))
+              (tenv_subst Xs Us empty) Us
+              (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+     kinding (tenv_subst Xs Us (E1 & E4))
+             (tenv_subst Xs Us empty)
+             (typ_subst Xs Us T) K) ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+  kindings (tenv_subst Xs Us (E1 & E2))
+           (tenv_subst Xs Us E3) Us
+           (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+  kinding (tenv_subst Xs Us (E1 & E2) & tenv_subst Xs Us E3)
+    empty (typ_subst Xs Us T) K.
 Proof.
-  intros.
-  generalize dependent i.
-  induction Ts; intro; induction i; simpl in *;
-    auto using subset_union_weak_l.
-  - rewrite union_comm; rewrite <- union_assoc.
-    apply subset_union_weak_l.
-  - rewrite union_comm with (E := typ_fv a).
-    rewrite union_assoc.
-    unfold subset in *; intros; rewrite in_union; left.
+  introv IH He1 He2 Hks.
+  rewrite <- tenv_subst_concat.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  rewrite <- concat_assoc.
+  apply IH; auto using concat_assoc, type_environment_extend.
+  rewrite tenv_subst_empty.
+  rewrite concat_assoc.
+  rewrite tenv_subst_concat.
+  apply kindings_extend;
+    autorewrite with rew_env_concat;
+    eauto using tenv_subst_type_environment,
+      tenv_subst_type_environment_extension with wellformed.
+Qed.
+
+Lemma kinding_typ_subst : forall E1 E2 E3 Xs Rs Us T K,
+    kinding (E1 & Xs ~* Rs & E2) E3 T K ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+    kindings (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      Us (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+    kinding (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+            (typ_subst Xs Us T) K.
+Proof.
+  introv Hk Hl He1 He2 Hks.
+  remember (E1 & Xs ~* Rs & E2) as E4.
+  generalize dependent E2.
+  induction Hk; introv Heq Hks; subst; simpl;
+    eauto using kinding_typ_subst_rec.
+  - rewrite <- rngs_kinds_subst_list in Hks.
+    destruct kinding_typ_subst_var
+      with (E1 := E1) (E2 := E3)
+           (E3 := tenv_subst Xs Us (E1 & E3))
+           (E4 := tenv_subst Xs Us E2)
+           (Xs := Xs) (Rs := Rs) (Us := Us) (X := X)
+           (R := Rng T1 T2 K)
+      as [?|[Hb Heq]]; auto.
+    rewrite Heq.
+    eapply tenv_subst_binds in Hb.
     eauto.
 Qed.
 
-Lemma typ_open_fv_inv : forall Us T,
-    subset (typ_fv T) (typ_fv (typ_open T Us)).
-Proof.
-  intros.
-  induction T; simpl;
-    auto using subset_empty_l, subset_refl, subset_union_2.
-Qed.
-
-Lemma typ_open_fv : forall Us T,
-    subset (typ_fv (typ_open T Us)) (typ_fv T \u typ_fv_list Us).
-Proof.
-  intros.
-  induction T; simpl;
-    try rewrite union_distribute with (R := typ_fv_list Us);
-    auto using subset_empty_l, subset_refl, subset_union_weak_l,
-      subset_union_2.
-  apply typ_fv_nth.
-Qed.
-
-Lemma typ_open_fresh_fv : forall Xs n Us T,
-    fresh (typ_fv T \u typ_fv_list Us) n Xs ->
-    fresh (typ_fv (typ_open T Us)) n Xs.
-Proof.
-  introv Hf.
-  generalize dependent n.
-  induction Xs; intros n Hf; subst;
-    destruct n; simpl in *; auto.
-  destruct Hf as [Hn Hf].
-  split.
-  - eauto using notin_subset, typ_open_fv.
-  - assert (fresh (typ_fv (typ_open T Us)) n Xs) by auto.
-    auto.
-Qed.
-
-Lemma typ_open_vars_fv_inv : forall Ys T,
-     subset (typ_fv T) (typ_fv (typ_open_vars T Ys)).
-Proof.
-  intros.
-  apply typ_open_fv_inv.
-Qed.
-
-Lemma typ_open_vars_fv : forall Ys T,
-    subset (typ_fv (typ_open_vars T Ys)) (typ_fv T \u from_list Ys).
-Proof.
-  intros.
-  rewrite <- typ_fv_list_fvars.
-  apply typ_open_fv.
-Qed.
-
-(** Open with nil is the identity. *)
-
-Lemma typ_open_nil : forall T,
-    typ_open T nil = T.
-Proof.
-  intros.
-  induction T; simpl;
-    rewrite? IHT; rewrite? IHT1; rewrite? IHT2; auto.
-  - destruct n; auto.
-Qed.
-
-Lemma typ_open_vars_nil : forall T,
-    typ_open_vars T nil = T.
-Proof.
-  intros.
-  unfold typ_open_vars.
-  apply typ_open_nil.
-Qed.
-
-(** Open on a type is the identity. *)
-
-Lemma typ_open_type : forall T Us,
-  type T -> T = typ_open T Us.
-Proof.
-  introv Htyp.
-  induction Htyp; simpl; rewrite <- ? IHHtyp;
-    rewrite <- ? IHHtyp1; rewrite <- ? IHHtyp2; auto.
-Qed.
-
-(** Length of typ_fvars *)
-
-Lemma length_typ_fvars : forall Xs,
-    length (typ_fvars Xs) = length Xs.
-Proof.
-  intros.
-  induction Xs; simpl; auto.
-Qed.
-
-(** Length of type list not affected by substitution *)
-
-Lemma length_typ_subst_list : forall Xs Us Ts,
-    length Ts = length (typ_subst_list Xs Us Ts).
-Proof.
-  intros.
-  unfold typ_subst_list.
-  rewrite List.map_length.
-  reflexivity.
-Qed.
-
-(** Substitution for a fresh name is identity. *)
-
-Lemma typ_var_subst_fresh : forall Xs Us X,
-  disjoint \{X} (from_list Xs) -> 
-  typ_var_subst Xs Us X = typ_fvar X.
-Proof.
-  introv Hf.
-  generalize dependent Us.
-  induction Xs; intro; induction Us; simpl; auto.
-  rewrite disjoint_from_list_cons_r in Hf.
-  destruct Hf as [Hf1 Hf2].
-  rewrite disjoint_singleton_singleton in Hf1.
-  case_var.
-  auto.
-Qed.
-
-Lemma typ_subst_fresh : forall Xs Us T, 
-  disjoint (typ_fv T) (from_list Xs) -> 
-  typ_subst Xs Us T = T.
-Proof.
-  introv Hf.
-  induction T; simpl; simpl in Hf;
-    rewrite? IHT; rewrite? IHT1; rewrite? IHT2;
-    auto using typ_var_subst_fresh.
-Qed.
-
-Lemma typ_subst_fresh_list : forall Xs Us Ts,
-  disjoint (typ_fv_list Ts) (from_list Xs) -> 
-  typ_subst_list Xs Us Ts = Ts.
-Proof.
-  induction Ts; simpl; intros Fr.
-  - easy.
-  - f_equal*.
-    auto using typ_subst_fresh.
-Qed.
-
-Lemma typ_subst_fresh_typ_fvars : forall Xs Us Ys,
-  disjoint (from_list Ys) (from_list Xs) ->
-  typ_subst_list Xs Us (typ_fvars Ys) = typ_fvars Ys.
-Proof.
-  introv Hf.
-  apply typ_subst_fresh_list.
-  rewrite typ_fv_list_fvars.
-  assumption.
-Qed.
-
-(** Substitution distributes on the open operation. *)
-
-Lemma typ_subst_nth : forall Xs Us Ts n T,
-    typ_subst Xs Us (nth n Ts T) =
-    nth n (typ_subst_list Xs Us Ts) (typ_subst Xs Us T).
-Proof.
-  intros.
-  generalize dependent n.
-  induction Ts; intro; simpl; induction n; auto.
-Qed.   
-
-Lemma type_var_subst : forall Xs Us X,
-    types Us ->
-    type (typ_var_subst Xs Us X).
-Proof.
-  introv Ht.
-  generalize dependent Xs.
-  induction Ht; intro; induction Xs; try apply type_fvar.
-  simpl.
-  case_var; auto.
-Qed.
-
-Lemma typ_var_subst_open : forall Xs Us Ts X,
-  types Us ->
-  typ_var_subst Xs Us X =
-  typ_open (typ_var_subst Xs Us X) Ts.
-Proof.
-  introv Ht.
-  auto using typ_open_type, type_var_subst.
-Qed.
-
-Lemma typ_subst_open : forall Xs Us T Ts,
-  types Us -> 
-  typ_subst Xs Us (typ_open T Ts) = 
-   typ_open (typ_subst Xs Us T) (typ_subst_list Xs Us Ts).
-Proof.
-  introv Ht. 
-  induction T; simpl; f_equal; auto.
-  - simpl; rewrite typ_subst_nth; auto.
-  - apply typ_var_subst_open; auto.
-Qed.
-
-(** Substitution and open_vars for distinct names commute. *)
-
-Lemma typ_subst_open_vars : forall Xs Ys Us T,
-    disjoint (from_list Ys) (from_list Xs) ->
-    types Us ->
-    typ_open_vars (typ_subst Xs Us T) Ys
-    = typ_subst Xs Us (typ_open_vars T Ys).
-Proof.
-  introv Hf Ht.
-  unfold typ_open_vars. 
-  rewrite typ_subst_open; auto. 
-  rewrite typ_subst_fresh_typ_fvars; auto.
-Qed.
-
-Lemma typ_subst_notin_cons : forall X Xs U Us T,
-    X \notin typ_fv T ->
-    typ_subst (X :: Xs) (U :: Us) T = typ_subst Xs Us T.
-Proof.
-  introv Hn.
-  induction T; simpl; simpl in Hn;
-    rewrite? IHT; rewrite? IHT1; rewrite? IHT2;
-      auto.
-  case_var; auto.
-Qed.
-
-Lemma typ_subst_list_notin_cons : forall X Xs U Us Ts,
-    X \notin typ_fv_list Ts ->
-    typ_subst_list (X :: Xs) (U :: Us) Ts = typ_subst_list Xs Us Ts.
-Proof.
-  introv Hn.
-  induction Ts; auto.
-  simpl in *.
-  rewrite typ_subst_notin_cons; f_equal; auto.
-Qed.
-
-Lemma typ_subst_fvars : forall Xs Us,
-    fresh \{} (length Us) Xs ->
-    typ_subst_list Xs Us (typ_fvars Xs) = Us.
-Proof.
-  introv Hf.
-  fresh_length Hf as Hl.
-  generalize dependent Us.
-  induction Xs; introv Hf Hl; induction Us; try discriminate; auto.
-  - simpl; case_var; f_equal.
-    destruct Hf.
-    rewrite typ_subst_list_notin_cons; auto.
-    rewrite typ_fv_list_fvars.
-    eauto using fresh_single_notin.
-Qed.
-
-(** Opening up a type T with a type U is the same as opening up T
-    with a fresh name X and then substituting U for X. *)
-Lemma typ_subst_intro : forall Xs Us T, 
-  fresh (typ_fv T) (length Us) Xs -> types Us ->
-  typ_open T Us = typ_subst Xs Us (typ_open_vars T Xs).
-Proof.
-  introv Hf Ht.
-  unfold typ_open_vars.
-  fresh_length Hf as Hl.
-  rewrite typ_subst_open; auto.
-  rewrite typ_subst_fresh; auto.
-  rewrite typ_subst_fvars; auto.
-Qed.
-
-Lemma typ_subst_nil : forall Xs Us T,
-    Xs = nil \/ Us = nil ->
-    typ_subst Xs Us T = T.
-Proof.
-  introv Heq.
-  induction T; simpl;
-    rewrite? IHT; rewrite? IHT1; rewrite? IHT2; auto.
-  destruct Heq; subst; auto.
-  destruct Xs; auto.
-Qed.
-
-Lemma typ_subst_list_nil : forall Xs Us Ts,
-    Xs = nil \/ Us = nil ->
-    typ_subst_list Xs Us Ts = Ts.
-Proof.
-  introv Heq.
-  induction Ts; simpl; rewrite? typ_subst_nil; rewrite? IHTs; auto.
-Qed.
-
-(* *************************************************************** *)
-(** ** Ranges *)
-
-Lemma rng_open_fv_inv : forall Us R,
-    subset (rng_fv R) (rng_fv (rng_open R Us)).
-Proof.
-  intros.
-  induction R; simpl; auto using subset_empty_l. 
-  apply subset_union_2; apply typ_open_fv_inv.
-Qed.
-
-Lemma rng_open_fv : forall Us R,
-    subset (rng_fv (rng_open R Us)) (rng_fv R \u typ_fv_list Us).
-Proof.
-  intros.
-  induction R; simpl; auto using subset_empty_l.
-  rewrite union_distribute.
-  apply subset_union_2; apply typ_open_fv.
-Qed.  
-
-Lemma rng_open_vars_fv_inv : forall Ys R,
-     subset (rng_fv R) (rng_fv (rng_open_vars R Ys)).
-Proof.
-  intros.
-  apply rng_open_fv_inv.
-Qed.
-
-Lemma rng_open_vars_fv : forall Ys R,
-    subset (rng_fv (rng_open_vars R Ys)) (rng_fv R \u from_list Ys).
-Proof.
-  intros.
-  rewrite <- typ_fv_list_fvars.
-  apply rng_open_fv.
-Qed.
-
-Lemma rng_open_list_fv_inv : forall Us Rs,
-    subset (rng_fv_list Rs) (rng_fv_list (rng_open_list Rs Us)).
-Proof.
-  intros.
-  induction Rs; simpl; auto using subset_empty_l.
-  apply subset_union_2; auto.
-  apply rng_open_fv_inv.
-Qed.
-
-Lemma rng_open_list_fv : forall Us Rs,
-    subset (rng_fv_list (rng_open_list Rs Us))
-      (rng_fv_list Rs \u typ_fv_list Us).
-Proof.
-  intros.
-  induction Rs; simpl; auto using subset_empty_l.
-  rewrite union_distribute.
-  apply subset_union_2; auto.
-  apply rng_open_fv.
-Qed.
-
-Lemma rng_open_vars_list_fv_inv : forall Ys Rs,
-    subset (rng_fv_list Rs)
-      (rng_fv_list (rng_open_vars_list Rs Ys)).
-Proof.
-  intros.
-  apply rng_open_list_fv_inv.
-Qed.
-
-Lemma rng_open_vars_list_fv : forall Ys Rs,
-    subset (rng_fv_list (rng_open_vars_list Rs Ys))
-      (rng_fv_list Rs \u from_list Ys).
-Proof.
-  intros.
-  rewrite <- typ_fv_list_fvars.  
-  apply rng_open_list_fv.
-Qed.
-
-Lemma rng_open_list_length : forall Rs Us,
-    length (rng_open_list Rs Us) = length Rs.
-Proof.
-  intros.
-  induction Rs; simpl; auto.
-Qed.
-
-Lemma rng_open_vars_list_length : forall Rs Xs,
-    length (rng_open_vars_list Rs Xs) = length Rs.
-Proof.
-  unfold rng_open_vars_list.
-  auto using rng_open_list_length.
-Qed.
-
-(** Open with nil is the identity. *)
-
-Lemma rng_open_nil : forall R,
-    rng_open R nil = R.
-Proof.
-  intros.
-  induction R; simpl; rewrite? typ_open_nil; auto.
-Qed.
-
-Lemma rng_open_vars_nil : forall R,
-    rng_open_vars R nil = R.
-Proof.
-  intros.
-  unfold rng_open_vars.
-  apply rng_open_nil.
-Qed.
-
-Lemma rng_open_list_nil : forall Rs,
-    rng_open_list Rs nil = Rs.
-Proof.
-  intros.
-  induction Rs; simpl; auto.
-  rewrite rng_open_nil.
-  rewrite IHRs.
-  auto.
-Qed.
-
-Lemma rng_open_vars_list_nil : forall Rs,
-    rng_open_vars_list Rs nil = Rs.
-Proof.
-  intros.
-  unfold rng_open_vars_list.
-  apply rng_open_list_nil.
-Qed.
-
-(** Open on a range is the identity. *)
-
-Lemma rng_open_range : forall R Us,
-  range R -> R = rng_open R Us.
-Proof.
-  introv Hr.
-  induction Hr; simpl; auto.
-  rewrite <- typ_open_type; auto.
-  rewrite <- typ_open_type; auto.
-Qed.
-
-Lemma rng_open_ranges : forall Rs Us,
-    ranges Rs -> Rs = rng_open_list Rs Us.
-Proof.
-  introv Hr.
-  induction Hr; simpl; f_equal; auto using rng_open_range.
-Qed.
-
-(** Length of range list not affected by opening or substitution *)
-
-Lemma length_rng_open_list : forall Rs Us,
-    length Rs = length (rng_open_list Rs Us).
-Proof.
-  intros.
-  unfold rng_open_list.
-  rewrite List.map_length.
-  reflexivity.
-Qed.
-
-Lemma length_rng_open_vars_list : forall Rs Xs,
-    length Rs = length (rng_open_vars_list Rs Xs).
-Proof.
-  intros.
-  unfold rng_open_vars_list.
-  unfold rng_open_list.
-  rewrite List.map_length.
-  reflexivity.
-Qed.
-
-Lemma length_rng_subst_list : forall Xs Us Rs,
-    length Rs = length (rng_subst_list Xs Us Rs).
-Proof.
-  intros.
-  unfold rng_subst_list.
-  rewrite List.map_length.
-  reflexivity.
-Qed.
-
-(** Kind of a range not affected by opening or
-    substitution *)
-
-Lemma rng_knd_open : forall R Us,
-  rng_knd R = rng_knd (rng_open R Us).
-Proof.
-  intros.
-  induction R; simpl; auto.
-Qed.
-
-Lemma rng_knd_open_vars : forall R Xs,
-  rng_knd R = rng_knd (rng_open_vars R Xs).
-Proof.
-  intros.
-  induction R; simpl; auto.
-Qed.
-
-Lemma rng_knd_subst : forall Xs Us R,
-  rng_knd R = rng_knd (rng_subst Xs Us R).
-Proof.
-  intros.
-  induction R; simpl; auto.
-Qed.
-
-(** Kinds of a range list not affected by opening or
-    substitution *)
-
-Lemma rngs_knds_open_list : forall Rs Us,
-  rngs_knds Rs = rngs_knds (rng_open_list Rs Us).
-Proof.
-  intros.
-  induction Rs; simpl; auto.
-  f_equal; auto using rng_knd_open.
-Qed.
-
-Lemma rngs_knds_open_vars_list : forall Rs Xs,
-  rngs_knds Rs = rngs_knds (rng_open_vars_list Rs Xs).
-Proof.
-  intros.
-  induction Rs; simpl; auto.
-  f_equal; auto using rng_knd_open.
-Qed.
-
-Lemma rngs_knds_subst_list : forall Xs Us Rs,
-  rngs_knds Rs = rngs_knds (rng_subst_list Xs Us Rs).
-Proof.
-  intros.
-  induction Rs; simpl; auto.
-  f_equal; auto using rng_knd_subst.
-Qed.
-
-(** Substitution for a fresh name is identity. *)
-
-Lemma rng_subst_fresh : forall Xs Us R, 
-  disjoint (rng_fv R) (from_list Xs) -> 
-  rng_subst Xs Us R = R.
-Proof.
-  introv Hf.
-  induction R; simpl in *; auto.
-  rewrite typ_subst_fresh; auto.
-  rewrite typ_subst_fresh; auto.
-Qed.
-
-Lemma rng_subst_list_fresh : forall Xs Us Rs,
-  disjoint (rng_fv_list Rs) (from_list Xs) -> 
-  rng_subst_list Xs Us Rs = Rs.
-Proof.
-  introv Hf.
-  induction Rs; simpl in *; f_equal; auto using rng_subst_fresh.
-Qed.
-
-(** Substitution distributes on the open operation. *)
-
-Lemma rng_subst_open : forall Xs Us R Ts,
-    types Us -> 
-    rng_subst Xs Us (rng_open R Ts)
-    = rng_open (rng_subst Xs Us R) (typ_subst_list Xs Us Ts).
-Proof.
-  introv Ht.
-  induction R; simpl in *; auto.
-  rewrite typ_subst_open; auto.
-  rewrite typ_subst_open; auto.
-Qed.
-
-Lemma rng_subst_list_open : forall Xs Us Rs Ts,
-    types Us -> 
-    rng_subst_list Xs Us (rng_open_list Rs Ts)
-    = rng_open_list
-        (rng_subst_list Xs Us Rs) (typ_subst_list Xs Us Ts).
-Proof.
-  introv Ht.
-  induction Rs; simpl in *; f_equal; auto using rng_subst_open.
-Qed.
-
-(** Substitution and open_var for distinct names commute. *)
-
-Lemma rng_subst_open_vars : forall Xs Ys Us R, 
-    disjoint (from_list Ys) (from_list Xs) ->
-    types Us ->
-    rng_subst Xs Us (rng_open_vars R Ys)
-    = rng_open_vars (rng_subst Xs Us R) Ys.
-Proof.
-  introv Hf Ht.
-  induction R; simpl; auto.
-  rewrite typ_subst_open; auto.
-  rewrite typ_subst_open; auto.
-  rewrite typ_subst_fresh_list; auto.
-  rewrite typ_fv_list_fvars; auto.
-Qed.
-
-Lemma rng_subst_list_open_vars : forall Xs Ys Us Rs, 
-    disjoint (from_list Ys) (from_list Xs) ->
-    types Us ->
-    rng_subst_list Xs Us (rng_open_vars_list Rs Ys)
-    = rng_open_vars_list (rng_subst_list Xs Us Rs) Ys.
-Proof.
-  introv Hf Ht.
-  induction Rs; simpl in *; f_equal; auto. 
-  rewrite rng_subst_open; auto.
-  rewrite typ_subst_fresh_list; auto.
-  rewrite typ_fv_list_fvars; auto.
-Qed.
-
-(** Opening up a range R with a type U is the same as opening up R
-    with a fresh name X and then substituting U for X. *)
-Lemma rng_subst_intro : forall Xs Us R,
-  fresh (rng_fv R) (length Us) Xs -> types Us ->
-  rng_open R Us = rng_subst Xs Us (rng_open_vars R Xs).
-Proof.
-  introv Hf Ht.
-  induction R; simpl in *; auto.
-  rewrite typ_subst_intro with (Xs := Xs); auto.
-  rewrite typ_subst_intro with (Xs := Xs); auto.
-Qed.
-
-Lemma rng_subst_list_intro : forall Xs Us Rs,
-  fresh (rng_fv_list Rs) (length Us) Xs -> types Us ->
-  rng_open_list Rs Us
-  = rng_subst_list Xs Us (rng_open_vars_list Rs Xs).
-Proof.
-  introv Hf Ht.
-  induction Rs; simpl in *; f_equal; auto.
-  rewrite rng_subst_intro with (Xs := Xs); auto.
-Qed.
-
-Lemma rng_subst_nil : forall Xs Us R,
-    Xs = nil \/ Us = nil ->
-    rng_subst Xs Us R = R.
-Proof.
-  introv Heq.
-  induction R; simpl; rewrite? typ_subst_nil; auto.
-Qed.
-
-Lemma rng_subst_list_nil : forall Xs Us Rs,
-    Xs = nil \/ Us = nil ->
-    rng_subst_list Xs Us Rs = Rs.
-Proof.
-  introv Heq.
-  induction Rs; simpl; rewrite? rng_subst_nil; rewrite? IHRs; auto.
-Qed.
-
-(* *************************************************************** *)
-(** ** Schemes *)
-
-Lemma sch_arity_length : forall M,
-    sch_arity M = length (sch_ranges M).
-Proof.
-  intros.
-  destruct M as [Rs T].
-  simpl.
-  reflexivity.
-Qed.
-
-Lemma sch_subst_arity : forall X U M,
-    sch_arity (sch_subst X U M) = sch_arity M.
-Proof.
-  intros.
-  destruct M.
-  simpl.
-  apply map_length.
-Qed.
-
-Hint Rewrite sch_subst_arity : rew_sch_arity.
-
-Lemma sch_fv_ranges : forall M,
-    subset (rng_fv_list (sch_ranges M)) (sch_fv M).
-Proof.
-  intros.
-  destruct M; simpl.
-  apply subset_union_weak_l.
-Qed.
-
-Lemma sch_fv_body : forall M,
-    subset (typ_fv (sch_body M)) (sch_fv M).
-Proof.
-  intros.
-  destruct M; simpl.
-  apply subset_union_weak_r.
-Qed.
-
-Lemma length_sch_subst_list : forall Xs Us Ms,
-    length Ms = length (sch_subst_list Xs Us Ms).
-Proof.
-  intros.
-  unfold sch_subst_list.
-  rewrite List.map_length.
-  reflexivity.
-Qed.
-
-(** Substitution for a fresh name is identity. *)
-
-Lemma sch_subst_fresh : forall Xs Us M,
-  disjoint (sch_fv M) (from_list Xs) -> 
-  sch_subst Xs Us M = M.
-Proof.
-  introv Hf.
-  destruct M; unfold sch_subst; simpl in *.
-  f_equal;
-    eauto using rng_subst_list_fresh, typ_subst_fresh.
-Qed.
-
-Lemma sch_subst_list_fresh : forall Xs Us Ms,
-  disjoint (sch_fv_list Ms) (from_list Xs) -> 
-  sch_subst_list Xs Us Ms = Ms.
-Proof.
-  introv Hf.
-  induction Ms; simpl in *; f_equal; auto using sch_subst_fresh.
-Qed.
-
-(** Substitution distributes on the sch_body. *)
-
-Lemma sch_subst_body : forall Xs Us M,
-    types Us ->
-    typ_subst Xs Us (sch_body M) = sch_body (sch_subst Xs Us M).
-Proof.
-  introv Ht.
-  destruct M; simpl; auto.
-Qed.
-
-(** Substitution distributes on empty schemes. *)
-
-Lemma sch_subst_empty : forall X U T,
-    sch_subst X U (sch_empty T) =
-    sch_empty (typ_subst X U T).
-Proof.
-  unfold sch_subst.
-  reflexivity.
-Qed.
-
-(** Substitution distributes on the instance operation. *)
-
-Lemma sch_subst_instance : forall Xs Us M Ts,
-    types Us -> 
-    typ_subst Xs Us (instance M Ts) = 
-    instance (sch_subst Xs Us M) (typ_subst_list Xs Us Ts).
-Proof.
-  introv Ht.
-  unfold instance.
-  rewrite <- sch_subst_body; auto using typ_subst_open.
-Qed.
-
-Lemma sch_subst_instance_vars : forall Zs Us M Xs,
-    types Us -> disjoint (from_list Xs) (from_list Zs) ->
-    typ_subst Zs Us (instance_vars M Xs) = 
-    instance_vars (sch_subst Zs Us M) Xs.
-Proof.
-  introv Ht Hf.
-  unfold instance_vars.
-  rewrite <- typ_subst_fresh_typ_fvars
-    with (Xs := Zs) (Us := Us) at 2; auto.
-  apply sch_subst_instance.
-  assumption.
-Qed.
-
-(** Instanciating with a type U is the same as instanciating
-    with a fresh name X and then substituting U for X. *)
-
-Lemma typ_subst_intro_instance : forall M Xs Us,
-  fresh (sch_fv M \u typ_fv_list Us) (sch_arity M) Xs ->
-  length Us = sch_arity M ->
-  types Us ->
-  instance M Us = typ_subst Xs Us (instance_vars M Xs).
-Proof.
-  introv Hf Hl Ht.
-  destruct M;
-    simpl sch_fv in Hf; simpl sch_arity in Hf;
-      simpl sch_arity in Hl; unfold instance_vars;
-        unfold instance; simpl.
-  apply typ_subst_intro; auto.
-Qed.
-
-Lemma instance_empty_nil : forall T,
-  instance (sch_empty T) nil = T.
-Proof.
-  intros.
-  unfold instance.
-  rewrite typ_open_nil.
-  auto.
-Qed.
-
-Lemma sch_subst_nil : forall Xs Us M,
-    Xs = nil \/ Us = nil ->
-    sch_subst Xs Us M = M.
-Proof.
-  introv Heq.
-  destruct M; unfold sch_subst; simpl.
-  rewrite rng_subst_list_nil; auto.
-  rewrite typ_subst_nil; auto.
-Qed.
-
-Lemma sch_subst_list_nil : forall Xs Us Ms,
-    Xs = nil \/ Us = nil ->
-    sch_subst_list Xs Us Ms = Ms.
-Proof.
-  introv Heq.
-  induction Ms; simpl; rewrite? sch_subst_nil; rewrite? IHMs; auto.
-Qed.
-
-(* *************************************************************** *)
-(** ** Type Environments *)
-
-Lemma tenv_fv_empty :
-  tenv_fv empty = \{}.
-Proof.
-  unfold tenv_fv, fv_in_values; rew_env_defs; simpl; reflexivity. 
-Qed.
-
-Lemma tenv_fv_single : forall x R,
-  tenv_fv (x ~ R) = rng_fv R.
-Proof.
-  intros.
-  unfold tenv_fv, fv_in_values; rew_env_defs; simpl. 
-  apply union_empty_r.
-Qed.
-
-Lemma tenv_fv_concat : forall E1 E2,
-  tenv_fv (E1 & E2) = tenv_fv E1 \u tenv_fv E2.
-Proof.
-  intros.
-  unfold tenv_fv, fv_in_values; rew_env_defs.
-  rewrite LibList.map_app.
-  rewrite LibList.fold_right_app.
-  induction E2.
-  - simpl. symmetry. apply union_empty_r.
-  - rewrite LibList.map_cons.
-    simpl.
-    rewrite union_comm_assoc.
-    rewrite IHE2.
-    reflexivity.
-Qed. 
-
-Lemma tenv_fv_singles : forall Xs Rs,
+Lemma kinding_typ_subst_l : forall E1 E2 Xs Rs Us T K,
+    kinding (E1 & Xs ~* Rs) E2 T K ->
     length Xs = length Rs ->
-    tenv_fv (Xs ~* Rs) = rng_fv_list Rs.
+    type_environment (E1 & Xs ~* Rs) ->
+    type_environment_extension (E1 & Xs ~* Rs) E2 ->
+    kindings (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+      Us (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+    kinding (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+      (typ_subst Xs Us T) K.
 Proof.
-  introv Hl.
-  generalize dependent Rs.
-  induction Xs; introv Hl; induction Rs; simpl;
-    inversion Hl; autorewrite with rew_env_concat;
-      rewrite? tenv_fv_empty; auto.
-  rewrite tenv_fv_concat.
-  rewrite tenv_fv_single; simpl.
-  rewrite union_comm.
-  f_equal; auto.
+  introv Hk Hl He1 He2 Hks.
+  rewrite <- (concat_empty_r E1).
+  rewrite <- (concat_empty_r E1) in Hks.
+  rewrite <- (concat_empty_r (E1 & Xs ~* Rs)) in Hk, He1, He2.
+  eauto using kinding_typ_subst.
 Qed.
 
-Lemma tenv_fv_ranges : forall Xs M,
-    length Xs = sch_arity M ->
-    subset (tenv_fv (Xs ~: M))
-           (rng_fv_list (sch_ranges M) \u from_list Xs).
+Lemma kinding_typ_subst_empty : forall E1 E2 Xs Rs Us T K,
+    kinding (E1 & Xs ~* Rs & E2) empty T K ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    kindings (tenv_subst Xs Us (E1 & E2)) empty
+      Us (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+    kinding (tenv_subst Xs Us (E1 & E2)) empty
+            (typ_subst Xs Us T) K.
 Proof.
-  introv Hl.
-  destruct M; unfold bind_sch_ranges; simpl in *.
-  rewrite tenv_fv_singles;
-    try rewrite <- length_rng_open_vars_list;
-    try rewrite Hl; auto.
-  apply rng_open_vars_list_fv.
-Qed.  
-
-Hint Rewrite tenv_fv_empty tenv_fv_single tenv_fv_concat
-  : rew_tenv_fv.
-
-Hint Rewrite tenv_fv_singles using auto : rew_tenv_fv.
-
-Hint Rewrite tenv_fv_ranges using auto : rew_tenv_fv.
-
-Lemma tenv_subst_nil : forall Xs Us E,
-    Xs = nil \/ Us = nil ->
-    tenv_subst Xs Us E = E.
-Proof.
-  introv Heq.
-  unfold tenv_subst.
-  induction E using env_ind;
-    rewrite? map_empty; rewrite? map_push;
-    rewrite? IHE; rewrite? rng_subst_nil; auto.
+  introv Hk Hl He Hrs.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us) in Hrs.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  apply kinding_typ_subst with Rs; auto.
 Qed.
 
-Lemma tenv_subst_empty : forall Xs Us,
-  tenv_subst Xs Us empty = empty.
-Proof.
-  intros.
-  unfold tenv_subst.
-  autorewrite with rew_env_map.
-  reflexivity.
-Qed.  
+(* *************************************************************** *)
+(** Kindings implied by rangings *)
 
-Lemma tenv_subst_single : forall Xs Us x R,
-  tenv_subst Xs Us (x ~ R) = (x ~ rng_subst Xs Us R).
+Lemma ranging_kinding : forall v E1 E2 T R K,
+  ranging v E1 E2 T R ->
+  K = rng_kind R ->
+  kinding E1 E2 T K.
 Proof.
-  intros.
-  unfold tenv_subst.
-  autorewrite with rew_env_map.
-  reflexivity.
+  introv Hr Heq.
+  induction Hr; subst; simpl; eauto.
 Qed.
 
-Lemma tenv_subst_concat : forall Xs Us E1 E2,
-  tenv_subst Xs Us (E1 & E2)
-  = tenv_subst Xs Us E1 & tenv_subst Xs Us E2.
+Lemma rangings_kindings : forall v E1 E2 Ts Rs Ks,
+  rangings v E1 E2 Ts Rs ->
+  Ks = rngs_kinds Rs ->
+  kindings E1 E2 Ts Ks.
 Proof.
-  intros.
-  unfold tenv_subst.
-  autorewrite with rew_env_map.
-  reflexivity. 
+  introv Hrs Heq.
+  generalize dependent Ks.
+  induction Hrs; introv Heq; subst; simpl;
+    eauto using ranging_kinding.
 Qed.
 
-Lemma tenv_subst_push : forall Zs Us E X R,
-  tenv_subst Zs Us (E & X ~ R)
-  = tenv_subst Zs Us E & X ~ rng_subst Zs Us R.
+(* *************************************************************** *)
+(** Kinding of instances *)
+
+Lemma kinding_instance : forall v E M Us,
+  valid_scheme v E M ->
+  valid_instance v E Us M ->
+  type_environment E ->
+  kinding E empty (instance M Us) knd_type.
 Proof.
-  intros.
-  unfold tenv_subst.
-  autorewrite with rew_env_map.
-  simpl.
-  reflexivity.
+  introv Hs Hi He.
+  destruct Hs as [? ? ? ? Hs].
+  destruct Hs as [? ? ? ? Hs].
+  pick_freshes (sch_arity M) Xs.
+  assert (fresh L (sch_arity M) Xs) as Hf by auto.
+  fresh_length Hf as Hl.
+  specialize (Hs Xs Hf).
+  inversion Hs; subst.
+  destruct Hi as [? ? Us]; subst.
+  assert (length Us = sch_arity M)
+    by (erewrite rangings_length; eauto;
+        rewrite rng_open_list_length;
+        rewrite sch_arity_length;
+        reflexivity).
+  rewrite typ_subst_intro_instance with (Xs := Xs);
+    auto with wellformed.
+  replace empty with (tenv_subst Xs Us empty)
+    by (rewrite tenv_subst_empty; reflexivity).
+  replace E with (tenv_subst Xs Us E)
+    by auto using tenv_subst_fresh.
+  apply kinding_typ_subst_l
+    with (Rs := rng_open_vars_list (sch_ranges M) Xs); auto.
+  - rewrite rng_open_vars_list_length.
+    rewrite <- sch_arity_length.
+    auto.             
+  - apply type_environment_extend; try fold (Xs ~: M);
+      auto with wellformed.
+  - apply rangings_kindings
+      with (v := v) (Rs := rng_open_list (sch_ranges M) Us).
+    + replace (tenv_subst Xs Us empty) with (empty : tenv)
+        by (rewrite tenv_subst_empty; reflexivity).
+      replace (tenv_subst Xs Us E) with E
+        by (rewrite tenv_subst_fresh; auto).
+      auto.
+    + rewrite rng_subst_list_intro with (Xs := Xs);
+        auto with wellformed.
+      apply fresh_subset with (sch_fv M);
+        auto using sch_fv_ranges.
 Qed.
 
-Lemma tenv_subst_singles : forall Zs Us Xs Rs,
-  length Xs = length Rs ->
-  tenv_subst Zs Us (Xs ~* Rs) =
-  Xs ~* (rng_subst_list Zs Us Rs).
+(* *************************************************************** *)
+(** Type equality preserved by type substitution *)
+
+(* Lemma for kinding judgements in contractive positions *)
+
+Lemma kinding_typ_subst_assoc : forall E1 E2 E3 Xs Rs Us T K,
+    kinding (E1 & Xs ~* Rs & E2 & E3) empty T K ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+    kindings (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      Us (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+    kinding (tenv_subst Xs Us (E1 & E2) & tenv_subst Xs Us E3)
+      empty (typ_subst Xs Us T) K.
 Proof.
-  introv Hl.
-  generalize dependent Rs.
-  induction Xs; intros; destruct Rs; simpl;
-    inversion Hl; autorewrite with rew_env_concat;
-    auto using tenv_subst_empty.
+  introv Hk Hl He1 He2 Hks.
+  rewrite <- tenv_subst_concat.
+  rewrite <- concat_assoc.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  eapply kinding_typ_subst; rewrite? concat_assoc;
+    eauto using type_environment_extend.
   rewrite tenv_subst_concat.
-  unfold tenv_subst at 2.
-  rewrite map_single.
-  f_equal; auto.
+  rewrite tenv_subst_empty.
+  apply kindings_extend;
+    autorewrite with rew_env_concat;
+    eauto using tenv_subst_type_environment,
+      tenv_subst_type_environment_extension with wellformed.
+Qed.  
+
+Lemma type_equal_core_typ_subst :
+  forall v Xs Us T1 T2 K,
+  type_equal_core v T1 T2 K ->
+  type_equal_core v (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte.
+  destruct Hte; simpl; auto.
 Qed.
 
-Lemma tenv_subst_ranges : forall Zs Us Xs M,
-  length Xs = sch_arity M ->
-  disjoint (from_list Xs) (from_list Zs) ->
-  types Us ->
-  tenv_subst Zs Us (Xs ~: M) = Xs ~: (sch_subst Zs Us M).
+Lemma ranging_typ_subst_var :
+  forall v E1 E2 E3 E4 Xs Rs Us Ys Ts X R,
+    binds X R (E1 & Xs ~* Rs & E2) ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    rangings v E3 E4 Us (rng_subst_list Ys Ts Rs) ->
+    ranging v E3 E4 (typ_var_subst Xs Us X) (rng_subst Ys Ts R)
+    \/ (binds X R (E1 & E2)
+        /\ typ_var_subst Xs Us X = typ_fvar X).
 Proof.
-  introv Hl Hn Ht.
-  destruct M as [Rs T].
-  unfold bind_sch_ranges.
-  simpl in *.
-  rewrite tenv_subst_singles;
-    rewrite? Hl; auto using length_rng_open_vars_list.
-  f_equal.
-  rewrite rng_subst_list_open_vars; auto.
-Qed.
-
-Hint Rewrite tenv_subst_empty tenv_subst_single tenv_subst_concat
-  : rew_tenv_subst.
-
-Hint Rewrite tenv_subst_singles using auto : rew_tenv_subst.
-
-Hint Rewrite tenv_subst_ranges using auto : rew_tenv_subst.
-
-Hint Rewrite dom_empty dom_single dom_concat : rew_tenv_dom.
-
-Hint Rewrite from_list_nil from_list_cons : rew_tenv_dom.
-
-Lemma tenv_dom_singles : forall Xs (Rs : list rng),
-  length Xs = length Rs ->
-  dom (Xs ~* Rs) = from_list Xs.
-Proof.
-  introv Hl.
+  introv Hb Hl1 He Hrs.
+  assert (length Us = length Rs) as Hl2
+    by (erewrite length_rng_subst_list; eauto using rangings_length).
   generalize dependent Rs.
-  induction Xs; introv Hl; destruct Rs; inversion Hl;
-    autorewrite with rew_env_concat;
+  generalize dependent Us.
+  induction Xs; introv Hb Hl1 He Hrs Hl2; destruct Rs; destruct Us;
+    try discriminate; simpl in *;
+    autorewrite with rew_env_concat in *; auto.
+  inversion Hrs; subst.
+  case_var.
+  - apply binds_middle_eq_inv in Hb; subst;
+      auto using ok_from_type_environment.
+  - eauto using binds_subst, type_environment_remove.     
+Qed.
+
+Lemma type_equal_typ_subst_rec : forall v E1 E2 E3 Xs Rs Us T1 T2 K,
+  (type_environment (E1 & Xs ~* Rs & E2 & E3) ->
+   type_environment_extension
+     (E1 & Xs ~* Rs & E2 & E3) empty ->
+   forall E4 : LibEnv.env rng,
+     E1 & Xs ~* Rs & E2 & E3 = E1 & Xs ~* Rs & E4 ->
+     rangings v (tenv_subst Xs Us (E1 & E4))
+       (tenv_subst Xs Us empty) Us
+       (rng_subst_list Xs Us Rs) ->
+     type_equal v (tenv_subst Xs Us (E1 & E4))
+       (tenv_subst Xs Us empty)
+       (typ_subst Xs Us T1)
+       (typ_subst Xs Us T2) K) ->
+  type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  rangings v (tenv_subst Xs Us (E1 & E2))
+    (tenv_subst Xs Us E3) Us
+    (rng_subst_list Xs Us Rs) ->
+  type_equal v
+    (tenv_subst Xs Us (E1 & E2) & tenv_subst Xs Us E3) empty
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv IH He1 He2 Hrs.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  rewrite <- tenv_subst_concat.
+  rewrite <- concat_assoc.
+  apply IH; rewrite? concat_assoc;
+    auto using type_environment_extend.
+  rewrite tenv_subst_concat.
+  apply rangings_extend;
+    eauto using tenv_subst_type_environment_extension
+    with wellformed.
+  rewrite tenv_subst_empty.
+  rewrite concat_empty_r.
+  assumption.
+Qed.
+
+Lemma type_equal_typ_subst : forall v E1 E2 E3 Xs Rs Us T1 T2 K,
+  type_equal v (E1 & Xs ~* Rs & E2) E3 T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+  rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+    Us (rng_subst_list Xs Us Rs) ->
+  type_equal v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte Hl He1 He2 Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  generalize dependent E2.
+  induction Hte; introv Heq Hrs; subst; simpl; auto.
+  - destruct ranging_typ_subst_var
+      with (E1 := E1) (E2 := E3) (E3 := tenv_subst Xs Us (E1 & E3))
+           (E4 := tenv_subst Xs Us E2)
+           (Xs := Xs) (Rs := Rs) (Us := Us) (Ys := Xs) (Ts := Us)
+           (X := X) (R := Rng T1 T2 K) (v := v)
+      as [Hr|[Hb Heq]]; auto.
+    + inversion Hr; auto.
+    + rewrite Heq in *.
+      apply tenv_subst_binds with (Zs := Xs) (Us := Us) in Hb.
+      unfold rng_subst in Hb; simpl in Hb.
+      eauto.
+  - destruct ranging_typ_subst_var
+      with (E1 := E1) (E2 := E3) (E3 := tenv_subst Xs Us (E1 & E3))
+           (E4 := tenv_subst Xs Us E2)
+           (Xs := Xs) (Rs := Rs) (Us := Us) (Ys := Xs) (Ts := Us)
+           (X := X) (R := Rng T1 T2 K) (v := v)
+      as [Hr|[Hb Heq]]; auto.
+    + inversion Hr; auto.
+    + rewrite Heq in *.
+      apply tenv_subst_binds with (Zs := Xs) (Us := Us) in Hb.
+      unfold rng_subst in Hb; simpl in Hb.
+      eauto.
+  - eauto using type_equal_typ_subst_rec.
+  - eauto using type_equal_typ_subst_rec.
+  - eauto using type_equal_typ_subst_rec.
+  - eauto using type_equal_typ_subst_rec.
+  - eauto using type_equal_typ_subst_rec.
+  - constructor; eauto using type_equal_core_typ_subst,
+      kinding_typ_subst, rangings_kindings.
+  - eauto using kinding_typ_subst, rangings_kindings.
+  - eauto.
+Qed.
+
+Lemma type_equal_typ_subst_l : forall v E1 E2 Xs Rs Us T1 T2 K,
+  type_equal v (E1 & Xs ~* Rs) E2 T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs) ->
+  type_environment_extension (E1 & Xs ~* Rs) E2 ->
+  rangings v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+    Us (rng_subst_list Xs Us Rs) ->
+  type_equal v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte Hl He1 He2 Hrs.
+  rewrite <- (concat_empty_r E1).
+  rewrite <- (concat_empty_r E1) in Hrs.
+  rewrite <- (concat_empty_r (E1 & Xs ~* Rs)) in Hte, He1, He2.
+  eauto using type_equal_typ_subst.
+Qed.
+
+Lemma type_equal_typ_subst_empty : forall v E1 E2 Xs Rs Us T1 T2 K,
+  type_equal v (E1 & Xs ~* Rs & E2) empty T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  rangings v (tenv_subst Xs Us (E1 & E2)) empty
+    Us (rng_subst_list Xs Us Rs) ->
+  type_equal v (tenv_subst Xs Us (E1 & E2)) empty
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hte Hl He Hrs.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us) in Hrs.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  apply type_equal_typ_subst with Rs; auto.
+Qed.
+
+Lemma subtype_typ_subst : forall v E1 E2 E3 Xs Rs Us T1 T2 K,
+  subtype v (E1 & Xs ~* Rs & E2) E3 T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+  rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+    Us (rng_subst_list Xs Us Rs) ->
+  subtype v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hsb Hl He1 He2 Hrs.
+  unfold subtype.
+  replace (typ_meet (typ_subst Xs Us T1) (typ_subst Xs Us T2))
+    with (typ_subst Xs Us (typ_meet T1 T2)) by auto.
+  eauto using type_equal_typ_subst.
+Qed.
+
+Lemma subtype_typ_subst_l : forall v E1 E2 Xs Rs Us T1 T2 cs,
+  subtype v (E1 & Xs ~* Rs) E2 T1 T2 cs ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs) ->
+  type_environment_extension (E1 & Xs ~* Rs) E2 ->
+  rangings v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+    Us (rng_subst_list Xs Us Rs) ->
+  subtype v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) cs.
+Proof.
+  introv Hsb Hl He1 He2 Hrs.
+  rewrite <- (concat_empty_r E1).
+  rewrite <- (concat_empty_r E1) in Hrs.
+  rewrite <- (concat_empty_r (E1 & Xs ~* Rs)) in Hsb, He1, He2.
+  eauto using subtype_typ_subst.
+Qed.
+
+Lemma subtype_typ_subst_empty : forall v E1 E2 Xs Rs Us T1 T2 K,
+  subtype v (E1 & Xs ~* Rs & E2) empty T1 T2 K ->
+  length Xs = length Rs ->
+  type_environment (E1 & Xs ~* Rs & E2) ->
+  rangings v (tenv_subst Xs Us (E1 & E2)) empty
+    Us (rng_subst_list Xs Us Rs) ->
+  subtype v (tenv_subst Xs Us (E1 & E2)) empty
+    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+Proof.
+  introv Hs Hl He Hrs.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us) in Hrs.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  apply subtype_typ_subst with Rs; auto.
+Qed.
+
+(* *************************************************************** *)
+(** Valid environment extensions preserved by type substitution *)
+
+Lemma valid_range_typ_subst : forall v E1 E2 E3 Xs Rs Us R,
+    valid_range v (E1 & Xs ~* Rs & E2) E3 R ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      Us (rng_subst_list Xs Us Rs) ->
+    valid_range v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      (rng_subst Xs Us R).
+Proof.
+  introv Hr Hl He1 He2 Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  destruct Hr; subst.
+  constructor; eauto using subtype_typ_subst,
+                 kinding_typ_subst, rangings_kindings.
+Qed.
+
+Lemma valid_tenv_rec_typ_subst : forall v E1 E2 E3 E4 Xs Rs Us,
+    valid_tenv_rec v (E1 & Xs ~* Rs & E2) E3 E4 ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+    type_environment_extension (E1 & Xs ~* Rs & E2 & E3) E4 ->
+    rangings v (tenv_subst Xs Us (E1 & E2))
+      (tenv_subst Xs Us (E3 & E4)) Us (rng_subst_list Xs Us Rs) ->
+    valid_tenv_rec v (tenv_subst Xs Us (E1 & E2))
+      (tenv_subst Xs Us E3) (tenv_subst Xs Us E4).
+Proof.
+  introv He Hl He1 He2 He3 Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  induction He; subst; autorewrite with rew_tenv_subst in *; auto.
+  autorewrite with rew_env_concat in *.
+  destruct (type_environment_push_inv He2) as [? [? [? ?]]].
+  apply type_environment_extension_strengthen_l in He3.
+  apply type_environment_extension_rev_push
+    with (X := X) (R := R) in He3; auto.
+  constructor; autorewrite with rew_tenv_dom; auto.
+  rewrite <- concat_assoc.
+  rewrite <- tenv_subst_single.
+  rewrite <- tenv_subst_concat.
+  rewrite <- tenv_subst_concat.
+  rewrite <- tenv_subst_concat.
+  eapply valid_range_typ_subst;
+    rewrite? concat_assoc; eauto using type_environment_extend.
+  autorewrite with rew_tenv_subst.
+  apply rangings_extend; rewrite? concat_assoc; auto.
+  rewrite <- tenv_subst_concat.
+  eauto using tenv_subst_type_environment_extension with wellformed.
+Qed.
+
+Lemma valid_tenv_extension_typ_subst : forall v E1 E2 E3 Xs Rs Us,
+    valid_tenv_extension v (E1 & Xs ~* Rs & E2) E3 ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      Us (rng_subst_list Xs Us Rs) ->
+    valid_tenv_extension v (tenv_subst Xs Us (E1 & E2))
+      (tenv_subst Xs Us E3).
+Proof.
+  introv Hx Hl He Hrs.
+  unfold valid_tenv_extension.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  rewrite <- concat_empty_r with (E := E3) in Hrs.
+  eauto using valid_tenv_rec_typ_subst with wellformed.
+Qed.
+
+(* *************************************************************** *)
+(** Valid schemes preserved by type substitution *)
+
+Lemma valid_tenv_extension_and_type_typ_subst :
+  forall v E1 E2 E3 Xs Rs Us T,
+    valid_tenv_extension_and_type v (E1 & Xs ~* Rs & E2) E3 T ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      Us (rng_subst_list Xs Us Rs) ->
+    valid_tenv_extension_and_type v (tenv_subst Xs Us (E1 & E2))
+      (tenv_subst Xs Us E3) (typ_subst Xs Us T).
+Proof.
+  introv Het Hl He Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  destruct Het; subst.
+  eauto using valid_tenv_extension_typ_subst,
+    kinding_typ_subst_assoc, rangings_kindings with wellformed.
+Qed.
+
+Lemma valid_scheme_aux_typ_subst : forall v E1 E2 Xs Rs Us L M,
+    valid_scheme_aux v L (E1 & Xs ~* Rs & E2) M ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) empty
+      Us (rng_subst_list Xs Us Rs) ->
+    valid_scheme_aux v (dom (E1 & Xs ~* Rs & E2) \u L)
+      (tenv_subst Xs Us (E1 & E2)) (sch_subst Xs Us M).
+Proof.
+  introv Hs Hl He Hrs.
+  assert (scheme_aux L M) by auto with wellformed.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  destruct Hs; subst.
+  apply valid_scheme_aux_c.
+  intros Ys Hf.
+  fresh_length Hf as Hl2.
+  autorewrite with rew_sch_arity in Hl2, Hf.
+  assert (type_environment_extension
+            (E1 & Xs ~* Rs & E2) (Ys ~: M))
+    by (apply type_environment_extension_ranges with L; auto).
+  autorewrite with rew_tenv_dom in Hf.
+  rewrite <- tenv_subst_ranges; auto with wellformed.
+  rewrite <- sch_subst_instance_vars; auto with wellformed.
+  apply valid_tenv_extension_and_type_typ_subst with Rs;
+    eauto using rangings_weakening_rec_empty,
+      tenv_subst_type_environment,
+        tenv_subst_type_environment_extension with wellformed.
+Qed.
+
+Lemma valid_scheme_typ_subst : forall v E1 E2 Xs Rs Us M,
+    valid_scheme v (E1 & Xs ~* Rs & E2) M ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) empty
+      Us (rng_subst_list Xs Us Rs) ->
+    valid_scheme v (tenv_subst Xs Us (E1 & E2)) (sch_subst Xs Us M).
+Proof.
+  introv Hs Hl He Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  destruct Hs as [L ? ? ? Hs]; subst.
+  apply valid_scheme_c with (dom (E1 & Xs ~* Rs & E2) \u L).
+  apply valid_scheme_aux_typ_subst; auto.
+Qed.
+
+Lemma valid_schemes_typ_subst : forall v E1 E2 Xs Rs Us Ms,
+    valid_schemes v (E1 & Xs ~* Rs & E2) Ms ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) empty
+      Us (rng_subst_list Xs Us Rs) ->
+    valid_schemes v (tenv_subst Xs Us (E1 & E2))
+      (sch_subst_list Xs Us Ms).
+Proof.
+  introv Hss Hl He Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  induction Hss; subst; simpl; eauto using valid_scheme_typ_subst.
+Qed.
+
+(* *************************************************************** *)
+(** Valid instances preserved by type substitution *)
+
+Lemma ranging_typ_subst : forall v E1 E2 E3 Xs Rs Us T R,
+    ranging v (E1 & Xs ~* Rs & E2) E3 T R ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      Us (rng_subst_list Xs Us Rs) ->
+    ranging v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      (typ_subst Xs Us T) (rng_subst Xs Us R).
+Proof.
+  introv Hr Hl He1 He2 Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  destruct Hr; subst.
+  constructor;
+    eauto using subtype_typ_subst, kinding_typ_subst,
+      rangings_kindings.
+Qed.
+
+Lemma ranging_typ_subst_l : forall v E1 E2 Xs Rs Us T R,
+    ranging v (E1 & Xs ~* Rs) E2 T R ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs) ->
+    type_environment_extension (E1 & Xs ~* Rs) E2 ->
+    rangings v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+      Us (rng_subst_list Xs Us Rs) ->
+    ranging v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+      (typ_subst Xs Us T) (rng_subst Xs Us R).
+Proof.
+  introv Hr Hl He1 He2 Hrs.
+  rewrite <- (concat_empty_r E1).
+  rewrite <- (concat_empty_r E1) in Hrs.
+  rewrite <- (concat_empty_r (E1 & Xs ~* Rs)) in Hr, He1, He2.
+  eauto using ranging_typ_subst.
+Qed.
+
+Lemma rangings_typ_subst : forall v E1 E2 E3 Xs Rs1 Us Ts Rs2,
+    rangings v (E1 & Xs ~* Rs1 & E2) E3 Ts Rs2 ->
+    length Xs = length Rs1 ->
+    type_environment (E1 & Xs ~* Rs1 & E2) ->
+    type_environment_extension (E1 & Xs ~* Rs1 & E2) E3 ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      Us (rng_subst_list Xs Us Rs1) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+      (typ_subst_list Xs Us Ts) (rng_subst_list Xs Us Rs2).
+Proof.
+  introv Hrs1 Hl He1 He2 Hrs2.
+  remember (E1 & Xs ~* Rs1 & E2) as E12.
+  induction Hrs1; subst; simpl; eauto using ranging_typ_subst.
+Qed.
+
+Lemma rangings_typ_subst_empty : forall v E1 E2 Xs Rs1 Us Ts Rs2,
+    rangings v (E1 & Xs ~* Rs1 & E2) empty Ts Rs2 ->
+    length Xs = length Rs1 ->
+    type_environment (E1 & Xs ~* Rs1 & E2) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) empty
+      Us (rng_subst_list Xs Us Rs1) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) empty
+      (typ_subst_list Xs Us Ts) (rng_subst_list Xs Us Rs2).
+Proof.
+  introv Hrs1 Hl He Hrs2.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us) in Hrs2.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  apply rangings_typ_subst with Rs1; auto.
+Qed.
+
+Lemma valid_instance_typ_subst : forall v E1 E2 Xs Rs Us Ts M,
+    valid_instance v (E1 & Xs ~* Rs & E2) Ts M ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) empty
+      Us (rng_subst_list Xs Us Rs) ->
+    valid_instance v (tenv_subst Xs Us (E1 & E2))
+      (typ_subst_list Xs Us Ts) (sch_subst Xs Us M).
+Proof.
+  introv Hv Hl He Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12.
+  destruct Hv; subst.
+  apply valid_instance_c
+    with (rng_subst_list Xs Us (rng_open_list (sch_ranges M) Ts));
+    eauto using rangings_typ_subst_empty.
+  apply rng_subst_list_open; auto with wellformed.
+Qed.
+
+(* ****************************************************** *)
+(** ** Type substitution *)
+
+Lemma rangings_add_subst_ranges : forall v E1 E2 Zs Us Rs Xs L M,
+    scheme_aux L M ->
+    fresh (dom E1 \u dom E2 \u from_list Zs \u L) (sch_arity M) Xs ->
+    rangings v (tenv_subst Zs Us (E1 & E2)) empty Us
+      (rng_subst_list Zs Us Rs) ->
+    type_environment (E1 & Zs ~* Rs & E2) ->
+    rangings v (tenv_subst Zs Us (E1 & (E2 & Xs ~: M))) empty Us
+      (rng_subst_list Zs Us Rs).
+Proof.
+  introv Hs Hf Hrs He.
+  fresh_length Hf as Hl.
+  rewrite concat_assoc.
+  rewrite tenv_subst_concat.
+  rewrite tenv_subst_ranges; auto with wellformed.
+  apply rangings_weakening_l; auto.
+  apply scheme_aux_subset with (L2 := L \u from_list Zs) in Hs;
+    auto using subset_union_weak_l.
+  apply type_environment_push_ranges with (L \u from_list Zs);
+    eauto using tenv_subst_type_environment,
+      type_environment_remove with wellformed;
+    autorewrite with rew_sch_arity;
+    autorewrite with rew_tenv_subst;
+    autorewrite with rew_tenv_dom;
+   try apply sch_subst_scheme_aux;
+   auto using subset_union_weak_r with wellformed.
+Qed.
+
+Lemma type_environment_push_subst_ranges : forall E1 E2 Xs Rs Ys L M,
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    length Xs = length Rs ->
+    scheme_aux L M ->
+    fresh (dom E1 \u from_list Xs \u dom E2 \u L) (sch_arity M) Ys ->
+    type_environment (E1 & Xs ~* Rs & (E2 & Ys ~: M)).
+Proof.
+  introv He Hl Hs Hf.
+  rewrite concat_assoc.
+  apply type_environment_push_ranges with L;
     autorewrite with rew_tenv_dom; auto.
-  rewrite union_comm.
-  f_equal; auto.
 Qed.
 
-Lemma tenv_dom_ranges : forall Xs M,
-  sch_arity M = length Xs ->
-  dom (Xs ~: M) = from_list Xs.
+Lemma typing_typ_subst : forall v E1 E2 Xs Rs Us D P t T,
+    typing v (E1 & Xs ~* Rs & E2) D P t T ->
+    length Xs = length Rs ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    rangings v (tenv_subst Xs Us (E1 & E2)) empty
+      Us (rng_subst_list Xs Us Rs) ->
+    typing v (tenv_subst Xs Us (E1 & E2))
+      (env_subst Xs Us D) (styp_subst Xs Us P) t
+           (typ_subst Xs Us T).
 Proof.
-  introv Hl.
-  destruct M as [Rs T].
-  unfold bind_sch_ranges.
-  simpl in *.
-  rewrite length_rng_open_vars_list with (Xs := Xs) in Hl.
-  rewrite tenv_dom_singles; auto.
+  introv Ht Hl He Hrs.
+  remember (E1 & Xs ~* Rs & E2) as E12 in Ht.
+  generalize dependent E2.
+  induction Ht; introv Heq He Hrs; subst;
+    eauto using type_equal_typ_subst_empty, subtype_typ_subst_empty.
+  - eapply typing_var;
+      eauto using env_subst_binds, valid_instance_typ_subst.
+    rewrite <- sch_subst_instance;
+      eauto using type_equal_typ_subst with wellformed.
+  - apply_fresh typing_abs as x;
+      eauto using kinding_typ_subst_empty, rangings_kindings.
+    fold typ_subst.
+    replace (sch_empty (typ_subst Xs Us T1))
+      with (sch_subst Xs Us (sch_empty T1)) by reflexivity.
+    rewrite <- env_subst_push; auto.
+  - apply typing_let_val
+      with (L := dom (E1 & Xs ~* Rs & E2) \u L)
+           (M := sch_subst Xs Us M);
+      eauto using valid_scheme_aux_typ_subst.
+    + introv Hf.
+      autorewrite with rew_sch_arity in Hf.
+      autorewrite with rew_tenv_dom in Hf.
+      fresh_length Hf as Hl2.
+      rewrite <- tenv_subst_ranges;
+        autorewrite with rew_env_dom; auto with wellformed.
+      rewrite <- tenv_subst_concat.
+      rewrite <- concat_assoc.
+      unfold instance_vars.
+      rewrite <- typ_subst_fresh_typ_fvars
+        with (Xs := Xs) (Us := Us); auto.
+      rewrite <- sch_subst_instance; auto with wellformed.
+      assert
+        (scheme_aux (((dom E1 \u from_list Xs) \u dom E2) \u L) M)
+        by (apply scheme_aux_subset with (L1 := L);
+              auto using subset_union_weak_r with wellformed).
+      eauto 6 using concat_assoc, rangings_add_subst_ranges,
+        type_environment_push_subst_ranges
+          with wellformed.
+    + introv Hn.
+      rewrite <- env_subst_push; auto.
+  - apply typing_let
+      with (L := L \u from_list Xs \u dom E1 \u dom E2)
+             (T1 := typ_subst Xs Us T1);
+      eauto using kinding_typ_subst_empty, rangings_kindings.
+    introv Hn.
+    replace (sch_empty (typ_subst Xs Us T1))
+      with (sch_subst Xs Us (sch_empty T1)) by reflexivity.
+    rewrite <- env_subst_push; auto.
+  - apply typing_constructor with (T1 := typ_subst Xs Us T1); auto.
+    fold typ_subst.
+    replace (typ_constructor c (typ_subst Xs Us T1))
+      with (typ_subst Xs Us (typ_constructor c T1))
+      by reflexivity.
+    replace (typ_proj CSet.universe (CSet.singleton c)
+                      (typ_subst Xs Us T2))
+      with (typ_subst Xs Us (typ_proj CSet.universe
+                                      (CSet.singleton c) T2))
+      by reflexivity.
+    eauto using subtype_typ_subst_empty.
+  - apply typing_match
+      with (T1 := typ_subst Xs Us T1) (T2 := typ_subst Xs Us T2)
+           (T3 := typ_subst Xs Us T3)
+           (L := L \u dom E1 \u dom E2); auto.
+    + replace
+        (typ_proj CSet.universe (CSet.singleton c)
+                  (typ_subst Xs Us T1))
+        with (typ_subst Xs Us
+                (typ_proj CSet.universe (CSet.singleton c) T1))
+        by reflexivity.
+      replace
+        (typ_proj CSet.universe (CSet.singleton c)
+                  (typ_subst Xs Us T2))
+        with (typ_subst Xs Us
+                (typ_proj CSet.universe (CSet.singleton c) T2))
+        by reflexivity.
+      eauto using subtype_typ_subst_empty.
+    + replace
+        (typ_proj CSet.universe (CSet.cosingleton c)
+                  (typ_subst Xs Us T1))
+        with (typ_subst Xs Us
+                (typ_proj CSet.universe (CSet.cosingleton c) T1))
+        by reflexivity.
+      replace
+        (typ_proj CSet.universe (CSet.cosingleton c)
+                  (typ_subst Xs Us T3))
+        with (typ_subst Xs Us
+                (typ_proj CSet.universe (CSet.cosingleton c) T3))
+        by reflexivity.
+      eauto using subtype_typ_subst_empty.
+    + replace (sch_empty (typ_variant (typ_subst Xs Us T2)))
+        with (sch_subst Xs Us (sch_empty (typ_variant T2)))
+        by reflexivity.
+      introv Hn.
+      rewrite <- env_subst_push.
+      auto.
+    + replace (sch_empty (typ_variant (typ_subst Xs Us T3)))
+        with (sch_subst Xs Us (sch_empty (typ_variant T3)))
+        by reflexivity.
+      introv Hn.
+      rewrite <- env_subst_push.
+      auto.
+  - apply typing_destruct
+      with (T1 := typ_subst Xs Us T1) (T2 := typ_subst Xs Us T2)
+           (L := L \u dom E1 \u dom E2); auto.
+    + replace
+        (typ_proj CSet.universe (CSet.singleton c)
+                  (typ_subst Xs Us T1))
+        with (typ_subst Xs Us
+                (typ_proj CSet.universe (CSet.singleton c) T1))
+        by reflexivity.
+      replace (typ_constructor c (typ_subst Xs Us T2))
+        with (typ_subst Xs Us (typ_constructor c T2)) by reflexivity.
+      eauto using subtype_typ_subst_empty.
+    + replace
+        (typ_proj CSet.universe (CSet.cosingleton c)
+                  (typ_subst Xs Us T1))
+        with (typ_subst Xs Us
+                (typ_proj CSet.universe (CSet.cosingleton c) T1))
+        by reflexivity.
+      replace (typ_bot (knd_row (CSet.cosingleton c)))
+        with (typ_subst Xs Us
+                (typ_bot (knd_row (CSet.cosingleton c))))
+        by reflexivity.
+      eauto using subtype_typ_subst_empty.
+    + replace (sch_empty (typ_subst Xs Us T2))
+        with (sch_subst Xs Us (sch_empty T2)) by reflexivity.
+      introv Hn.
+      rewrite <- env_subst_push.
+      auto.
+  - apply typing_absurd with (T1 := typ_subst Xs Us T1);
+      eauto using kinding_typ_subst_empty, rangings_kindings.
+    replace (typ_bot knd_row_all)
+      with (typ_subst Xs Us (typ_bot knd_row_all)) by reflexivity.
+    eauto using subtype_typ_subst_empty.
+  - apply_fresh typing_fix as x;
+      eauto using kinding_typ_subst_empty, rangings_kindings.
+    introv Hn1 Hn2.
+    fold typ_subst.
+    replace (sch_empty (typ_arrow (typ_subst Xs Us T1)
+                                  (typ_subst Xs Us T2)))
+      with (sch_subst Xs Us (sch_empty (typ_arrow T1 T2)))
+      by reflexivity.
+    replace (sch_empty (typ_subst Xs Us T1))
+      with (sch_subst Xs Us (sch_empty T1)) by reflexivity.
+    rewrite <- env_subst_push.
+    rewrite <- env_subst_push.
+    auto.
+  - apply typing_prod; auto.
+  - apply typing_loc with (T1 := typ_subst Xs Us T1);
+      eauto using styp_subst_binds.
+  - apply typing_ref; auto.
 Qed.
 
-Lemma tenv_dom_subst : forall Zs Us E,
-    dom (tenv_subst Zs Us E) = dom E.
+Lemma typing_typ_subst_l : forall v E Xs Rs Us D P t T,
+    typing v (E & Xs ~* Rs) D P t T ->
+    length Xs = length Rs ->
+    type_environment (E & Xs ~* Rs) ->
+    rangings v (tenv_subst Xs Us E) empty
+      Us (rng_subst_list Xs Us Rs) ->
+    typing v (tenv_subst Xs Us E)
+      (env_subst Xs Us D) (styp_subst Xs Us P) t
+           (typ_subst Xs Us T).
 Proof.
-  intros.
-  induction E using env_ind;
-    autorewrite with rew_tenv_subst rew_env_dom.
-  - reflexivity.
-  - rewrite IHE. reflexivity.
+  introv Ht Hl He Hrs.
+  rewrite <- concat_empty_r with (E := E).
+  rewrite <- concat_empty_r with (E := E & Xs ~* Rs) in He, Ht.
+  rewrite <- concat_empty_r with (E := E) in Hrs.
+  eauto using typing_typ_subst.
 Qed.
 
-Hint Rewrite tenv_dom_subst : rew_tenv_dom.
-
-Hint Rewrite tenv_dom_singles using auto : rew_tenv_dom.
-
-Hint Rewrite tenv_dom_ranges using auto : rew_tenv_dom.
-
-Lemma tenv_subst_fresh : forall Xs Us E, 
-  disjoint (tenv_fv E) (from_list Xs) -> 
-  tenv_subst Xs Us E = E.
+Lemma typing_instance : forall v E M D P t Us,
+  typing_scheme v E D P t M ->
+  valid_instance v E Us M ->
+  type_environment E ->
+  typing v E D P t (instance M Us). 
 Proof.
-  introv Hf.
-  induction E using env_ind;
-    autorewrite with rew_tenv_subst rew_tenv_fv in *.
-  - reflexivity.
-  - rewrite rng_subst_fresh; auto.
-    rewrite IHE; auto.
-Qed.
-
-Lemma tenv_subst_binds : forall X R E Zs Us,
-    binds X R E ->
-    binds X (rng_subst Zs Us R) (tenv_subst Zs Us E).
-Proof.
-  introv Hbd.
-  induction E using env_ind.
-  - apply binds_empty_inv in Hbd; contradiction.
-  - destruct (binds_push_inv Hbd) as [[Hx Hb]|[Hx Hb]].
-    + subst. autorewrite with rew_tenv_subst.
-      apply binds_push_eq.
-    + autorewrite with rew_tenv_subst.
-      apply binds_push_neq; auto.
+  introv Hs Hv He.
+  destruct Hs as [L ? ? ? ? ? ? Hs].
+  pick_freshes (sch_arity M) Xs.
+  fresh_length Fr as Hl.
+  assert (fresh L (sch_arity M) Xs) as Hf2 by auto.
+  specialize (Hs Xs Hf2).
+  inversion Hs; subst.
+  inversion Hv; subst; simpl in *.
+  assert (length Us = sch_arity M)
+    by (erewrite rangings_length,
+          <- length_rng_open_list, sch_arity_length; eauto).
+  rewrite typ_subst_intro_instance with (Xs := Xs);
+    auto with wellformed.
+  assert (type_environment_extension E (Xs ~: M))
+    by auto with wellformed.
+  unfold bind_sch_ranges, instance_vars, instance in *.
+  destruct M; simpl in *.
+  rewrite <- styp_subst_fresh with (Xs := Xs) (Us := Us) (P := P);
+    auto.
+  rewrite <- env_subst_fresh with (Xs := Xs) (Us := Us) (D := D);
+    auto.
+  rewrite <- tenv_subst_fresh with (Xs := Xs) (Us := Us) (E := E);
+    auto.
+  apply typing_typ_subst_l
+    with (Rs := rng_open_vars_list sch_ranges Xs);
+    rewrite <- ?length_rng_open_vars_list;
+      auto using type_environment_extend. 
+  rewrite tenv_subst_fresh with (Xs := Xs) (Us := Us) (E := E); auto.
+  rewrite <- rng_subst_list_intro; auto with wellformed.
 Qed.
 
 (* *************************************************************** *)
-(** ** Environments *)
+(** Somes useful lemmas for proofs about term subtitution *)
 
-Lemma env_fv_empty :
-  env_fv empty = \{}.
+Lemma typing_schemes_add_subst_typ_bind :
+  forall v E D1 D2 P x M Ms ts,
+    x \notin (dom D1 \u dom D2) ->
+    typing_schemes v E (D1 & D2) P ts Ms ->
+    scheme M ->
+    type_environment E ->
+    environment (D1 & D2) ->
+    store_type P ->
+    typing_schemes v E (D1 & (D2 & x ~ M)) P ts Ms.
 Proof.
-  unfold env_fv, fv_in_values; rew_env_defs; simpl; reflexivity. 
+  introv Hn Hss Hs He Hd Hp.
+  rewrite concat_assoc.
+  apply typing_schemes_env_weakening_l; auto.
+Qed.
+
+Lemma typing_schemes_add_subst_typ_bind_empty :
+  forall v E D1 D2 P x T Ms ts,
+    x \notin (dom D1 \u dom D2) ->
+    typing_schemes v E (D1 & D2) P ts Ms ->
+    type T ->
+    type_environment E ->
+    environment (D1 & D2) ->
+    store_type P ->
+    typing_schemes v E (D1 & (D2 & x ~ sch_empty T)) P ts Ms.
+Proof.
+  introv Hn Hss Hk He Hd Hp.
+  apply typing_schemes_add_subst_typ_bind; auto.
+Qed.
+
+Lemma typing_schemes_add_subst_typ_bind_empty2 :
+  forall v E D1 D2 P x T y U Ms ts,
+    x \notin (dom D1 \u dom D2) ->
+    y \notin (dom D1 \u dom D2 \u \{x}) ->
+    typing_schemes v E (D1 & D2) P ts Ms ->
+    type T ->
+    type U ->
+    type_environment E ->
+    environment (D1 & D2) ->
+    store_type P ->
+    typing_schemes
+      v E (D1 & (D2 & x ~ sch_empty T & y ~ sch_empty U)) P ts Ms.
+Proof.
+  introv Hn1 Hn2 Hss Hk1 Hk2 He Hd Hp.
+  rewrite concat_assoc2.
+  apply typing_schemes_env_weakening_l;
+    auto using environment_push2.
+  apply typing_schemes_env_weakening_l; auto.
 Qed.  
 
-Lemma env_fv_single : forall x v,
-  env_fv (x ~ v) = sch_fv v.
+Lemma typing_schemes_add_subst_kinds_bind :
+  forall v E D1 D2 P Xs L M Ms ts,
+    scheme_aux L M ->
+    fresh (dom E \u L) (sch_arity M) Xs ->
+    typing_schemes v E (D1 & D2) P ts Ms ->
+    type_environment E ->
+    typing_schemes v (E & Xs ~: M) (D1 & D2) P ts Ms.
 Proof.
-  intros.
-  unfold env_fv, fv_in_values; rew_env_defs; simpl. 
-  apply union_empty_r.
+  introv Hs Hf Hss He.
+  apply typing_schemes_tenv_weakening_l;
+    eauto using type_environment_push_ranges.
 Qed.
 
-Lemma env_fv_concat : forall D1 D2,
-  env_fv (D1 & D2) = env_fv D1 \u env_fv D2.
-Proof.
-  intros.
-  unfold env_fv, fv_in_values; rew_env_defs.
-  rewrite LibList.map_app.
-  rewrite LibList.fold_right_app.
-  induction D2.
-  - simpl. symmetry. apply union_empty_r.
-  - rewrite LibList.map_cons.
-    simpl.
-    rewrite union_comm_assoc.
-    rewrite IHD2.
-    reflexivity.
-Qed.
-
-Hint Rewrite env_fv_empty env_fv_single env_fv_concat : rew_env_fv.
-
-Lemma env_fv_singles : forall xs Ms,
+Lemma type_environment_add_subst_typ_bind : forall D1 D2 xs Ms x M,
+    environment (D1 & xs ~* Ms & D2) ->
     length xs = length Ms ->
-    env_fv (xs ~* Ms) = sch_fv_list Ms.
+    x \notin (dom D1 \u from_list xs \u dom D2) ->
+    scheme M ->
+    environment (D1 & xs ~* Ms & D2 & x ~ M).
 Proof.
-  introv Hl.
+  introv He Hl Hn Hs.
+  apply environment_push; autorewrite with rew_env_dom; auto.
+Qed.
+
+Lemma environment_add_subst_typ_bind :
+    forall D1 D2 xs Ms x M,
+    environment (D1 & xs ~* Ms & D2) ->
+    length xs = length Ms ->
+    x \notin (dom D1 \u from_list xs \u dom D2) ->
+    scheme M ->
+    environment (D1 & xs ~* Ms & D2 & x ~ M).
+Proof.
+  introv He Hl Hn Hk.
+  apply environment_push; autorewrite with rew_env_dom; auto.
+Qed.
+
+Lemma environment_add_subst_typ_bind_empty :
+    forall D1 D2 xs Ms x T,
+    environment (D1 & xs ~* Ms & D2) ->
+    length xs = length Ms ->
+    x \notin (dom D1 \u from_list xs \u dom D2) ->
+    type T ->
+    environment (D1 & xs ~* Ms & D2 & x ~ sch_empty T).
+Proof.
+  introv He Hl Hn Hk.
+  apply environment_push; autorewrite with rew_env_dom; auto.
+Qed.
+
+Lemma environment_add_subst_typ_bind_empty2 :
+    forall D1 D2 xs Ms x T1 y T2,
+    environment (D1 & xs ~* Ms & D2) ->
+    length xs = length Ms ->
+    x \notin (dom D1 \u from_list xs \u dom D2) ->
+    y \notin (dom D1 \u from_list xs \u dom D2 \u \{x}) ->
+    type T1 ->
+    type T2 ->
+    environment (D1 & xs ~* Ms & D2
+                 & x ~ sch_empty T1 & y ~ sch_empty T2).
+Proof.
+  introv He Hl Hn1 Hn2 Hk1 Hk2.
+  apply environment_push; autorewrite with rew_env_dom; auto.
+  apply environment_push; autorewrite with rew_env_dom; auto.
+Qed.
+
+(* ****************************************************** *)
+(** ** Term substitution *)
+
+Lemma value_trm_subst : forall xs ss t,
+    value t ->
+    terms ss ->
+    value (trm_subst xs ss t).
+Proof.
+  introv Hv Ht.
+  induction Hv; simpl; auto.
+  - apply value_abs.
+    replace (trm_abs (trm_subst xs ss t))
+      with (trm_subst xs ss (trm_abs t))
+      by auto.
+    auto using trm_subst_term.
+  - apply value_fix.
+    replace (trm_fix (trm_subst xs ss t))
+      with (trm_subst xs ss (trm_fix t))
+      by auto.
+    auto using trm_subst_term.
+Qed.
+
+Lemma typing_trm_subst_var : forall v E D1 D2 P xs Ms ts x M,
+    binds x M (D1 & xs ~* Ms & D2) ->
+    length xs = length Ms ->
+    environment (D1 & xs ~* Ms & D2) ->
+    typing_schemes v E (D1 & D2) P ts Ms ->
+    typing_scheme v E (D1 & D2) P (trm_var_subst xs ts x) M
+    \/ (binds x M (D1 & D2)
+        /\ trm_var_subst xs ts x = trm_fvar x).
+Proof.
+  introv Hb Hl He Hss.
+  assert (length ts = length Ms) as Hl2
+    by eauto using typing_schemes_length.
   generalize dependent Ms.
-  induction xs; introv Hl; induction Ms; simpl;
-    inversion Hl;
-    autorewrite with rew_env_concat;
-    autorewrite with rew_env_fv; auto.
-  rewrite union_comm.
-  f_equal; auto.
+  generalize dependent ts.
+  induction xs; introv Hb Hl1 He Hss Hl2; destruct Ms; destruct ts;
+    try discriminate; simpl in *;
+    autorewrite with rew_env_concat in *; auto.
+  inversion Hss; subst.
+  case_var.
+  - apply binds_middle_eq_inv in Hb; subst;
+      auto using ok_from_environment.
+  - eauto using binds_subst, environment_remove.
 Qed.
 
-Hint Rewrite env_fv_singles using auto : rew_env_fv.
-
-Lemma env_subst_nil : forall Xs Us D,
-    Xs = nil \/ Us = nil ->
-    env_subst Xs Us D = D.
+Lemma typing_trm_subst : forall v E D1 D2 P xs Ms ts t T,
+    typing v E (D1 & xs ~* Ms & D2) P t T ->
+    length xs = length Ms ->
+    type_environment E ->
+    environment (D1 & xs ~* Ms & D2) ->
+    store_type P ->
+    typing_schemes v E (D1 & D2) P ts Ms ->
+    typing v E (D1 & D2) P (trm_subst xs ts t) T.
 Proof.
-  introv Heq.
-  unfold env_subst.
-  induction D using env_ind;
-    rewrite? map_empty; rewrite? map_push;
-    rewrite? IHD; rewrite? sch_subst_nil; auto.
+  introv Ht Hl He Hd Hp Hss.
+  assert (type_environment_extension E empty) as He2 by auto.
+  remember (D1 & xs ~* Ms & D2) as D12.
+  generalize dependent D2.
+  induction Ht; introv Heq Hss; subst; simpl; eauto.
+  - destruct typing_trm_subst_var
+      with (v := v) (E := E) (D1 := D1) (D2 := D2) (P := P)
+           (xs := xs) (Ms := Ms)
+           (ts := ts) (x := x) (M := M) as [Hs | [Hb Heq]]; auto.
+    + auto using typing_instance.
+    + rewrite Heq.
+      apply typing_var with (M := M) (Us := Us); auto.
+  - apply typing_abs with (L := L \u from_list xs \u dom D1 \u dom D2);
+      auto.
+    intros x Hf.
+    rewrite trm_subst_open_var; auto with wellformed.
+    rewrite <- concat_assoc.
+    eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
+      environment_remove, environment_add_subst_typ_bind_empty
+        with wellformed.
+  - apply typing_let_val
+      with (L := L \u from_list xs \u dom E \u dom D1 \u dom D2)
+        (M := M);
+      eauto using value_trm_subst, valid_scheme_aux_subset,
+        subset_union_weak_l with wellformed.
+    + introv Hf.
+      assert (scheme_aux L M) by auto with wellformed.
+      eauto using type_environment_push_ranges,
+        typing_schemes_add_subst_kinds_bind with wellformed.
+    + introv Hn.
+      rewrite trm_subst_open_var; auto with wellformed.
+      rewrite <- concat_assoc.
+      eauto using concat_assoc, typing_schemes_add_subst_typ_bind,
+        environment_remove, environment_add_subst_typ_bind
+          with wellformed.
+  - apply typing_let
+      with (L := L \u from_list xs \u dom D1 \u dom D2) (T1 := T1);
+      auto.
+    introv Hn.
+    rewrite trm_subst_open_var; auto with wellformed.
+    rewrite <- concat_assoc.
+    eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
+      environment_remove, environment_add_subst_typ_bind_empty
+        with wellformed.
+  - apply typing_match
+      with (L := L \u from_list xs \u dom D1 \u dom D2)
+           (T1 := T1) (T2 := T2) (T3 := T3); auto.
+    + introv Hn.
+      rewrite trm_subst_open_var; auto with wellformed.
+      rewrite <- concat_assoc.
+      assert
+        (type (typ_proj CSet.universe (CSet.singleton c) T2))
+          as Hty by auto with wellformed.
+      inversion Hty; subst.
+      assert (type (typ_variant T2)) by auto.
+      eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
+        environment_remove, environment_add_subst_typ_bind_empty
+          with wellformed.
+    + introv Hn.
+      rewrite trm_subst_open_var; auto with wellformed.
+      rewrite <- concat_assoc.
+      assert
+        (type (typ_proj CSet.universe (CSet.cosingleton c) T3))
+          as Hty by auto with wellformed.
+      inversion Hty; subst.
+      assert (type (typ_variant T3)) by auto.
+      eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
+        environment_remove, environment_add_subst_typ_bind_empty
+          with wellformed.
+  - apply typing_destruct
+      with (L := L \u from_list xs \u dom D1 \u dom D2)
+           (T1 := T1) (T2 := T2); auto.
+    introv Hn.
+    rewrite trm_subst_open_var; auto with wellformed.
+    rewrite <- concat_assoc.
+      assert (type (typ_constructor c T2))
+          as Hty by auto with wellformed.
+    inversion Hty; subst.
+    eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
+      environment_remove, environment_add_subst_typ_bind_empty
+        with wellformed.
+  - apply typing_fix
+      with (L := L \u from_list xs \u dom D1 \u dom D2); auto.
+    introv Hn1 Hn2.
+    rewrite trm_subst_open_vars; auto with wellformed.
+    rewrite <- concat_assoc2.
+    assert (type (typ_arrow T1 T2)) by auto with wellformed.
+    eauto using concat_assoc2, typing_schemes_add_subst_typ_bind_empty2,
+      environment_remove, environment_add_subst_typ_bind_empty2
+        with wellformed.
 Qed.
 
-Lemma env_subst_empty : forall Xs Us,
-  env_subst Xs Us empty = empty.
+Lemma typing_trm_subst_l : forall v E D xs Ms P ts t T,
+    typing v E (D & xs ~* Ms) P t T ->
+    length xs = length Ms ->
+    type_environment E ->
+    environment (D & xs ~* Ms) ->
+    store_type P ->
+    typing_schemes v E D P ts Ms ->
+    typing v E D P (trm_subst xs ts t) T.
 Proof.
-  intros.
-  unfold env_subst.
-  autorewrite with rew_env_map.
-  reflexivity. 
+  introv Ht Hl He Hd Hp Hts.
+  rewrite <- concat_empty_r with (E := D).
+  rewrite <- concat_empty_r with (E := D & xs ~* Ms) in Ht, Hd.
+  rewrite <- concat_empty_r with (E := D) in Hts.
+  eauto using typing_trm_subst.
 Qed.
 
-Lemma env_subst_single : forall Xs Us x M,
-  env_subst Xs Us (x ~ M) = (x ~ sch_subst Xs Us M).
+Lemma typing_trm_subst_single : forall v E D1 D2 x M P s t T,
+    typing v E (D1 & x ~ M & D2) P t T ->
+    type_environment E ->
+    environment (D1 & x ~ M & D2) ->
+    store_type P ->
+    typing_scheme v E (D1 & D2) P s M ->
+    typing v E (D1 & D2) P (trm_subst_single x s t) T.
 Proof.
-  intros.
-  unfold env_subst.
-  autorewrite with rew_env_map.
-  reflexivity.
+  introv Ht He Hd Hp Hs.
+  apply typing_trm_subst with (Ms := cons M nil);
+    simpl; autorewrite with rew_env_concat; auto.
 Qed.
 
-Lemma env_subst_concat : forall Xs Us D1 D2,
-  env_subst Xs Us (D1 & D2)
-  = env_subst Xs Us D1 & env_subst Xs Us D2.
+Lemma typing_trm_subst_single_l : forall v E D x M P s t T,
+    typing v E (D & x ~ M) P t T ->
+    type_environment E ->
+    environment (D & x ~ M) ->
+    store_type P ->
+    typing_scheme v E D P s M ->
+    typing v E D P (trm_subst_single x s t) T.
 Proof.
-  intros.
-  unfold env_subst.
-  autorewrite with rew_env_map.
-  reflexivity. 
-Qed.
-
-Lemma env_subst_push : forall Zs Us D x M,
-  env_subst Zs Us (D & x ~ M)
-  = env_subst Zs Us D & x ~ sch_subst Zs Us M.
-Proof.
-  intros.
-  unfold env_subst.
-  autorewrite with rew_env_map.
-  simpl.
-  reflexivity.
-Qed.
-
-Hint Rewrite env_subst_empty env_subst_single
-     env_subst_concat : rew_env_subst.
-
-Lemma env_subst_singles : forall Zs Us xs Ms,
-  length xs = length Ms ->
-  env_subst Zs Us (xs ~* Ms) =
-  xs ~* (sch_subst_list Zs Us Ms).
-Proof.
-  introv Hl.
-  generalize dependent Ms.
-  induction xs; intros; induction Ms; simpl;
-    inversion Hl;
-    autorewrite with rew_env_concat;
-    autorewrite with rew_env_subst; auto.
-  f_equal; auto.
-Qed.
-
-Hint Rewrite env_subst_singles using auto
-  : rew_env_subst.
-
-Hint Rewrite from_list_nil from_list_cons : rew_env_dom.
-
-Lemma env_dom_singles : forall xs (Ms : list sch),
-  length Ms = length xs ->
-  dom (xs ~* Ms) = from_list xs.
-Proof.
-  introv Hl.
-  generalize dependent Ms.
-  induction xs; introv Hl; destruct Ms; inversion Hl;
-    autorewrite with rew_env_concat;
-    autorewrite with rew_env_dom; auto.
-  rewrite union_comm.
-  f_equal; auto.
-Qed.
-
-Lemma env_dom_subst : forall Zs Us D,
-    dom (env_subst Zs Us D) = dom D.
-Proof.
-  intros.
-  induction D using env_ind;
-    autorewrite with rew_env_subst rew_env_dom.
-  - reflexivity.
-  - rewrite IHD. reflexivity.
-Qed.
-
-Hint Rewrite env_dom_singles using auto : rew_env_dom.
-
-Hint Rewrite env_dom_subst : rew_env_dom.
-
-Lemma env_subst_fresh : forall Xs Us D, 
-  disjoint (env_fv D) (from_list Xs) -> 
-  env_subst Xs Us D = D.
-Proof.
-  introv Hf.
-  induction D using env_ind;
-    autorewrite with rew_env_subst rew_env_fv in *.
-  - reflexivity.
-  - rewrite sch_subst_fresh; auto.
-    rewrite IHD; auto.
-Qed.
-
-Lemma env_subst_binds : forall X M D Zs Us,
-    binds X M D ->
-    binds X (sch_subst Zs Us M) (env_subst Zs Us D).
-Proof.
-  introv Hbd.
-  induction D using env_ind.
-  - apply binds_empty_inv in Hbd; contradiction.
-  - destruct (binds_push_inv Hbd) as [[Hx Hb]|[Hx Hb]].
-    + subst. autorewrite with rew_env_subst.
-      apply binds_push_eq.
-    + autorewrite with rew_env_subst.
-      apply binds_push_neq; auto.
-Qed.
-
-(* *************************************************************** *)
-(** ** Store types *)
-
-Lemma styp_fv_empty :
-  styp_fv empty = \{}.
-Proof.
-  unfold styp_fv, fv_in_values; rew_env_defs; simpl; reflexivity. 
-Qed.  
-
-Lemma styp_fv_single : forall x T,
-  styp_fv (x ~ T) = typ_fv T.
-Proof.
-  intros.
-  unfold styp_fv, fv_in_values; rew_env_defs; simpl. 
-  apply union_empty_r.
-Qed.  
-
-Lemma styp_fv_concat : forall E1 E2,
-  styp_fv (E1 & E2) = styp_fv E1 \u styp_fv E2.
-Proof.
-  intros.
-  unfold styp_fv, fv_in_values; rew_env_defs.
-  rewrite LibList.map_app.
-  rewrite LibList.fold_right_app.
-  induction E2.
-  - simpl. symmetry. apply union_empty_r.
-  - rewrite LibList.map_cons.
-    simpl.
-    rewrite union_comm_assoc.
-    rewrite IHE2.
-    reflexivity.
-Qed.
-
-Hint Rewrite styp_fv_empty styp_fv_single styp_fv_concat
-  : rew_styp_fv.
-
-Lemma styp_subst_nil : forall Xs Us P,
-    Xs = nil \/ Us = nil ->
-    styp_subst Xs Us P = P.
-Proof.
-  introv Heq.
-  unfold styp_subst.
-  induction P using env_ind;
-    rewrite? map_empty; rewrite? map_push;
-    rewrite? IHP; rewrite? typ_subst_nil; auto.
-Qed.
-
-Lemma styp_subst_empty : forall Xs Us,
-  styp_subst Xs Us empty = empty.
-Proof.
-  intros.
-  unfold styp_subst.
-  autorewrite with rew_env_map.
-  reflexivity. 
-Qed.
-
-Lemma styp_subst_single : forall Xs Us x T,
-  styp_subst Xs Us (x ~ T) = (x ~ typ_subst Xs Us T).
-Proof.
-  intros.
-  unfold styp_subst.
-  autorewrite with rew_env_map.
-  reflexivity.
-Qed.  
-
-Lemma styp_subst_concat : forall Xs Us P1 P2,
-  styp_subst Xs Us (P1 & P2)
-  = styp_subst Xs Us P1 & styp_subst Xs Us P2.
-Proof.
-  intros.
-  unfold styp_subst.
-  autorewrite with rew_env_map.
-  reflexivity. 
-Qed.
-
-Hint Rewrite styp_subst_empty styp_subst_single styp_subst_concat
-  : rew_styp_subst.
-
-Lemma styp_dom_subst : forall Zs Us P,
-    dom (styp_subst Zs Us P) = dom P.
-Proof.
-  intros.
-  induction P using env_ind;
-    autorewrite with rew_styp_subst rew_env_dom.
-  - reflexivity.
-  - rewrite IHP. reflexivity.
-Qed.
-
-Hint Rewrite dom_empty dom_single dom_concat styp_dom_subst
-  : rew_styp_dom.
-
-Hint Rewrite from_list_nil from_list_cons : rew_styp_dom.
-
-Lemma styp_subst_fresh : forall Xs Us P, 
-  disjoint (styp_fv P) (from_list Xs) -> 
-  styp_subst Xs Us P = P.
-Proof.
-  introv Hf.
-  induction P using env_ind;
-    autorewrite with rew_styp_subst rew_styp_fv in *.
-  - reflexivity.
-  - rewrite typ_subst_fresh; auto.
-    rewrite IHP; auto.
-Qed.
-
-Lemma styp_subst_binds : forall X T P Zs Us,
-    binds X T P ->
-    binds X (typ_subst Zs Us T) (styp_subst Zs Us P).
-Proof.
-  introv Hbd.
-  induction P using env_ind.
-  - apply binds_empty_inv in Hbd; contradiction.
-  - destruct (binds_push_inv Hbd) as [[Hx Hb]|[Hx Hb]].
-    + subst. autorewrite with rew_styp_subst.
-      apply binds_push_eq.
-    + autorewrite with rew_styp_subst.
-      apply binds_push_neq; auto.
+  introv Ht He Hd Hp Hts.
+  rewrite <- concat_empty_r with (E := D).
+  rewrite <- concat_empty_r with (E := D & x ~ M) in Ht, Hd.
+  rewrite <- concat_empty_r with (E := D) in Hts.
+  eauto using typing_trm_subst_single.
 Qed.

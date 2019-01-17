@@ -3,8 +3,10 @@
  *                 Leo White                    *
  ************************************************)
 
+(* General utilities *)
+
 Set Implicit Arguments.
-Require Import List LibLN Disjoint.
+Require Import List LibLN Disjoint Bool Ring.
 
 (* **************************************************** *)
 (** Additional set lemmas *)
@@ -62,9 +64,6 @@ Proof.
   generalize dependent M.
   generalize dependent n.
   induction Xs; introv Hf Hs; destruct n; auto; simpl in *.
-  unfold subset in Hs.
-  unfold notin, not in *.
-  intuition auto.
 Qed.
 
 Lemma fresh_disjoint : forall L n Xs,
@@ -107,6 +106,16 @@ Proof.
   introv Hf.
   fresh_length Hf as Hl.
   simpl in Hl.
+  assumption.
+Qed.
+
+Lemma fresh_zero : forall L Xs,
+  fresh L 0 Xs -> Xs = nil.
+Proof.
+  introv Hf.
+  fresh_length Hf as Hl.
+  symmetry in Hl.
+  apply List.length_zero_iff_nil in Hl.
   assumption.
 Qed.
 
@@ -156,13 +165,56 @@ Qed.
 
 Hint Rewrite singles_nil singles_cons : rew_env_concat.
 
+(* *************************************************************** *)
+(** * Extra lemmas about the [ok] predicate *)
+
+Lemma ok_middle : forall A E1 E2 x (v : A),
+  ok (E1 & E2) ->
+  x # (E1 & E2) ->
+  ok (E1 & x ~ v & E2).
+Proof.
+  introv Hok Hn.
+  induction E2 using env_ind;
+    autorewrite with rew_env_concat in *;
+    autorewrite with rew_env_dom in *; auto.
+  destruct (ok_push_inv Hok).
+  auto.
+Qed.
+
+Lemma ok_concat : forall A (E1 : LibEnv.env A) E2,
+    ok E1 -> ok E2 ->
+    disjoint (dom E1) (dom E2) ->
+    ok (E1 & E2).
+Proof.
+  introv Hok1 Hok2 Hd.
+  induction E2 using env_ind;
+    autorewrite with rew_env_concat in *;
+    autorewrite with rew_env_dom in *; auto.
+  destruct (ok_push_inv Hok2).
+  auto.
+Qed.
+
+Lemma ok_concat_inv : forall A (E1 : LibEnv.env A) E2,
+    ok (E1 & E2) ->
+    disjoint (dom E1) (dom E2) /\ ok E1 /\ ok E2.
+Proof.
+  introv Hok.
+  splits; eauto using ok_concat_inv_l, ok_concat_inv_r.
+  induction E2 using env_ind;
+    autorewrite with rew_env_concat in *;
+    autorewrite with rew_env_dom in *; auto.
+  destruct (ok_push_inv Hok).
+  autorewrite with rew_env_dom in *.
+  auto.
+Qed.
+
 (* **************************************************** *)
 (** Some automation around fresh names *)
 
 Ltac inList x xs :=
   match xs with
-  | tt => constr:false
-  | (x, _) => constr:true
+  | tt => constr:(false)
+  | (x, _) => constr:(true)
   | (_, ?xs') => inList x xs'
   end.
 
@@ -201,8 +253,8 @@ Ltac spec_one_freshes Xs H L n :=
 Ltac spec_all_freshes Xs n :=
   let rec inList2 x xs :=
     match xs with
-    | tt => constr:false
-    | (x, _) => constr:true
+    | tt => constr:(false)
+    | (x, _) => constr:(true)
     | (_, ?xs') => inList2 x xs'
     end
   in
@@ -269,6 +321,10 @@ Ltac app_fresh :=
     Hq1 : ?Q1, Hq2 : ?Q2 |- ?P =>
     apply (H (proj1_sig (var_fresh L))
              (proj2_sig (var_fresh L)) Hq1 Hq2 )
+  | H : forall x, x \notin ?L -> ?Q1 -> ?Q2 -> ?Q3 -> ?P,
+    Hq1 : ?Q1, Hq2 : ?Q2, Hq3 : ?Q3 |- ?P =>
+    apply (H (proj1_sig (var_fresh L))
+             (proj2_sig (var_fresh L)) Hq1 Hq2 Hq3)
   | H: forall Xs : list var,
       fresh ?L ?n Xs -> ?P |- ?P =>
     apply (H (proj1_sig (var_freshes L n))
@@ -282,6 +338,82 @@ Ltac app_fresh :=
         Hq1 : ?Q1, Hq2 : ?Q2  |- ?P =>
     apply (H (proj1_sig (var_freshes L n))
              (proj2_sig (var_freshes L n)) Hq1 Hq2)
+  | H : forall Xs : list var,
+      fresh ?L ?n Xs -> ?Q1 -> ?Q2 -> ?Q3 -> ?P,
+        Hq1 : ?Q1, Hq2 : ?Q2, Hq3 : ?Q3 |- ?P =>
+    apply (H (proj1_sig (var_freshes L n))
+             (proj2_sig (var_freshes L n)) Hq1 Hq2 Hq3)
   end.
 
 Hint Extern 1 => app_fresh : fresh.
+
+(* **************************************************** *)
+(* Semi-ring for andb and orb *)
+
+Lemma AndOrTheory :
+  semi_ring_theory false true orb andb (eq(A:=bool)).
+Proof.
+  apply mk_srt; intros; Bool.destr_bool.
+Qed.
+
+Add Ring bool_ring :
+  AndOrTheory (decidable bool_eq_ok, constants [bool_cst]).
+
+Definition leb b1 b2 :=
+  b1 = andb b1 b2.
+
+Lemma leb_refl : forall b,
+  leb b b.
+Proof.
+  intros.
+  unfold leb.
+  destruct b; auto.
+Qed.
+
+Lemma leb_lower_bound_l : forall b1 b2,
+  leb (andb b1 b2) b1.
+Proof.
+  intros.
+  unfold leb.
+  destruct b1; destruct b2; auto.
+Qed.
+
+Lemma leb_lower_bound_r : forall b1 b2,
+  leb (andb b1 b2) b2.
+Proof.
+  intros.
+  unfold leb.
+  destruct b1; destruct b2; auto.
+Qed.
+
+Lemma leb_upper_bound_l : forall b1 b2,
+  leb b1 (orb b1 b2).
+Proof.
+  intros.
+  unfold leb.
+  destruct b1; destruct b2; auto.
+Qed.
+
+Lemma leb_upper_bound_r : forall b1 b2,
+  leb b2 (orb b1 b2).
+Proof.
+  intros.
+  unfold leb.
+  destruct b1; destruct b2; auto.
+Qed.
+
+Lemma andb_orb_distribution : forall b1 b2 b3,
+    b1 && (b2 || b3) =
+    (b1 && b2) || (b1 && b3).
+Proof.
+  intros.
+  ring.
+Qed.
+
+Lemma leb_false : forall b,
+    leb b false ->
+    b = false.
+Proof.
+  introv Hl.
+  destruct b; auto.
+Qed.

@@ -55,7 +55,7 @@ Proof.
       specialize (H X).
       exfalso.
       intuition auto.
-    + apply in_empty_elim in Hin.
+    + rewrite in_empty in Hin.
       contradiction.
 Qed.      
 
@@ -216,7 +216,9 @@ Proof.
   - apply disjoint_from_list_nil_r.
   - destruct n; try contradiction.
     rewrite disjoint_from_list_cons_r.
-    intuition eauto.
+    destruct Hf.
+    assert (fresh L n Xs) by auto.
+    split; eauto.
     rewrite disjoint_singleton_r.
     auto.
 Qed.     
@@ -333,10 +335,21 @@ Ltac disjoint_simpl :=
 Ltac disjoint_solve :=
   disjoint_simpl;
   first [ disjoint_solve_one
+        | disjoint_solve_by_subset
         | disjoint_solve_by_fresh
         | disjoint_solve_by_notin
         | disjoint_solve_by_neq
-        | idtac ].
+        | idtac ]
+
+with disjoint_solve_by_subset :=
+  match goal with
+  | H : subset ?A ?B |- disjoint ?A _ =>
+    apply (disjoint_subset_l H);
+    disjoint_solve
+  | H : subset ?A ?B |- disjoint _ ?A =>
+    apply (disjoint_subset_r H);
+    disjoint_solve
+  end.
 
 Hint Extern 1 (disjoint _ _) => disjoint_solve.
 

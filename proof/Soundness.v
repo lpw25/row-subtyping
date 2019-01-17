@@ -5,11 +5,10 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import Arith LibLN.
-Require Import Cofinite Disjoint Definitions Substitution
-        Wellformedness Kinding Subtyping Ranging Typing.
-
-Hint Constructors red.
+Require Import Coq.Arith.PeanoNat LibLN Utilities Cofinite
+        Disjoint Definitions Opening FreeVars Environments
+        Subst Wellformedness Weakening Substitution Kinding
+        Subtyping Inversion Coercible Typing.
 
 (* *************************************************************** *)
 (** * Values do not reduce *)
@@ -34,277 +33,295 @@ Qed.
 Lemma preservation : preservation.
 Proof.
   unfold preservation.
-  introv He1 He2 Hv Hst Ht Hs Hr.
+  introv He Hd Hp Hst Ht Hs Hr.
   generalize dependent T.
   generalize dependent P.
-  induction Hr; introv Hv Hs Ht.
+  induction Hr; introv Hp Hs Ht.
   - exists P.
     splits; auto.
-    inversion Ht; subst.
+    invert_typing Ht He Hd Hp.
     + pick_fresh x.
       rewrite trm_subst_single_intro with (x := x);
         auto with wellformed.
       apply typing_trm_subst_single_l with (M := M);
-        eauto with wellformed.
-    + assert (kinding E T1 knd_type)
+        eauto using typing_coercible, typing_scheme_c'
+          with wellformed.
+    + assert (kinding E empty T1 knd_type)
         by eauto using output_typing with wellformed.
       pick_fresh x.
       rewrite trm_subst_single_intro with (x := x);
         auto with wellformed.
       apply typing_trm_subst_empty_l with (T2 := T1);
-        auto with wellformed.
-  - inversion Ht; subst.
+        eauto using typing_coercible with wellformed.
+  - invert_typing Ht He Hd Hp.
     + assert (value t1) as Hvl by assumption.
       exfalso.
       apply (values_do_not_reduce Hvl Hr).
-    + assert (typing E D P t1 T1) as Ht2 by auto.
-      destruct (IHHr Hst _ Hv Hs _ Ht2)
+    + assert (typing v E D P t1 T1) as Ht2 by auto.
+      destruct (IHHr Hst _ Hp Hs _ Ht2)
         as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
       exists P'.
       splits; auto.
-      apply typing_let with (L := L \u dom E) (T1 := T1);
-        auto.
+      apply typing_let with (L := L \u dom D \u dom E) (T1 := T1);
+        eauto using output_typing.
       introv Hn.
       apply typing_extend_store_type with (P := P);
-        auto with wellformed. 
-  - inversion Ht; subst.
-    assert (typing E D P t1 (typ_arrow S T)) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+        eauto using typing_coercible with wellformed.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t1 (typ_arrow T1 T2)) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type with wellformed.
-  - inversion Ht; subst.
-    assert (typing E D P t2 S) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    eauto using typing_coercible, typing_extend_store_type
+      with wellformed.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t2 T1) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type with wellformed.
+    eauto using typing_coercible, typing_extend_store_type
+      with wellformed.
   - exists P.
     splits; auto.
-    inversion Ht; subst.
-    assert (typing E D P (trm_abs t1) (typ_arrow S T)) as Ht2
-      by assumption.
-    inversion Ht2; subst.
+    invert_typing Ht He Hd Hp.
+    assert (typing v E D P (trm_abs t1) (typ_arrow T1 T2))
+      as Ht2 by assumption.
+    invert_typing Ht2 He Hd Hp.
     pick_fresh x.
     rewrite trm_subst_single_intro with (x := x);
       auto with wellformed.
-    apply typing_trm_subst_empty_l with (T2 := S);
-      auto with wellformed.
+    assert (coercible v E T3 T2)
+      by eauto using invert_coercible_arrow_right.
+    assert (coercible v E T1 T0)
+      by eauto using invert_coercible_arrow_left.
+    apply typing_trm_subst_empty_l with (T2 := T0);
+      eauto using typing_coercible with wellformed.
   - exists P.
     splits; auto.
-    inversion Ht; subst.
-    assert (typing E D P (trm_fix t1) (typ_arrow S T)) as Ht2
-      by assumption.
-    inversion Ht2; subst.
+    invert_typing Ht He Hd Hp.
+    assert (typing v E D P (trm_fix t1) (typ_arrow T1 T2))
+      as Ht2 by assumption.
+    invert_typing Ht2 He Hd Hp.
     pick_fresh x.
     pick_fresh y.
     rewrite trm_subst_intro with (xs := cons y (x::nil));
       auto with wellformed.
+    assert (coercible v E T3 T2)
+      by eauto using invert_coercible_arrow_right.
+    assert (coercible v E T1 T0)
+      by eauto using invert_coercible_arrow_left.
     apply typing_trm_subst_empty2_l
-      with (T2 := typ_arrow S T) (T3 := S); auto with wellformed.
-  - inversion Ht; subst.
-    assert (typing E D P t T3) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+      with (T2 := typ_arrow T0 T3) (T3 := T0);
+      eauto using typing_coercible with wellformed.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t T1) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type.
-  - inversion Ht; subst.
-    assert (typing E D P t1 (typ_variant T1)) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    eauto using typing_coercible.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t1 (typ_variant T1)) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
+    apply typing_coercible with T4; auto.
     apply typing_match with (L := L \u dom E \u dom D)
-      (T1 := T1) (T2 := T2) (T3 := T3) (T4 := T4) (T5 := T5)
-      (T6 := T6) (T7 := T7);
+      (T1 := T1) (T2 := T2) (T3 := T3) (T4 := T4);
       eauto using typing_extend_store_type with wellformed.
+  - subst.
+    exists P.
+    splits; auto.
+    invert_typing Ht He Hd Hp.
+    assert
+      (typing v E D P (trm_constructor c2 t1) (typ_variant T1))
+      as Ht2 by assumption.
+    invert_typing Ht2 He Hd Hp.
+    assert (valid_tenv_extension v E empty) by auto.
+    assert (kinding E empty T2 knd_row_all)
+      by auto with kinding.
+    pick_fresh x.
+    rewrite trm_subst_single_intro with (x := x);
+      auto with wellformed.
+    apply typing_trm_subst_empty_l with (T2 := typ_variant T2);
+      eauto using typing_coercible with wellformed.
+    apply typing_constructor with (T1 := T0); auto.
+    subst_subtype (typ_constructor c2 T0).
+    subst_subtype ((typ_proj CSet.universe (CSet.singleton c2) T2)).
+    assert (subtype v E empty T5 T1 knd_row_all) as Hs2
+      by (apply invert_coercible_variant; auto).
+    rewrite Hs2.
+    sreflexivity.
   - exists P.
     splits; auto.
-    inversion Ht; subst.
+    invert_typing Ht He Hd Hp.
     assert
-      (typing E D P (trm_constructor c2 t1) (typ_variant T1))
+      (typing v E D P (trm_constructor c1 t1) (typ_variant T1))
       as Ht2 by assumption.
-    inversion Ht2; subst.
+    invert_typing Ht2 He Hd Hp.
+    assert (valid_tenv_extension v E empty) by auto.
+    assert (kinding E empty T3 knd_row_all)
+      by auto with kinding.
     pick_fresh x.
-    rewrite trm_subst_single_intro with (x := x); auto with wellformed.
+    rewrite trm_subst_single_intro with (x := x);
+      auto with wellformed.
     apply typing_trm_subst_empty_l with (T2 := typ_variant T3);
-      auto with wellformed.
-    apply typing_constructor with (T2 := T4) (T3 := T9); auto.
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T8 (CSet.singleton c2));
-      auto with wellformed.
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T2 (CSet.singleton c2));
-      auto with wellformed.
-    eauto using subtype_proj, subtype_from_ranges
-      with wellformed csetdec.
-  - exists P.
-    splits; auto.
-    inversion Ht; subst.
-    assert
-      (typing E D P (trm_constructor c1 t1) (typ_variant T1))
-      as Ht2 by assumption.
-    inversion Ht2; subst.
-    pick_fresh x.
-    rewrite trm_subst_single_intro with (x := x);
-      auto with wellformed.
-    apply typing_trm_subst_empty_l with (T2 := typ_variant T5);
-      auto with wellformed.
-    apply typing_constructor with (T2 := T6) (T3 := T9); auto.
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T8 (CSet.singleton c1));
-      auto with wellformed.
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T2 (CSet.singleton c1));
-      auto with wellformed.
-    + eauto using subtype_proj, subtype_from_ranges
-        with wellformed csetdec.
-    + eauto using subtype_proj_subset with wellformed csetdec.
-  - inversion Ht; subst.
-    assert (typing E D P t1 (typ_variant T1)) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+      eauto using typing_coercible with wellformed.
+    apply typing_constructor with (T1 := T0); auto.
+    subst_subtype (typ_constructor c1 T0).
+    assert (subtype v E empty T5 T1 knd_row_all) as Hs2
+      by (apply invert_coercible_variant; auto).
+    rewrite Hs2.
+    apply subtype_proj_subset with (cs3 := CSet.cosingleton c2);
+      auto with csetdec.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t1 (typ_variant T1)) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
+    apply typing_coercible with T3; auto.
     apply typing_destruct with (L := L \u dom D)
-      (T1 := T1) (T2 := T2) (T3 := T3); auto.
+      (T1 := T1) (T2 := T2); auto.
     eauto using typing_extend_store_type with wellformed.
-  - exists P.
+  - subst.
+    exists P.
     splits; auto.
-    inversion Ht; subst.
+    invert_typing Ht He Hd Hp.
     assert
-      (typing E D P (trm_constructor c2 t1) (typ_variant T1))
+      (typing v E D P (trm_constructor c2 t1) (typ_variant T1))
       as Ht2 by assumption.
-    assert (type_environment E) by auto with wellformed.
-    assert (kinding E T3 knd_type) by auto with kinding.
-    inversion Ht2; subst.
+    invert_typing Ht2 He Hd Hp.
     pick_fresh x.
     rewrite trm_subst_single_intro with (x := x);
       auto with wellformed.
-    apply typing_trm_subst_empty_l with (T2 := T3);
-      auto with wellformed.
-    apply typing_equal with (T1 := T5);
-      auto with wellformed.
-    apply subtype_preserves_constructor
-      with (c := c2); auto. 
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T4 (CSet.singleton c2));
-      auto.
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T2 (CSet.singleton c2));
-      auto.
-    eauto using subtype_proj, subtype_from_ranges with csetdec.
-  - inversion Ht; subst.
-    assert (typing E D P t (typ_variant T1)) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    assert (coercible v E T0 T2)
+      by eauto using invert_coercible_variant_constructor.
+    apply typing_trm_subst_empty_l with (T2 := T2);
+      eauto using typing_coercible with wellformed.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t (typ_variant T1)) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type.
-  - inversion Ht; subst.
-    assert (typing E D P t1 T1) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    eauto using typing_coercible.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t1 T1) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type with wellformed.
-  - inversion Ht; subst.
-    assert (typing E D P t2 T2) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    eauto using typing_coercible, typing_extend_store_type
+      with wellformed.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t2 T2) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type with wellformed.
-  - inversion Ht; subst.
-    assert (typing E D P t (typ_prod T T2)) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    eauto using typing_coercible, typing_extend_store_type
+      with wellformed.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t (typ_prod T1 T2)) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type.
+    eauto using typing_coercible.
   - exists P.
     splits; auto.
-    inversion Ht; subst.
+    invert_typing Ht He Hd Hp.
     assert
-      (typing E D P (trm_prod t1 t2) (typ_prod T T2))
+      (typing v E D P (trm_prod t1 t2) (typ_prod T1 T2))
       as Ht2 by assumption.
-    inversion Ht2; subst.
-    auto.
-  - inversion Ht; subst.
-    assert (typing E D P t (typ_prod T1 T)) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    invert_typing Ht2 He Hd Hp.
+    assert (coercible v E T0 T1)
+      by eauto using invert_coercible_prod_left.
+    eauto using typing_coercible.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t (typ_prod T1 T2)) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type.
+    eauto using typing_coercible.
   - exists P.
     splits; auto.
-    inversion Ht; subst.
+    invert_typing Ht He Hd Hp.
     assert
-      (typing E D P (trm_prod t1 t2) (typ_prod T1 T))
+      (typing v E D P (trm_prod t1 t2) (typ_prod T1 T2))
       as Ht2 by assumption.
-    inversion Ht2; subst.
-    auto.
-  - inversion Ht; subst.
-    assert (typing E D P t T0) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    invert_typing Ht2 He Hd Hp.
+    assert (coercible v E T3 T2)
+      by eauto using invert_coercible_prod_right.
+    eauto using typing_coercible.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t T1) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-  - inversion Ht; subst.   
-    assert (kinding E T0 knd_type)
-      by eauto using output_typing with wellformed.
-    exists (P & l ~ T0).
+    eauto using typing_coercible.
+  - invert_typing Ht He Hd Hp.
+    exists (P & l ~ T1).
     remember Hs as Hs'.
-    destruct Hs' as [? ? ? ? Hsl].
+    destruct Hs' as [? ? ? ? ? Hsl].
     destruct (Hsl l).
-    + splits; auto using typing_store_ref with wellformed.
-        apply typing_loc with (T1 := T0); auto.
+    + splits; eauto using typing_store_ref, typing_coercible,
+        output_typing with wellformed. 
     + exfalso. eauto using binds_fresh_inv.
-  - inversion Ht; subst.
-    assert (typing E D P t (typ_ref T)) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t (typ_ref T1)) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
-    splits; auto.
+    splits; eauto using typing_coercible.
   - exists P.
     splits; auto.
-    inversion Ht; subst.
-    assert (typing E D P (trm_loc l) (typ_ref T)) as Ht2
+    invert_typing Ht He Hd Hp.
+    assert (typing v E D P (trm_loc l) (typ_ref T1)) as Ht2
         by assumption.
-    inversion Ht2; subst.
-    destruct Hs as [? ? ? ? Hsl].
+    invert_typing Ht2 He Hd Hp.
+    destruct Hs as [? ? ? ? ? Hsl].
     destruct (Hsl l).
     + exfalso. eauto using binds_fresh_inv.
-    + replace t0 with t in * by eauto using binds_func.
-      replace T0 with T1 in * by eauto using binds_func.
-      eauto using typing_equal with wellformed.
-  - inversion Ht; subst.
-    assert (typing E D P t1 (typ_ref T0)) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    + replace t0 with t in *
+        by eauto using binds_functional.
+      replace T0 with T2 in *
+        by eauto using binds_functional.
+      assert (coercible v E T2 T1)
+        by eauto using invert_coercible_ref_covariant.
+      eauto using typing_coercible.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t1 (typ_ref T1)) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type with wellformed.
-  - inversion Ht; subst.
-    assert (typing E D P t2 T0) as Ht2 by auto.
-    destruct (IHHr Hst _ Hv Hs _ Ht2)
+    eauto using typing_coercible,
+      typing_extend_store_type with wellformed.
+  - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t2 T1) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
     exists P'.
     splits; auto.
-    eauto using typing_extend_store_type with wellformed.
+    eauto using typing_coercible,
+      typing_extend_store_type with wellformed.
   - exists P.
-    inversion Ht; subst.
-    assert (typing E D P (trm_loc l) (typ_ref T0)) as Ht2
+    invert_typing Ht He Hd Hp.
+    assert (typing v E D P (trm_loc l) (typ_ref T1)) as Ht2
         by assumption.
-    inversion Ht2; subst.
-    splits; auto.
-    eapply typing_store_set;
-      eauto using typing_equal, type_equal_symmetric
-        with wellformed.
+    invert_typing Ht2 He Hd Hp.
+    splits; eauto using typing_coercible.
+    assert (coercible v E T1 T0) as Hc
+      by eauto using invert_coercible_ref_contravariant.
+    eauto using typing_store_set, typing_coercible
+      with wellformed kinding.
 Qed.
 
 (* *************************************************************** *)
@@ -313,10 +330,11 @@ Qed.
 Lemma progress : progress.
 Proof.
   unfold progress.
-  introv He Hv Hst Ht Hs.
+  introv He Hp Hv Ht Hs.
+  assert (valid_env v E empty) as Hd by auto.
   remember empty as D.
   assert (term t) as Htrm by auto with wellformed.
-  induction Ht; subst; auto.
+  induction_with_envs Ht He Hd Hp; subst; auto.
   - exfalso; eauto using binds_empty_inv.
   - inversion Htrm; subst.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
@@ -326,7 +344,8 @@ Proof.
     destruct IH1 as [Hv1|[t1' [V1' He1]]];
       destruct IH2 as [Hv2|[t2' [V2' He2]]];
         eauto.
-    destruct Hv1; inversion Ht1; subst; eauto.
+    eapply invert_value_arrow with (t := t1); try eassumption;
+      intros; subst; eauto.
   - pick_freshes_gen L (sch_arity M) Xs.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
@@ -343,45 +362,64 @@ Proof.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
     destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
-    destruct Hv1; inversion Ht; subst.
+    eapply invert_value_variant with (t := t1); try eassumption;
+      intros; subst.
     destruct (Nat.eq_dec c c0); subst; eauto.
   - inversion Htrm; subst.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
     destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
-    destruct Hv1; inversion Ht; subst.
+    eapply invert_value_variant with (t := t1); try eassumption;
+      intros; subst.    
     destruct (Nat.eq_dec c c0); subst; eauto.
     exfalso.
-    apply no_subtype_constructor_bot
-      with (E := E) (T := T6) (c := c0); auto with wellformed.
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T5 (CSet.singleton c0));
-      auto with wellformed.
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T2 (CSet.singleton c0));
-      eauto using subtype_proj, subtype_from_ranges
-        with wellformed csetdec.
-    eauto using subtype_proj_subset_bottom
-      with wellformed csetdec.
+    eapply typing_constructor_inv
+      with (c := c0) (t1 := t0); try eassumption; intros.
+    apply invert_subtype_constructor_bot
+      with (v := v) (E1 := E) (E2 := empty) (c := c0)
+           (cs := CSet.singleton c0) (T1 := T0); auto.
+    assert (subtype v E empty (typ_constructor c0 T0)
+             (typ_proj CSet.universe (CSet.singleton c0) T4)
+             (knd_row (CSet.singleton c0)))
+      as Hs1 by assumption.
+    assert (subtype v E empty T4 T1 knd_row_all)
+      as Hs2 by auto using invert_coercible_variant.
+    assert (subtype v E empty
+              (typ_proj CSet.universe (CSet.cosingleton c) T1)
+              (typ_bot (knd_row (CSet.cosingleton c)))
+              (knd_row (CSet.cosingleton c)))
+      as Hs3 by assumption.
+    apply subtype_proj_subset_bottom
+      with (cs3 := CSet.singleton c0) in Hs3; auto with csetdec.
+    rewrite Hs1.
+    rewrite Hs2.
+    rewrite Hs3.
+    sreflexivity.
   - inversion Htrm; subst.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
     destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
-    destruct Hv1; inversion Ht; subst.
+    eapply invert_value_variant with (t := t1);
+      try eassumption; intros; subst.
     exfalso.
-    apply no_subtype_constructor_bot
-      with (E := E) (T := T4) (c := c); auto with wellformed.
-    apply subtype_transitive
-      with (T2 := typ_proj CSet.universe T3 (CSet.singleton c));
-      auto with wellformed.
-    apply subtype_transitive
-      with (T2 :=
-              typ_proj CSet.universe
-                (typ_bot CSet.universe) (CSet.singleton c));
-      eauto using subtype_proj, subtype_from_ranges
-        with wellformed csetdec.
-    auto using subtype_reflexive, type_equal_proj_bot
-      with wellformed csetdec.
+    eapply typing_constructor_inv
+      with (c := c) (t1 := t0); try eassumption; intros.
+    apply invert_subtype_constructor_bot
+      with (v := v) (E1 := E) (E2 := empty) (c := c)
+           (cs := CSet.singleton c) (T1 := T0); auto.
+    assert (subtype v E empty (typ_constructor c T0)
+             (typ_proj CSet.universe (CSet.singleton c) T3)
+             (knd_row (CSet.singleton c)))
+      as Hs1 by assumption.
+    assert (subtype v E empty T3 T1 knd_row_all)
+      as Hs2 by auto using invert_coercible_variant.
+    assert (subtype v E empty T1 (typ_bot knd_row_all) knd_row_all)
+      as Hs3 by assumption.
+    rewrite Hs1.
+    rewrite Hs2.
+    rewrite Hs3.
+    rewrite type_equal_proj_bot; auto with csetdec.
+    sreflexivity.
   - inversion Htrm; subst.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by auto.
@@ -394,12 +432,14 @@ Proof.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
     destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
-    destruct Hv1; inversion Ht; subst; eauto.
+    eapply invert_value_prod with (t := t1); try eassumption;
+      intros; subst; eauto.
   - inversion Htrm; subst.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
     destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
-    destruct Hv1; inversion Ht; subst; eauto.
+    eapply invert_value_prod with (t := t1); try eassumption;
+      intros; subst; eauto.
   - inversion Htrm; subst.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
@@ -409,8 +449,11 @@ Proof.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by eauto.
     destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
-    destruct Hv1; inversion Ht; subst.
-    destruct Hs as [? ? ? ? Hsl].
+    eapply invert_value_ref with (t := t1); try eassumption;
+      intros; subst.
+    eapply typing_loc_inv with (l := l); try eassumption;
+      intros.
+    destruct Hs as [? ? ? ? ? Hsl].
     destruct (Hsl l).
     + exfalso; eauto using binds_fresh_inv.
     + eauto.
@@ -421,6 +464,7 @@ Proof.
       as IH2 by auto.
     destruct IH1 as [Hv1|[t1' [V1' He1]]];
       destruct IH2 as [Hv2|[t2' [V2' He2]]]; eauto.
-    destruct Hv1; inversion Ht1; subst.
+    eapply invert_value_ref with (t := t1); try eassumption;
+      intros; subst.
     eauto.
 Qed.

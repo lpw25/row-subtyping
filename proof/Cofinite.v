@@ -3,6 +3,8 @@
  *                 Leo White                    *
  ************************************************)
 
+(* An implementation of cofinite sets *)
+
 Set Implicit Arguments.
 
 Require Import MSets.
@@ -868,6 +870,7 @@ Module CSetFacts.
 
   End BoolSpec.
 
+(*
   (** * Declarations of morphisms with respects to [E.eq] and
         [Equal] *)
 
@@ -1034,6 +1037,7 @@ Module CSetFacts.
   intros s1 s1' Hs1 s2 s2' Hs2 a.
   rewrite !diff_iff, Hs1, Hs2; intuition.
   Qed.
+*)
 
 End CSetFacts.
 
@@ -1253,6 +1257,12 @@ Module CSetDecideAuxiliary.
         end; no_logical_interdep
       | _ => idtac
     end.
+
+  Ltac remove_reflexive_equalities :=
+    repeat
+      (match goal with
+       | H : Equal ?cs ?cs |- _ => clear H
+       end).
 
   Ltac abstract_term t :=
     tryif (is_var t) then fail "no need to abstract a variable"
@@ -1539,8 +1549,8 @@ Module CSetDecideAuxiliary.
 
   Ltac inList x xs :=
     match xs with
-    | tt => constr:false
-    | (x, _) => constr:true
+    | tt => constr:(false)
+    | (x, _) => constr:(true)
     | (_, ?xs') => inList x xs'
     end.
 
@@ -1752,6 +1762,8 @@ Ltac csetdec :=
   fold any not; intros;
   (** Rewrite logical equality to [Equal] *)
   autorewrite with Logical_eq_iff_Equal in *;
+  (* Remove pointless equalities *)
+  remove_reflexive_equalities;
   (** We don't care about the value of elements : complex ones are
       abstracted as new variables (avoiding potential dependencies,
       see bug #2464) *)
@@ -1824,6 +1836,15 @@ Hint Extern 1 (CSet.Nonuniverse _) => csetdec : csetdec.
 Hint Extern 1 (CSet.Disjoint _ _) => csetdec : csetdec.
 Hint Extern 1 (@Logic.eq CSet.t _ _) => csetdec : csetdec.
 
+Existing Class CSet.Equal.
+Existing Class CSet.Subset.
+Existing Class CSet.Nonempty.
+Existing Class CSet.Disjoint.
+
+Hint Extern 1 (CSet.Equal _ _) => csetdec : typeclass_instances.
+Hint Extern 1 (CSet.Subset _ _) => csetdec : typeclass_instances.
+Hint Extern 1 (CSet.Nonempty _) => csetdec : typeclass_instances.
+Hint Extern 1 (CSet.Disjoint _ _) => csetdec : typeclass_instances.
 
 Module CSetDecideTestCases.
 

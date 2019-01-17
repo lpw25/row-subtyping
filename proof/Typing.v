@@ -4,68 +4,17 @@
  ************************************************)
 
 Set Implicit Arguments.
-Require Import LibLN Cofinite Disjoint Definitions Utilities
-        Substitution Wellformedness Kinding Subtyping Ranging.
-
-(* ****************************************************** *)
-(** ** Add hints for constructors *)
-
-Hint Constructors valid_env valid_store_type
-  value typing typing_scheme typing_schemes.
-
-Hint Extern 1 (typing _ _ _ (trm_abs _) _) =>
-  let L' := gather_vars in
-  let L' := beautify_fset L' in
-  apply typing_abs with (L := L').
-
-Hint Extern 1 (typing _ _ _ (trm_let _ _) _) =>
-  let L' := gather_vars in
-  let L' := beautify_fset L' in
-  apply typing_let_val with (L := L').
-
-Hint Extern 1 (typing _ _ _ (trm_let _ _) _) =>
-  let L' := gather_vars in
-  let L' := beautify_fset L' in
-  apply typing_let with (L := L').
-
-Hint Extern 1 (typing _ _ _ (trm_match _ _ _ _) _) =>
-  let L' := gather_vars in
-  let L' := beautify_fset L' in
-  apply typing_match with (L := L').
-
-Hint Extern 1 (typing _ _ _ (trm_destruct _ _ _) _) =>
-  let L' := gather_vars in
-  let L' := beautify_fset L' in
-  apply typing_destruct with (L := L').
-
-Hint Extern 1 (typing _ _ _ (trm_fix _) _) =>
-  let L' := gather_vars in
-  let L' := beautify_fset L' in
-  apply typing_fix with (L := L').
-
-Hint Extern 1 (typing_scheme _ _ _ _ _) =>
-  let L' := gather_vars in
-  let L' := beautify_fset L' in
-  apply typing_scheme_c with (L := L').
-
-(* *************************************************************** *)
-(** Length of typing_schemes *)
-
-Lemma typing_schemes_length : forall E D P ts Ms,
-  typing_schemes E D P ts Ms ->
-  length ts = length Ms.
-Proof.
-  introv Hss.
-  induction Hss; simpl; auto.
-Qed.
+Require Import LibLN Utilities Cofinite Disjoint Definitions
+        Opening FreeVars Environments Subst Wellformedness
+        Weakening Substitution Kinding Subtyping Inversion Coercible.
 
 (* *************************************************************** *)
 (** Valid bindings *)
 
-Lemma valid_scheme_from_valid_env : forall X E D M,
-    valid_env E D ->
+Lemma valid_scheme_from_valid_env : forall X v E D M,
+    valid_env v E D ->
     binds X M D ->
-    valid_scheme E M.
+    valid_scheme v E M.
 Proof.
   introv He Hb.
   induction He.
@@ -74,1156 +23,951 @@ Proof.
       subst; auto.
 Qed.
 
-(* *************************************************************** *)
-(** Valid output *)
+(* ****************************************************** *)
+(** ** Environment extension by ranges of a valid scheme *)
 
-Lemma output_typing : forall E D P t T,
-  typing E D P t T ->
-  type_environment E ->
-  kinding E T knd_type.
+Lemma valid_tenv_extension_valid_scheme : forall v L E Xs M,
+    valid_scheme_aux v L E M ->
+    fresh L (sch_arity M) Xs ->
+    valid_tenv_extension v E (Xs ~: M).
 Proof.
-  introv Ht He.
-  induction Ht; auto with fresh kinding.
-  - eauto using ranging_kinding.
+  introv Hs Hf.
+  destruct Hs as [? ? ? ? Hs].
+  specialize (Hs Xs Hf).
+  inversion Hs; subst.
+  assumption.
 Qed.
 
-Lemma output_typing_scheme : forall E D P t M,
-  typing_scheme E D P t M ->
-  valid_scheme E M.
+Lemma valid_tenv_push_ranges : forall v L E Xs M,
+    valid_tenv v E ->
+    valid_scheme_aux v L E M ->
+    fresh L (sch_arity M) Xs ->
+    valid_tenv v (E & Xs ~: M).
 Proof.
-  introv Hs.
-  destruct Hs; auto.
+  introv Ht Hs Hf.
+  eauto using valid_tenv_extend,
+    valid_tenv_extension_valid_scheme.
 Qed.
+
+(* ****************************************************** *)
+(** ** Induction scheme with valid environments *)
+
+Record typing_with_envs v E D P t T :=
+  typing_with_envs_c
+    { He : valid_tenv v E;
+      Hd : valid_env v E D;
+      Hp : valid_store_type E P;
+      Ht : typing v E D P t T; }.
+
+Hint Constructors typing_with_envs.
+
+Lemma typing_with_envs_ind :
+  forall (Q : version -> tenv -> env -> styp ->
+              trm -> typ -> Prop),
+    (forall (E : tenv) (D : env) (P : styp) 
+            (t : trm) (T1 T2 : typ),
+        valid_tenv version_row_subtyping E ->
+        valid_tenv_extension version_row_subtyping E empty ->
+        valid_env version_row_subtyping E D ->
+        valid_store_type E P ->
+        typing version_row_subtyping E D P t T1 ->
+        Q version_row_subtyping E D P t T1 ->
+        type_equal version_row_subtyping
+                   E empty T1 T2 knd_type ->
+        Q version_row_subtyping E D P t T2) ->
+    (forall (E : tenv) (D : env) (P : styp) 
+            (t : trm) (T1 T2 : typ),
+        valid_tenv version_full_subtyping E ->
+        valid_tenv_extension version_full_subtyping E empty ->
+        valid_env version_full_subtyping E D ->
+        valid_store_type E P ->
+        typing version_full_subtyping E D P t T1 ->
+        Q version_full_subtyping E D P t T1 ->
+        subtype version_full_subtyping
+                E empty T1 T2 knd_type ->
+        Q version_full_subtyping E D P t T2) ->
+    (forall (v : version) (E : tenv)
+            (D : LibEnv.env sch) (P : styp) 
+            (x : var) (M : sch) (T1 : typ) 
+            (Us : list typ),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        binds x M D ->
+        valid_instance v E Us M ->
+        T1 = instance M Us ->
+        Q v E D P (trm_fvar x) T1) ->
+    (forall (L : fset var) (v : version) 
+            (E : tenv) (D : LibEnv.env sch) 
+            (P : styp) (T1 T2 : typ) (t1 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        kinding E empty T1 knd_type ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            typing v E (D & x ~ sch_empty T1) P (t1 ^ x) T2) ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            Q v E (D & x ~ sch_empty T1) P (t1 ^ x) T2) ->
+        Q v E D P (trm_abs t1) (typ_arrow T1 T2)) ->
+    (forall (v : version) (E : tenv) 
+            (P : styp) (D : env) (T1 T2 : typ) 
+            (t1 t2 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 (typ_arrow T1 T2) ->
+        Q v E D P t1 (typ_arrow T1 T2) ->
+        typing v E D P t2 T1 ->
+        Q v E D P t2 T1 -> Q v E D P (trm_app t1 t2) T2) ->
+    (forall (L : vars) (M : sch) (v : version)
+            (E : tenv) (D : env) (P : styp) 
+            (T2 : typ) (t1 t2 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        value t1 ->
+        valid_scheme_aux v L E M ->
+        (forall Xs : list var,
+            fresh L (sch_arity M) Xs ->
+            typing v (E & Xs ~: M) D P t1
+                   (instance_vars M Xs)) ->
+        (forall Xs : list var,
+            fresh L (sch_arity M) Xs ->
+            Q v (E & Xs ~: M) D P t1 (instance_vars M Xs)) ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            typing v E (D & x ~ M) P (t2 ^ x) T2) ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            Q v E (D & x ~ M) P (t2 ^ x) T2) ->
+        Q v E D P (trm_let t1 t2) T2) ->
+    (forall (L : fset var) (v : version) 
+            (E : tenv) (D : env) (P : styp) 
+            (T1 T2 : typ) (t1 t2 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        kinding E empty T1 knd_type ->
+        typing v E D P t1 T1 ->
+        Q v E D P t1 T1 ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            typing v E (D & x ~ sch_empty T1) P (t2 ^ x) T2) ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            Q v E (D & x ~ sch_empty T1) P (t2 ^ x) T2) ->
+        Q v E D P (trm_let t1 t2) T2) ->
+    (forall (c : CSet.MSet.elt) (v : version) 
+            (E : tenv) (D : env) (P : styp) 
+            (T1 T2 : typ) (t : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t T1 ->
+        Q v E D P t T1 ->
+        subtype v E empty (typ_constructor c T1)
+                (typ_proj CSet.universe (CSet.singleton c) T2)
+                (knd_row (CSet.singleton c)) ->
+        Q v E D P (trm_constructor c t) (typ_variant T2)) ->
+    (forall (L : fset var) (c : CSet.MSet.elt)
+            (v : version) (E : tenv) (D : env) 
+            (P : styp) (T1 T2 T3 T4 : typ) 
+            (t1 t2 t3 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 (typ_variant T1) ->
+        Q v E D P t1 (typ_variant T1) ->
+        subtype v E empty
+                (typ_proj CSet.universe (CSet.singleton c) T1)
+                (typ_proj CSet.universe (CSet.singleton c) T2)
+                (knd_row (CSet.singleton c)) ->
+        subtype v E empty
+                (typ_proj CSet.universe (CSet.cosingleton c) T1)
+                (typ_proj CSet.universe (CSet.cosingleton c) T3)
+                (knd_row (CSet.cosingleton c)) ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            typing v E (D & x ~ sch_empty (typ_variant T2)) P
+                   (t2 ^ x) T4) ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            Q v E (D & x ~ sch_empty (typ_variant T2)) P
+              (t2 ^ x) T4) ->
+        (forall y : var,
+            y \notin (L \u dom D) ->
+            typing v E (D & y ~ sch_empty (typ_variant T3)) P
+                   (t3 ^ y) T4) ->
+        (forall y : var,
+            y \notin (L \u dom D) ->
+            Q v E (D & y ~ sch_empty (typ_variant T3)) P
+              (t3 ^ y) T4) ->
+        Q v E D P (trm_match t1 c t2 t3) T4) ->
+    (forall (L : fset var) (c : CSet.MSet.elt)
+            (v : version) (E : tenv) (D : env) 
+            (P : styp) (T1 T2 T3 : typ) 
+            (t1 t2 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 (typ_variant T1) ->
+        Q v E D P t1 (typ_variant T1) ->
+        subtype v E empty
+                (typ_proj CSet.universe (CSet.singleton c) T1)
+                (typ_constructor c T2)
+                (knd_row (CSet.singleton c)) ->
+        subtype v E empty
+                (typ_proj CSet.universe (CSet.cosingleton c) T1)
+                (typ_bot (knd_row (CSet.cosingleton c)))
+                (knd_row (CSet.cosingleton c)) ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            typing v E (D & x ~ sch_empty T2) P (t2 ^ x) T3) ->
+        (forall x : var,
+            x \notin (L \u dom D) ->
+            Q v E (D & x ~ sch_empty T2) P (t2 ^ x) T3) ->
+        Q v E D P (trm_destruct t1 c t2) T3) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : styp) (T1 T2 : typ) 
+            (t1 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 (typ_variant T1) ->
+        Q v E D P t1 (typ_variant T1) ->
+        subtype v E empty T1 (typ_bot knd_row_all)
+                knd_row_all ->
+        kinding E empty T2 knd_type ->
+        Q v E D P (trm_absurd t1) T2) ->
+    (forall (L : fset var) (v : version) 
+            (E : tenv) (D : LibEnv.env sch) 
+            (P : styp) (T1 T2 : typ) (t1 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        kinding E empty T1 knd_type ->
+        kinding E empty T2 knd_type ->
+        (forall x y : var,
+            x \notin (L \u dom D) ->
+            y \notin (L \u dom D \u \{ x}) ->
+            typing v E
+                   (D & x ~ sch_empty (typ_arrow T1 T2) &
+                    y ~ sch_empty T1) P
+                   (t1 ^* y :: (x :: nil)%list) T2) ->
+        (forall x y : var,
+            x \notin (L \u dom D) ->
+            y \notin (L \u dom D \u \{ x}) ->
+            Q v E
+              (D & x ~ sch_empty (typ_arrow T1 T2) &
+               y ~ sch_empty T1) P
+              (t1 ^* y :: (x :: nil)%list) T2) ->
+        Q v E D P (trm_fix t1) (typ_arrow T1 T2)) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : styp),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        Q v E D P trm_unit typ_unit) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : styp) (T1 T2 : typ) 
+            (t1 t2 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 T1 ->
+        Q v E D P t1 T1 ->
+        typing v E D P t2 T2 ->
+        Q v E D P t2 T2 ->
+        Q v E D P (trm_prod t1 t2) (typ_prod T1 T2)) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : styp) (T1 T2 : typ) 
+            (t1 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 (typ_prod T1 T2) ->
+        Q v E D P t1 (typ_prod T1 T2) ->
+        Q v E D P (trm_fst t1) T1) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : styp) (T1 T2 : typ) 
+            (t1 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 (typ_prod T1 T2) ->
+        Q v E D P t1 (typ_prod T1 T2) ->
+        Q v E D P (trm_snd t1) T2) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : LibEnv.env typ) 
+            (l : var) (T1 : typ),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        binds l T1 P -> Q v E D P (trm_loc l) (typ_ref T1)) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : styp) (t1 : trm) 
+            (T1 : typ),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 T1 ->
+        Q v E D P t1 T1 ->
+        Q v E D P (trm_ref t1) (typ_ref T1)) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : styp) (t1 : trm) 
+            (T1 : typ),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 (typ_ref T1) ->
+        Q v E D P t1 (typ_ref T1) ->
+        Q v E D P (trm_get t1) T1) ->
+    (forall (v : version) (E : tenv) 
+            (D : env) (P : styp) (t1 t2 : trm) 
+            (T1 : typ),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 (typ_ref T1) ->
+        Q v E D P t1 (typ_ref T1) ->
+        typing v E D P t2 T1 ->
+        Q v E D P t2 T1 ->
+        Q v E D P (trm_set t1 t2) typ_unit) ->
+    forall (v : version) (E : tenv) 
+           (D : env) (P : styp) (t : trm) 
+           (T : typ),
+      typing_with_envs v E D P t T ->
+      Q v E D P t T.
+Proof.
+  introv H1 H2 H3 H4 H5 H6 H7 H8 H9 H10.
+  introv H11 H12 H13 H14 H15 H16 H17 H18 H19 H20.
+  introv Htwe.
+  destruct Htwe as [He Hd Hp Ht].
+  induction Ht;
+    [> apply H1 with (T1 := T1) | apply H2 with (T1 := T1)
+     | apply H3 with (M := M) (Us := Us) | apply H4 with (L := L)
+     | apply H5 with (T1 := T1) | apply H6 with (L := L) (M := M)
+     | apply H7 with (L := L) (T1 := T1) | apply H8 with (T1 := T1)
+     | apply H9 with (L := L) (T1 := T1) (T2 := T2) (T3 := T3)
+     | apply H10 with (L := L) (T1 := T1) (T2 := T2)
+     | apply H11 with (T1 := T1) | apply H12 with (L := L)
+     | apply H13 | apply H14 | apply H15 with (T2 := T2)
+     | apply H16 with (T1 := T1) | apply H17 | apply H18
+     | apply H19 | apply H20 with (T1 := T1) ];
+    clear H1 H2 H3 H4 H5 H6 H7 H8 H9 H10
+          H11 H12 H13 H14 H15 H16 H17 H18 H19 H20;
+    auto.
+  - auto using valid_scheme_empty_of_kinding.
+  - introv Hf.
+    assert (valid_tenv v (E & Xs ~: M)) by
+      eauto using valid_tenv_push_ranges.
+    auto using valid_env_weakening_l,
+      valid_store_type_weakening_l with wellformed.
+  - eauto.
+  - auto using valid_scheme_empty_of_kinding.
+  - assert (valid_tenv_extension v E empty) by auto.
+    auto using valid_scheme_empty_of_kinding with kinding.
+  - assert (valid_tenv_extension v E empty) by auto.
+    auto using valid_scheme_empty_of_kinding with kinding.
+  - assert (valid_tenv_extension v E empty) by auto.
+    auto using valid_scheme_empty_of_kinding with kinding.
+  - auto 7 using valid_scheme_empty_of_kinding,
+      kinding_concat_empty.
+Qed.
+
+Ltac induction_with_envs Ht He Hd Hp :=
+  let Htwe := fresh "Htwe" in
+  let Heq := fresh "Heq" in
+  remember (typing_with_envs_c He Hd Hp Ht) as Htwe eqn:Heq;
+  clear Ht He Hd Hp Heq;
+  induction Htwe using typing_with_envs_ind.
+
+(* ****************************************************** *)
+(** ** Valid output *)
+
+Lemma output_typing : forall v E D P t T,
+    typing v E D P t T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    kinding E empty T knd_type.
+Proof.
+  introv Ht He Hd Hp.
+  induction_with_envs Ht He Hd Hp;
+    auto with kinding fresh.
+  - subst; apply kinding_instance with (v := v);
+      eauto using valid_scheme_from_valid_env
+        with wellformed.
+  - constructor; autorewrite with rew_env_concat;
+      auto with fresh.
+  - constructor; autorewrite with rew_env_concat;
+      eauto using kinding_from_valid_store_type.
+Qed.    
+
+(* ****************************************************** *)
+(** ** Typing inversions *)
+
+Ltac solve_inv_body H coercible T :=
+  let Hc := fresh "Hc" in
+  introv Hc; intros;
+  inversion Hc; subst;
+  eapply H;
+    try solve [apply coercible; transitivity T; eauto];
+    eauto.
+
+Ltac solve_inv :=
+  let Ht := fresh "Ht" in
+  let He := fresh "He" in
+  let Hd := fresh "Hd" in
+  let Hp := fresh "Hp" in
+  let Hq := fresh "Hq" in
+  let t := fresh "t" in
+  introv Ht He Hd Hp Hq;
+  match type of Ht with
+  | typing _ _ _ _ ?tm _ =>
+    remember tm as t
+  end;
+  apply output_typing in Ht as Hk; auto;
+  induction_with_envs Ht He Hd Hp; inversion Heqt; subst;
+  [> match goal with
+     | IH : _ = _ -> kinding _ empty ?Tt knd_type -> _ -> ?R
+       |- ?R =>
+       apply IH; auto with kinding;
+       solve_inv_body Hq coercible_row Tt
+     end
+  |  match goal with
+     | IH : _ = _ -> kinding _ empty ?Tt knd_type -> _ -> ?R
+       |- ?R =>
+       apply IH; auto with kinding;
+       solve_inv_body Hq coercible_full Tt
+     end
+  |  eauto 6 using coercible_refl ].
+
+Lemma typing_var_inv : forall v E D P x T (Q : Prop),
+    typing v E D P (trm_fvar x) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall M T1 Us,
+      coercible v E T1 T ->
+      typing v E D P (trm_fvar x) T1 ->
+      binds x M D -> 
+      valid_instance v E Us M ->
+      T1 = instance M Us ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_abs_inv : forall v E D P t1 T (Q : Prop),
+    typing v E D P (trm_abs t1) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall L T1 T2,
+        coercible v E (typ_arrow T1 T2) T ->
+        typing v E D P (trm_abs t1) (typ_arrow T1 T2) ->
+        kinding E empty T1 knd_type ->
+        (forall x, x \notin (L \u dom D) -> 
+          typing v E (D & x ~ sch_empty T1) P (t1 ^ x) T2) -> 
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_app_inv : forall v E D P t1 t2 T (Q : Prop),
+    typing v E D P (trm_app t1 t2) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1 T2,
+      coercible v E T2 T ->
+      typing v E D P (trm_app t1 t2) T2 ->
+      typing v E D P t1 (typ_arrow T1 T2) ->
+      typing v E D P t2 T1 ->   
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_let_inv : forall v E D P t1 t2 T (Q : Prop),
+    typing v E D P (trm_let t1 t2) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall L M T2,
+      coercible v E T2 T ->
+      typing v E D P (trm_let t1 t2) T2 ->
+      value t1 ->
+      valid_scheme_aux v L E M ->
+      (forall Xs,
+          fresh L (sch_arity M) Xs ->
+          typing v
+            (E & Xs ~: M) D P
+            t1 (instance_vars M Xs)) ->
+      (forall x,
+          x \notin (L \u dom D) ->
+          typing v E (D & x ~ M) P (t2 ^ x) T2) ->
+      Q) ->
+    (forall L T1 T2,
+        coercible v E T2 T ->
+        typing v E D P (trm_let t1 t2) T2 ->
+        typing v E D P t1 T1 ->
+        (forall x,
+            x \notin (L \u dom D) ->
+            typing v E (D & x ~ sch_empty T1) P (t2 ^ x) T2) ->
+        Q) ->
+    Q.
+Proof.
+  introv Ht He Hd Hp Hq1 Hq2.
+  remember (trm_let t1 t2) as t.
+  apply output_typing in Ht as Hk; auto.
+  induction_with_envs Ht He Hd Hp; inversion Heqt; subst.
+  - apply IHHtwe; auto with kinding.
+    + solve_inv_body Hq1 coercible_row T2.
+    + solve_inv_body Hq2 coercible_row T1.
+  - apply IHHtwe; auto with kinding.
+    + solve_inv_body Hq1 coercible_full T2.
+    + solve_inv_body Hq2 coercible_full T1.
+  - eapply Hq1 with (T3 := T2) (L := L);
+      try apply coercible_refl;
+      try eapply typing_let_val with (L := L \u dom D);
+      eauto using valid_scheme_aux_subset,
+        subset_union_weak_l.
+  - eapply Hq2 with (T3 := T2) (L := L);
+      try apply coercible_refl;
+      try eapply typing_let with (L := L \u dom D);
+      eauto using valid_scheme_aux_subset,
+        subset_union_weak_l.
+Qed.
+
+Lemma typing_constructor_inv : forall v E D P c t1 T (Q : Prop),
+    typing v E D P (trm_constructor c t1) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1 T2,
+      coercible v E (typ_variant T2) T ->
+      typing v E D P (trm_constructor c t1) (typ_variant T2) ->
+      typing v E D P t1 T1 ->
+      subtype v E empty
+        (typ_constructor c T1)
+        (typ_proj CSet.universe (CSet.singleton c) T2)
+        (knd_row (CSet.singleton c)) ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_match_inv :
+  forall v E D P t1 c t2 t3 T (Q : Prop),
+    typing v E D P (trm_match t1 c t2 t3) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall L T1 T2 T3 T4,
+      coercible v E T4 T ->
+      typing v E D P (trm_match t1 c t2 t3) T4 ->
+      typing v E D P t1 (typ_variant T1) ->
+      subtype v E empty
+        (typ_proj CSet.universe (CSet.singleton c) T1)
+        (typ_proj CSet.universe (CSet.singleton c) T2)
+        (knd_row (CSet.singleton c)) ->
+      subtype v E empty
+        (typ_proj CSet.universe (CSet.cosingleton c) T1)
+        (typ_proj CSet.universe (CSet.cosingleton c) T3)
+        (knd_row (CSet.cosingleton c)) ->
+      (forall x, x \notin L ->
+         typing v E (D & x ~ (sch_empty (typ_variant T2))) P
+                (t2 ^ x) T4) ->
+      (forall y, y \notin L -> 
+         typing v E (D & y ~ (sch_empty (typ_variant T3))) P
+                (t3 ^ y) T4) ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_destruct_inv :
+  forall v E D P t1 c t2 T (Q : Prop),
+    typing v E D P (trm_destruct t1 c t2) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall L T1 T2 T3,
+      coercible v E T3 T ->
+      typing v E D P (trm_destruct t1 c t2) T3 ->
+      typing v E D P t1 (typ_variant T1) ->
+      subtype v E empty
+        (typ_proj CSet.universe (CSet.singleton c) T1)
+        (typ_constructor c T2)
+        (knd_row (CSet.singleton c)) ->
+      subtype v E empty
+        (typ_proj CSet.universe (CSet.cosingleton c) T1)
+        (typ_bot (knd_row (CSet.cosingleton c)))
+        (knd_row (CSet.cosingleton c)) ->
+      (forall x, x \notin L ->
+         typing v E (D & x ~ (sch_empty T2)) P
+                (t2 ^ x) T3) ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_absurd_inv :
+  forall v E D P t1 T (Q : Prop),
+    typing v E D P (trm_absurd t1) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1 T2,
+      coercible v E T2 T ->
+      typing v E D P (trm_absurd t1) T2 ->
+      typing v E D P t1 (typ_variant T1) ->
+      subtype v E empty T1 (typ_bot knd_row_all) knd_row_all ->
+      kinding E empty T2 knd_type ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_fix_inv :
+  forall v E D P t1 T (Q : Prop),
+    typing v E D P (trm_fix t1) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall L T1 T2,
+      coercible v E (typ_arrow T1 T2) T ->
+      typing v E D P (trm_fix t1) (typ_arrow T1 T2) ->
+      kinding E empty T1 knd_type ->
+      kinding E empty T2 knd_type ->
+      (forall x y,
+          x \notin L -> y \notin (L \u \{x}) ->
+          typing
+            v E (D & x ~ sch_empty (typ_arrow T1 T2)
+                 & y ~ sch_empty T1)
+            P (t1 ^* (cons y (cons x nil))) T2) -> 
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_unit_inv :
+  forall v E D P T (Q : Prop),
+    typing v E D P trm_unit T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (coercible v E typ_unit T ->
+     typing v E D P trm_unit typ_unit ->
+     Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_prod_inv :
+  forall v E D P t1 t2 T (Q : Prop),
+    typing v E D P (trm_prod t1 t2) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1 T2,
+      coercible v E (typ_prod T1 T2) T ->
+      typing v E D P (trm_prod t1 t2) (typ_prod T1 T2) ->
+      typing v E D P t1 T1 ->
+      typing v E D P t2 T2 ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_fst_inv :
+  forall v E D P t1 T (Q : Prop),
+    typing v E D P (trm_fst t1) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1 T2,
+      coercible v E T1 T ->
+      typing v E D P (trm_fst t1) T1 ->
+      typing v E D P t1 (typ_prod T1 T2) ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_snd_inv :
+  forall v E D P t1 T (Q : Prop),
+    typing v E D P (trm_snd t1) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1 T2,
+      coercible v E T2 T ->
+      typing v E D P (trm_snd t1) T2 ->
+      typing v E D P t1 (typ_prod T1 T2) ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_loc_inv :
+  forall v E D P l T (Q : Prop),
+    typing v E D P (trm_loc l) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1,
+      coercible v E (typ_ref T1) T ->
+      typing v E D P (trm_loc l) (typ_ref T1) ->
+      binds l T1 P ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_ref_inv :
+  forall v E D P t1 T (Q : Prop),
+    typing v E D P (trm_ref t1) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1,
+      coercible v E (typ_ref T1) T ->
+      typing v E D P (trm_ref t1) (typ_ref T1) ->
+      typing v E D P t1 T1 ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_get_inv :
+  forall v E D P t1 T (Q : Prop),
+    typing v E D P (trm_get t1) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1,
+      coercible v E T1 T ->
+      typing v E D P (trm_get t1) T1 ->
+      typing v E D P t1 (typ_ref T1) ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Lemma typing_set_inv :
+  forall v E D P t1 t2 T (Q : Prop),
+    typing v E D P (trm_set t1 t2) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1,
+      coercible v E typ_unit T ->
+      typing v E D P (trm_set t1 t2) typ_unit ->
+      typing v E D P t1 (typ_ref T1) ->
+      typing v E D P t2 T1 ->
+      Q) ->
+    Q.
+Proof. solve_inv. Qed.
+
+Ltac invert_typing Ht He Hd Hp :=
+  match type of Ht with
+  | typing _ _ _ _ (trm_fvar _) _ =>
+    apply (typing_var_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_abs _) _ =>
+    apply (typing_abs_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_app _ _) _ =>
+    apply (typing_app_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_let _ _) _ =>
+    apply (typing_let_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_constructor _ _) _ =>
+    apply (typing_constructor_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_match _ _ _ _) _ =>
+    apply (typing_match_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_destruct _ _ _) _ =>
+    apply (typing_destruct_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_absurd _) _ =>
+    apply (typing_absurd_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_fix _) _ =>
+    apply (typing_fix_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ trm_unit _ =>
+    apply (typing_unit_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_prod _ _) _ =>
+    apply (typing_prod_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_fst _) _ =>
+    apply (typing_fst_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_snd _) _ =>
+    apply (typing_snd_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_loc _) _ =>
+    apply (typing_loc_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_ref _) _ =>
+    apply (typing_ref_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_get _) _ =>
+    apply (typing_get_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_set _ _) _ =>
+    apply (typing_set_inv Ht He Hd Hp); intros
+  end.
 
 (* ****************************************************** *)
 (** ** Typing empty scheme *)
 
-Lemma typing_scheme_empty : forall E D P t T,
-    type_environment E ->
-    typing E D P t T <-> typing_scheme E D P t (sch_empty T).
+Lemma typing_scheme_empty : forall v E D P t T,
+    typing v E D P t T <-> typing_scheme v E D P t (sch_empty T).
 Proof.
-  introv He.
   split; introv Ht.
-  - assert (kinding E T knd_type)
-      by eauto using output_typing.
-    apply typing_scheme_c with (L := \{});
-      try rewrite <- valid_scheme_empty;
-      simpl; auto.
-    introv Hf.
-    fresh_length Hf as Hl.
-    destruct Xs; try discriminate.
-    unfold sch_empty, instance_vars, instance, bind_sch_ranges;
-      simpl; autorewrite with rew_env_concat;
-        rewrite typ_open_nil; auto.
+  - apply typing_scheme_c with (L := \{}).
+    intros Xs Hf.
+    apply fresh_zero in Hf; subst.
+    rewrite instance_vars_empty_nil.
+    unfold sch_empty, bind_sch_ranges; simpl.
+    apply valid_tenv_extension_and_typing_c;
+      autorewrite with rew_env_concat; auto.   
   - remember (sch_empty T) as M.
     destruct Ht; subst.
-    unfold sch_empty, instance_vars, instance, bind_sch_ranges in *;
-      simpl in *.
     assert
-      (typing (E & nil ~* nil) D P t
-         (typ_open T (typ_fvars nil))) by auto.
-    simpl in *; autorewrite with rew_env_concat in *;
-      rewrite typ_open_nil in *; auto.
-Qed.
-
-(* ****************************************************** *)
-(** ** Weakening type environment *)
-
-Lemma typing_tenv_weakening : forall E1 E2 E3 D P t T,
-    typing (E1 & E3) D P t T ->
-    type_environment (E1 & E2 & E3) ->
-    typing (E1 & E2 & E3) D P t T.
-Proof.
-  introv Ht He.
-  remember (E1 & E3) as E13.
-  generalize dependent E3.
-  induction Ht; introv Heq He; subst;
-    eauto using binds_env_weakening,
-      kinding_weakening, subtype_weakening, type_equal_weakening,
-      ranging_weakening, valid_instance_weakening.
-  - apply typing_let_val
-      with (M := M) (L := L \u dom E1 \u dom E2 \u dom E3);
-      eauto using valid_scheme_weakening.
-    intros Xs Hf.
-    assert (type_environment (E1 & E2 & E3 & Xs ~: M)) as He2
-      by (apply type_environment_push_ranges;
-          autorewrite with rew_tenv_dom; auto with wellformed).
-    rewrite <- concat_assoc.
-    rewrite <- concat_assoc in He2.
-    auto using concat_assoc.
-  - eapply typing_match with (T1 := T1) (T2 := T2) (T3 := T3);
-      eauto using binds_env_weakening,
-        kinding_weakening, subtype_weakening, type_equal_weakening,
-        ranging_weakening, valid_instance_weakening.
-  - eapply typing_destruct with (T1 := T1) (T2 := T2) (T3 := T3);
-      eauto using binds_env_weakening,
-        kinding_weakening, subtype_weakening, type_equal_weakening,
-        ranging_weakening, valid_instance_weakening.
-Qed.    
-
-Lemma typing_tenv_weakening_l : forall E1 E2 D P t T,
-    typing E1 D P t T ->
-    type_environment (E1 & E2) ->
-    typing (E1 & E2) D P t T.
-Proof.
-  introv Ht He.
-  rewrite <- concat_empty_r with (E := E1 & E2).
-  apply typing_tenv_weakening; rewrite concat_empty_r; assumption.
-Qed.
-
-Lemma typing_scheme_tenv_weakening : forall E1 E2 E3 D P t M,
-    typing_scheme (E1 & E3) D P t M ->
-    type_environment (E1 & E2 & E3) ->
-    typing_scheme (E1 & E2 & E3) D P t M.
-Proof.
-  introv Ht He.
-  remember (E1 & E3) as E13.
-  destruct Ht; subst.
-  apply typing_scheme_c
-    with (L := L \u dom E1 \u dom E2 \u dom E3);
-      eauto using valid_scheme_weakening.
-  intros Xs Hf.
-  assert (type_environment (E1 & E2 & E3 & Xs ~: M)) as He2
-    by (apply type_environment_push_ranges;
-        autorewrite with rew_tenv_dom; auto with wellformed).
-  rewrite <- concat_assoc.
-  apply typing_tenv_weakening;
-    rewrite concat_assoc;
-    eauto using valid_scheme_weakening.
-Qed.
-
-Lemma typing_schemes_tenv_weakening : forall E1 E2 E3 D P ts Ms,
-    typing_schemes (E1 & E3) D P ts Ms ->
-    type_environment (E1 & E2 & E3) ->
-    typing_schemes (E1 & E2 & E3) D P ts Ms.
-Proof.
-  introv Ht He.
-  remember (E1 & E3) as E13.
-  induction Ht; subst;
-    auto using typing_scheme_tenv_weakening.
-Qed.
-
-Lemma typing_schemes_tenv_weakening_l : forall E1 E2 D P ts Ms,
-    typing_schemes E1 D P ts Ms ->
-    type_environment (E1 & E2) ->
-    typing_schemes (E1 & E2) D P ts Ms.
-Proof.
-  introv Ht Hv.
-  rewrite <- concat_empty_r with (E := E1 & E2).
-  apply typing_schemes_tenv_weakening;
-    rewrite concat_empty_r; assumption.
-Qed.
-
-Lemma valid_store_type_weakening : forall E1 E2 E3 P,
-    valid_store_type (E1 & E3) P ->
-    type_environment (E1 & E2 & E3) ->
-    valid_store_type (E1 & E2 & E3) P.
-Proof.
-  introv Hv He.
-  remember (E1 & E3) as E13.
-  induction Hv; subst; auto using kinding_weakening.
-Qed.
-
-Lemma valid_store_type_weakening_l : forall E1 E2 P,
-    valid_store_type E1 P ->
-    type_environment (E1 & E2) ->
-    valid_store_type (E1 & E2) P.
-Proof.
-  introv Hv He.
-  rewrite <- concat_empty_r with (E := E1 & E2).
-  apply valid_store_type_weakening;
-    rewrite concat_empty_r; auto.
-Qed.
-
-(* ****************************************************** *)
-(** ** Type subtitution *)
-
-Lemma typing_typ_subst : forall E1 E2 Xs Rs Us D P t T,
-    typing (E1 & Xs ~* Rs & E2) D P t T ->
-    length Xs = length Rs ->
-    type_environment (E1 & Xs ~* Rs & E2) ->
-    rangings (tenv_subst Xs Us (E1 & E2))
-      Us (rng_subst_list Xs Us Rs) ->
-    typing (tenv_subst Xs Us (E1 & E2))
-      (env_subst Xs Us D) (styp_subst Xs Us P) t
-           (typ_subst Xs Us T).
-Proof.
-  introv Ht Hl He Hrs.
-  remember (E1 & Xs ~* Rs & E2) as E3 in Ht.
-  generalize dependent E2.
-  induction Ht; introv Heq He Hrs; subst; eauto.
-  - eapply typing_var;
-      eauto using env_subst_binds, valid_instance_typ_subst.
-    rewrite <- sch_subst_instance;
-      eauto using type_equal_typ_subst with wellformed.
-  - assert (kindings (tenv_subst Xs Us (E1 & E2))
-            Us (rngs_knds (rng_subst_list Xs Us Rs)))
-      by eauto using kinding_typ_subst, rangings_kindings.
-    apply_fresh typing_abs as x;
-      eauto using kinding_typ_subst.
-    fold (typ_subst Xs Us T1).
-    replace (sch_empty (typ_subst Xs Us T1))
-      with (sch_subst Xs Us (sch_empty T1)) by reflexivity.
-    rewrite <- env_subst_push.
+      (valid_tenv_extension_and_typing v E
+        (nil ~: sch_empty T) D P t (instance_vars (sch_empty T) nil))
+      as Hv by auto.
+    rewrite instance_vars_empty_nil in Hv.
+    unfold sch_empty, bind_sch_ranges in Hv; simpl in Hv.
+    inversion Hv; subst.
+    autorewrite with rew_env_concat in *.
     auto.
-  - apply typing_let_val
-      with (L := L \u from_list Xs \u dom E1 \u dom E2)
-           (M := sch_subst Xs Us M);
-      eauto using valid_scheme_typ_subst.
-    + introv Hf.
-      autorewrite with rew_sch_arity in Hf.
-      fresh_length Hf as Hl2.
-      rewrite <- tenv_subst_ranges;
-        autorewrite with rew_env_dom; auto with wellformed.
-      rewrite <- tenv_subst_concat.
-      rewrite <- concat_assoc.
-      unfold instance_vars.
-      rewrite <- typ_subst_fresh_typ_fvars
-        with (Xs := Xs) (Us := Us); auto.
-      rewrite <- sch_subst_instance; auto with wellformed.
-      eauto using concat_assoc, rangings_add_subst_ranges,
-        type_environment_push_subst_ranges
-          with wellformed.
-    + introv Hn.
-      rewrite <- env_subst_push; auto.
-  - apply typing_let
-      with (L := L \u from_list Xs \u dom E1 \u dom E2)
-             (T1 := typ_subst Xs Us T1); auto.
-    introv Hn.
-    replace (sch_empty (typ_subst Xs Us T1))
-      with (sch_subst Xs Us (sch_empty T1)) by reflexivity.
-    rewrite <- env_subst_push; auto.
-  - apply typing_constructor
-      with (T2 := typ_subst Xs Us T2) (T3 := typ_subst Xs Us T3); auto.
-    + replace (rng_range_above (typ_subst Xs Us T2))
-        with (rng_subst Xs Us (rng_range_above T2))
-        by reflexivity.
-      eauto using ranging_typ_subst.
-    + replace (typ_constructor c (typ_subst Xs Us T3))
-        with (typ_subst Xs Us (typ_constructor c T3))
-        by reflexivity.
-      replace (typ_proj CSet.universe (typ_subst Xs Us T2)
-                        (CSet.singleton c))
-        with (typ_subst Xs Us (typ_proj CSet.universe T2
-                                        (CSet.singleton c)))
-        by reflexivity.
-      eauto using subtype_typ_subst.
-  - apply typing_match
-      with (T1 := typ_subst Xs Us T1) (T2 := typ_subst Xs Us T2)
-           (T3 := typ_subst Xs Us T3) (T4 := typ_subst Xs Us T4)
-           (T5 := typ_subst Xs Us T5) (T6 := typ_subst Xs Us T6)
-           (T7 := typ_subst Xs Us T7)
-           (L := L \u dom E1 \u dom E2); auto.
-    + replace (rng_range_below (typ_subst Xs Us T2))
-        with (rng_subst Xs Us (rng_range_below T2))
-        by reflexivity.
-      eauto using ranging_typ_subst.
-    + replace (rng_range_above (typ_subst Xs Us T4))
-        with (rng_subst Xs Us (rng_range_above T4))
-        by reflexivity.
-      eauto using ranging_typ_subst.
-    + replace (rng_range_above (typ_subst Xs Us T6))
-        with (rng_subst Xs Us (rng_range_above T6))
-        by reflexivity.
-      eauto using ranging_typ_subst.
-    + replace
-        (typ_proj CSet.universe (typ_subst Xs Us T2)
-           (CSet.singleton c))
-        with (typ_subst Xs Us
-                (typ_proj CSet.universe T2 (CSet.singleton c)))
-        by reflexivity.
-      replace (typ_constructor c (typ_subst Xs Us T7))
-        with (typ_subst Xs Us (typ_constructor c T7)) by reflexivity.
-      eauto using subtype_typ_subst.
-    + replace
-        (typ_proj CSet.universe (typ_subst Xs Us T2)
-           (CSet.singleton c))
-        with (typ_subst Xs Us
-                (typ_proj CSet.universe T2 (CSet.singleton c)))
-        by reflexivity.
-      replace
-        (typ_proj CSet.universe (typ_subst Xs Us T4)
-           (CSet.singleton c))
-        with (typ_subst Xs Us
-                (typ_proj CSet.universe T4 (CSet.singleton c)))
-        by reflexivity.
-      eauto using subtype_typ_subst.
-    + replace
-        (typ_proj
-           CSet.universe (typ_subst Xs Us T2) (CSet.cosingleton c))
-        with (typ_subst Xs Us
-                (typ_proj CSet.universe T2 (CSet.cosingleton c)))
-        by reflexivity.
-      replace
-        (typ_proj
-           CSet.universe (typ_subst Xs Us T6) (CSet.cosingleton c))
-        with (typ_subst Xs Us
-                (typ_proj CSet.universe T6 (CSet.cosingleton c)))
-        by reflexivity.
-      eauto using subtype_typ_subst.
-    + replace (sch_empty (typ_variant (typ_subst Xs Us T3)))
-        with (sch_subst Xs Us (sch_empty (typ_variant T3)))
-        by reflexivity.
-      introv Hn.
-      rewrite <- env_subst_push.
-      auto.
-    + replace (sch_empty (typ_variant (typ_subst Xs Us T5)))
-        with (sch_subst Xs Us (sch_empty (typ_variant T5)))
-        by reflexivity.
-      introv Hn.
-      rewrite <- env_subst_push.
-      auto.
-  - apply typing_destruct
-      with (T1 := typ_subst Xs Us T1) (T2 := typ_subst Xs Us T2)
-           (T3 := typ_subst Xs Us T3)
-           (L := L \u dom E1 \u dom E2); auto.
-    + replace (rng_range_below (typ_subst Xs Us T2))
-        with (rng_subst Xs Us (rng_range_below T2))
-        by reflexivity.
-      eauto using ranging_typ_subst.
-    + replace
-        (typ_proj CSet.universe (typ_subst Xs Us T2)
-           (CSet.singleton c))
-        with (typ_subst Xs Us
-                (typ_proj CSet.universe T2 (CSet.singleton c)))
-        by reflexivity.
-      replace (typ_constructor c (typ_subst Xs Us T3))
-        with (typ_subst Xs Us (typ_constructor c T3)) by reflexivity.
-      eauto using subtype_typ_subst.
-    + replace
-        (typ_proj
-           CSet.universe (typ_subst Xs Us T2) (CSet.cosingleton c))
-        with (typ_subst Xs Us
-                (typ_proj CSet.universe T2 (CSet.cosingleton c)))
-        by reflexivity.
-      replace (typ_bot (CSet.cosingleton c))
-        with (typ_subst Xs Us (typ_bot (CSet.cosingleton c)))
-        by reflexivity.
-      eauto using subtype_typ_subst.
-    + replace (sch_empty (typ_subst Xs Us T3))
-        with (sch_subst Xs Us (sch_empty T3)) by reflexivity.
-      introv Hn.
-      rewrite <- env_subst_push.
-      auto.
-  - assert (kindings (tenv_subst Xs Us (E1 & E2))
-            Us (rngs_knds (rng_subst_list Xs Us Rs)))
-      by eauto using kinding_typ_subst, rangings_kindings.
-    apply typing_absurd with (T1 := typ_subst Xs Us T1);
-      eauto using kinding_typ_subst.
-    + replace (rng_range_below (typ_bot CSet.universe))
-        with (rng_subst Xs Us
-                (rng_range_below (typ_bot CSet.universe)))
-        by reflexivity.
-      eauto using ranging_typ_subst.
-  - assert (kindings (tenv_subst Xs Us (E1 & E2))
-            Us (rngs_knds (rng_subst_list Xs Us Rs)))
-      by eauto using kinding_typ_subst, rangings_kindings.
-    apply_fresh typing_fix as x; eauto using kinding_typ_subst.
-    introv Hn1 Hn2.
-    fold (typ_subst Xs Us (typ_arrow T1 T2)).
-    replace (sch_empty (typ_subst Xs Us (typ_arrow T1 T2)))
-      with (sch_subst Xs Us (sch_empty (typ_arrow T1 T2)))
-      by reflexivity.
-    fold (typ_subst Xs Us T1).
-    replace (sch_empty (typ_subst Xs Us T1))
-      with (sch_subst Xs Us (sch_empty T1)) by reflexivity.
-    rewrite <- env_subst_push.
-    rewrite <- env_subst_push.
-    auto.
-  - apply typing_prod; auto.
-  - apply typing_loc with (T1 := typ_subst Xs Us T1);
-      eauto using styp_subst_binds.
-    eauto using type_equal_typ_subst.
-  - apply typing_ref; auto.
 Qed.
 
-Lemma typing_typ_subst_l : forall E Xs Rs Us D P t T,
-    typing (E & Xs ~* Rs) D P t T ->
-    length Xs = length Rs ->
-    type_environment (E & Xs ~* Rs) ->
-    rangings (tenv_subst Xs Us E)
-      Us (rng_subst_list Xs Us Rs) ->
-    typing (tenv_subst Xs Us E)
-      (env_subst Xs Us D) (styp_subst Xs Us P) t
-           (typ_subst Xs Us T).
+Lemma typing_scheme_c' : forall L v E M D P t,
+    valid_scheme_aux v L E M ->
+    (forall Xs : list var,
+         fresh L (sch_arity M) Xs ->
+         typing v (E & Xs ~: M) D P t
+           (instance_vars M Xs)) ->
+    typing_scheme v E D P t M.
 Proof.
-  introv Ht Hl He Hrs.
-  rewrite <- concat_empty_r with (E := E).
-  rewrite <- concat_empty_r with (E := E & Xs ~* Rs) in He, Ht.
-  rewrite <- concat_empty_r with (E := E) in Hrs.
-  eauto using typing_typ_subst.
-Qed.
-
-Lemma typing_instance : forall E M D P t Us,
-  typing_scheme E D P t M ->
-  valid_instance E Us M ->
-  type_environment E ->
-  typing E D P t (instance M Us). 
-Proof.
-  introv Hs Hv He.
-  destruct Hs.
-  pick_freshes (sch_arity M) Xs.
-  fresh_length Fr as Hl.
-  inversion Hv; subst; simpl in *.
-  assert (type_environment (E & Xs ~: M))
-    by auto using type_environment_push_ranges with wellformed.
-  assert (length Us = sch_arity M)
-    by (erewrite rangings_length,
-          <- length_rng_open_list, sch_arity_length; eauto).
-  rewrite typ_subst_intro_instance with (Xs := Xs);
-    auto with wellformed.
-  unfold bind_sch_ranges, instance_vars, instance in *.
-  destruct M; simpl in *.
-  rewrite <- styp_subst_fresh with (Xs := Xs) (Us := Us) (P := P);
-    auto.
-  rewrite <- env_subst_fresh with (Xs := Xs) (Us := Us) (D := D);
-    auto.
-  rewrite <- tenv_subst_fresh with (Xs := Xs) (Us := Us) (E := E);
-    auto.
-  apply typing_typ_subst_l
-    with (Rs := rng_open_vars_list sch_ranges Xs);
-    rewrite <- ?length_rng_open_vars_list; auto. 
-  rewrite tenv_subst_fresh with (Xs := Xs) (Us := Us) (E := E); auto.
-  rewrite <- rng_subst_list_intro; auto with wellformed.
-Qed.
-
-(* ****************************************************** *)
-(** ** Respects type equality *)
-
-Lemma typing_equal_binding : forall E D1 D2 T1 T2 x P t T,
-    type_equal E T1 T2 knd_type ->
-    type_environment E ->
-    environment (D1 & x ~ sch_empty T1 & D2) ->
-    typing E (D1 & x ~ sch_empty T1 & D2) P t T ->
-    typing E (D1 & x ~ sch_empty T2 & D2) P t T.
-Proof.
-  introv Hte He1 He2 Ht.
-  assert (scheme (sch_empty T2))
-    by auto with wellformed.
-  assert (environment (D1 & x ~ sch_empty T2 & D2)) as He3
-    by eauto using environment_middle, environment_middle_inv_env,
-       environment_middle_inv_fresh with wellformed.
-  remember (D1 & x ~ sch_empty T1 & D2) as D3.
-  remember (D1 & x ~ sch_empty T2 & D2) as D4.
-  symmetry in HeqD3.
-  symmetry in HeqD4.
-  generalize dependent D2.
-  generalize dependent D4.
-  induction Ht; introv He Heq1 Heq2; eauto.
-  - subst.
-    case_if_eq x x0.
-    + { assert (binds x0 M (D1 & x0 ~ sch_empty T1 & D2)) as Hb
-          by assumption.
-        apply binds_middle_eq_inv in Hb;
-          auto using ok_from_environment; subst.
-        assert (valid_instance E Us (sch_empty T1)) as Hi by assumption.
-        inversion Hi; subst.
-        apply typing_var with (M := sch_empty T2) (Us := nil); eauto.
-        - eauto using binds_middle_eq,
-            ok_middle_inv_r, ok_from_environment.
-        - assert (length Us = 0) as Hl
-           by (erewrite rangings_length; eauto; simpl; auto).
-          rewrite List.length_zero_iff_nil in Hl; subst.
-          rewrite instance_empty_nil in *.
-          apply type_equal_transitive with (T2 := T1); auto. }
-    + apply typing_var with (M := M) (Us := Us);
-        eauto using binds_env_weakening, binds_subst.
-  - apply typing_abs
-      with (L := L \u dom E \u dom D \u dom D4); auto; subst.
-    introv Hn.
-    eauto 6 using concat_assoc with wellformed.
-  - apply typing_let_val
-      with (L := L \u dom E \u dom D \u dom D4) (M := M); auto; subst.
-    + introv Hf.
-      eauto using type_equal_weakening_l,
-        type_environment_push_ranges with wellformed.
-    + introv Hn.
-      eauto using concat_assoc with wellformed.
-  - apply typing_let
-      with (L := L \u dom E \u dom D \u dom D4) (T1 := T0);
-      eauto; subst.
-    introv Hn.
-    assert (type T0) by eauto using output_typing, wellformed_kinding.
-    eauto 6 using concat_assoc with wellformed.
-  - apply typing_match
-      with (L := L \u dom E \u dom D \u dom D4) (T1 := T0)
-           (T2 := T3) (T3 := T4) (T4 := T5) (T5 := T6)
-           (T6 := T7) (T7 := T8); subst; eauto.
-    + introv Hn.
-      assert (type (typ_variant T4)) by auto with wellformed.
-      eauto 6 using concat_assoc with wellformed.
-    + introv Hn.
-      assert (type (typ_variant T6)) by auto with wellformed.
-      eauto 6 using concat_assoc with wellformed.      
-  - apply typing_destruct
-      with (L := L \u dom E \u dom D \u dom D4) (T1 := T0)
-           (T2 := T3) (T3 := T4) (T4 := T5); subst; eauto.
-    introv Hn.
-    assert (kinding E T4 knd_type) by auto with kinding.
-    eauto 6 using concat_assoc with wellformed.  
-  - apply typing_fix with (L := L \u dom E \u dom D \u dom D4);
-      subst; auto.
-    introv Hn1 Hn2.
-    assert (type T0) by auto with wellformed.
-    assert (type (typ_arrow T0 T3)) by auto with wellformed.
-    assert (environment
-              (D1 & x ~ sch_empty T1 & D2
-               & x0 ~ sch_empty (typ_arrow T0 T3)
-               & y ~ sch_empty T0))
-      by eauto using environment_push2 with wellformed.
-    assert (environment
-              (D1 & x ~ sch_empty T2 & D2
-               & x0 ~ sch_empty (typ_arrow T0 T3)
-               & y ~ sch_empty T0))
-      by eauto using environment_push2 with wellformed.
-    eauto using concat_assoc2.
-Qed.
-
-Lemma typing_equal_binding_l : forall E D T1 T2 x P t T,
-    type_equal E T1 T2 knd_type ->
-    type_environment E ->
-    environment (D & x ~ sch_empty T1) ->
-    typing E (D & x ~ sch_empty T1) P t T ->
-    typing E (D & x ~ sch_empty T2) P t T.
-Proof.
-  introv Hte He1 He2 Ht.
-  rewrite <- concat_empty_r
-    with (E := D & x ~ sch_empty T2).
-  rewrite <- concat_empty_r
-    with (E := D & x ~ sch_empty T1) in Ht, He2.
-  eauto using typing_equal_binding.
-Qed.
-
-Lemma typing_equal_binding_l2 : forall E D T1 T1' T2 T2' x y P t T,
-    type_equal E T1 T1' knd_type ->
-    type_equal E T2 T2' knd_type ->
-    type_environment E ->
-    environment (D & x ~ sch_empty T1 & y ~ sch_empty T2) ->
-    typing E (D & x ~ sch_empty T1 & y ~ sch_empty T2) P t T ->
-    typing E (D & x ~ sch_empty T1' & y ~ sch_empty T2') P t T.
-Proof.
-  introv Hte1 Hte2 He1 He2 Ht.
-  assert (environment (D & x ~ sch_empty T1 & y ~ sch_empty T2'))
-    by eauto using environment_concat_inv_l,
-       environment_push_inv_fresh with wellformed.
-  apply typing_equal_binding with (T1 := T1); auto.
-  apply typing_equal_binding_l with (T1 := T2); auto.
-Qed.
-
-Lemma typing_equal_cong : forall E D P t T1 T2,
-    type_equal_cong E T1 T2 knd_type ->
-    type_environment E ->
-    environment D ->
-    typing E D P t T1 ->
-    typing E D P t T2.
-Proof.
-  introv Hte He1 He2 Ht.
-  generalize dependent T2.
-  induction Ht; introv Hte.
-  - apply typing_var with (M := M) (Us := Us); auto.
-    apply type_equal_transitive with (T2 := T); auto.
-    auto using type_equal_single, type_equal_cong_symmetric.
-  - inversion Hte; subst.
-    + apply typing_abs with (L := L \u dom D);
-        auto with kinding.
-      introv Hn.
-      apply typing_equal_binding_l with (T1 := T1);
-        auto using type_equal_single with wellformed.
-    + apply typing_abs with (L := L \u dom D);
-        auto with wellformed.
-    + exfalso; eauto using type_equal_symm_inv_type.
-  - eauto using output_typing.
-  - apply typing_let_val with (L := L \u dom E \u dom D) (M := M);
-      auto with wellformed.   
-  - apply typing_let with (L := L \u dom E \u dom D) (T1 := T1);
-      eauto 6 using output_typing, wellformed_kinding.
-  - inversion Hte; subst.
-    + assert (type_equal_cong E T1 T1' knd_range) as Heq
-          by assumption.
-      inversion Heq; subst.
-      exfalso; eauto using type_equal_symm_inv_range.
-    + exfalso; eauto using type_equal_symm_inv_type.
-  - apply typing_match
-      with (L := L \u dom D) (T1 := T1) (T2 := T2) (T3 := T3)
-           (T4 := T4) (T5 := T5) (T6 := T6) (T7 := T7);
-      auto with wellformed.
-  - assert (kinding E T3 knd_type) by auto with kinding.
-    apply typing_destruct
-      with (L := L \u dom D) (T1 := T1)
-           (T2 := T2) (T3 := T3); auto with wellformed.
-  - eauto with kinding.
-  - inversion Hte; subst.
-    + apply typing_fix with (L := L \u dom D);
-        auto with kinding.
-      introv Hn1 Hn2.
-      apply typing_equal_binding_l2
-        with (T1 := typ_arrow T1 T2) (T2 := T1);
-        eauto with kinding wellformed.
-    + apply typing_fix with (L := L \u dom D);
-        auto with kinding.
-      introv Hn1 Hn2.
-      apply typing_equal_binding_l2
-        with (T1 := typ_arrow T1 T2) (T2 := T1);
-        eauto using environment_push2 with kinding wellformed.
-    + exfalso; eauto using type_equal_symm_inv_type.
-  - inversion Hte.
-    exfalso; eauto using type_equal_symm_inv_type.
-  - inversion Hte; subst; auto.
-    exfalso; eauto using type_equal_symm_inv_type.
-  - assert (kinding E (typ_prod T1 T2) knd_type) by
-      eauto using output_typing.
-    eauto with kinding.
-  - assert (kinding E (typ_prod T1 T2) knd_type) by
-      eauto using output_typing.
-    eauto with kinding.
-  - inversion Hte; subst.
-    + assert (type_equal E T1 T1' knd_type)
-        by eauto using type_equal_post_step.
-      eauto.
-    + exfalso; eauto using type_equal_symm_inv_type.
-  - inversion Hte; subst; auto.
-    exfalso; eauto using type_equal_symm_inv_type.
-  - auto.
-  - inversion Hte.
-    exfalso; eauto using type_equal_symm_inv_type.
-Qed.
-
-Lemma typing_equal : forall E D P t T1 T2,
-    type_equal E T1 T2 knd_type ->
-    type_environment E ->
-    environment D ->
-    typing E D P t T1 ->
-    typing E D P t T2.
-Proof.
-  introv Hte He1 He2 Ht.
-  remember knd_type as K.
-  induction Hte; subst;
-    eauto using typing_equal_cong.
-Qed.
-
-(* ****************************************************** *)
-(** ** Weakening term environment *)
-
-Lemma typing_env_weakening : forall E D1 D2 D3 P t T,
-    typing E (D1 & D3) P t T ->
-    type_environment E ->
-    environment (D1 & D2 & D3) ->
-    typing E (D1 & D2 & D3) P t T.
-Proof.
-  introv Ht He1 He2.
-  remember (D1 & D3) as D13.
-  generalize dependent D3.
-  induction Ht; introv Heq He; subst;
-    eauto using binds_env_weakening.
-  - apply typing_abs with (L \u dom D1 \u dom D2 \u dom D3); auto.
-    intros x Hn.
-    assert (environment (D1 & D2 & D3 & x ~ sch_empty T1)) as He3
-      by auto with wellformed.
-    rewrite <- concat_assoc.
-    rewrite <- concat_assoc in He3.
-    auto using concat_assoc.
-  - apply typing_let_val
-      with (L := L \u dom E \u dom D1 \u dom D2 \u dom D3) (M := M);
-      auto using type_environment_push_ranges with wellformed.
-    intros x Hn.
-    assert (environment (D1 & D2 & D3 & x ~ M)) as He3
-      by auto with wellformed.
-    rewrite <- concat_assoc.
-    rewrite <- concat_assoc in He3.
-    auto using concat_assoc.
-  - apply typing_let
-      with (L := L \u dom D1 \u dom D2 \u dom D3) (T1 := T1);
-      auto.
-    intros x Hn.
-    assert (kinding E T1 knd_type) by eauto using output_typing.
-    assert (environment (D1 & D2 & D3 & x ~ sch_empty T1)) as He2
-      by auto with wellformed.
-    rewrite <- concat_assoc.
-    rewrite <- concat_assoc in He2.
-    auto using concat_assoc.
-  - apply typing_match
-      with (L := L \u dom D1 \u dom D2 \u dom D3) (T1 := T1)
-           (T2 := T2) (T3 := T3) (T4 := T4) (T5 := T5) (T6 := T6)
-           (T7 := T7); auto.
-    + intros x Hn.
-      assert (environment
-                (D1 & D2 & D3
-                 & x ~ sch_empty (typ_variant T3))) as He3
-        by auto with wellformed.
-      rewrite <- concat_assoc.
-      rewrite <- concat_assoc in He3.
-      auto using concat_assoc.
-    + intros x Hn.
-      assert (environment
-                (D1 & D2 & D3
-                 & x ~ sch_empty (typ_variant T5))) as He3
-        by auto with wellformed.
-      rewrite <- concat_assoc.
-      rewrite <- concat_assoc in He3.
-      auto using concat_assoc.
-  - apply typing_destruct
-      with (L := L \u dom D1 \u dom D2 \u dom D3) (T1 := T1)
-           (T2 := T2) (T3 := T3); auto.
-    intros x Hn.
-    assert (kinding E T3 knd_type) by auto with kinding.
-    assert (environment (D1 & D2 & D3 & x ~ sch_empty T3)) as He2
-      by auto with wellformed.
-    rewrite <- concat_assoc.
-    rewrite <- concat_assoc in He2.
-    auto using concat_assoc.
-  - apply typing_fix
-      with (L := L \u dom D1 \u dom D2 \u dom D3); auto.
-    intros x y Hn1 Hn2.
-(*    assert (kinding E T3 knd_type) by auto with kinding. *)
-    assert (environment
-              (D1 & D2 & D3
-               & x ~ sch_empty (typ_arrow T1 T2)
-               & y ~ sch_empty T1)) as He2
-      by auto with wellformed.
-    rewrite <- concat_assoc2.
-    rewrite <- concat_assoc2 in He2.
-    auto using concat_assoc2.
-Qed.    
-
-Lemma typing_env_weakening_l : forall E D1 D2 P t T,
-    typing E D1 P t T ->
-    type_environment E ->
-    environment (D1 & D2) ->
-    typing E (D1 & D2) P t T.
-Proof.
-  introv Ht He1 He2.
-  rewrite <- concat_empty_r with (E := D1 & D2).
-  apply typing_env_weakening; rewrite ?concat_empty_r; auto.
-Qed.
-
-Lemma typing_scheme_env_weakening : forall E D1 D2 D3 P t M,
-    typing_scheme E (D1 & D3) P t M ->
-    type_environment E ->
-    environment (D1 & D2 & D3) ->
-    typing_scheme E (D1 & D2 & D3) P t M.
-Proof.
-  introv Ht He1 He2.
-  remember (D1 & D3) as D13.
-  destruct Ht; subst.
-  apply typing_scheme_c
-    with (L := L \u dom E \u dom D1 \u dom D2 \u dom D3);
-      eauto using valid_scheme_weakening.
-  intros Xs Hf.
-  apply typing_env_weakening;
-    auto using type_environment_push_ranges with wellformed.
-Qed.
-
-Lemma typing_schemes_env_weakening : forall E D1 D2 D3 P ts Ms,
-    typing_schemes E (D1 & D3) P ts Ms ->
-    type_environment E ->
-    environment (D1 & D2 & D3) ->
-    typing_schemes E (D1 & D2 & D3) P ts Ms.
-Proof.
-  introv Ht He1 He2.
-  remember (D1 & D3) as D13.
-  induction Ht; subst;
-    auto using typing_scheme_env_weakening.
-Qed.
-
-Lemma typing_schemes_env_weakening_l : forall E D1 D2 P ts Ms,
-    typing_schemes E D1 P ts Ms ->
-    type_environment E ->
-    environment (D1 & D2) ->
-    typing_schemes E (D1 & D2) P ts Ms.
-Proof.
-  introv Ht He1 He2.
-  rewrite <- concat_empty_r with (E := D1 & D2).
-  apply typing_schemes_env_weakening;
-    rewrite ?concat_empty_r; auto.
-Qed.
-
-(* *************************************************************** *)
-(** Somes useful for proofs about term subtitution *)
-
-Lemma typing_schemes_add_subst_typ_bind :
-  forall E D1 D2 P x M Ms ts,
-    x \notin (dom D1 \u dom D2) ->
-    typing_schemes E (D1 & D2) P ts Ms ->
-    scheme M ->
-    type_environment E ->
-    environment (D1 & D2) ->
-    typing_schemes E (D1 & (D2 & x ~ M)) P ts Ms.
-Proof.
-  introv Hn Hss Hs He1 He2.
-  rewrite concat_assoc.
-  apply typing_schemes_env_weakening_l; auto.
-Qed.
-
-Lemma typing_schemes_add_subst_typ_bind_empty :
-  forall E D1 D2 P x T Ms ts,
-    x \notin (dom D1 \u dom D2) ->
-    typing_schemes E (D1 & D2) P ts Ms ->
-    type T ->
-    type_environment E ->
-    environment (D1 & D2) ->
-    typing_schemes E (D1 & (D2 & x ~ sch_empty T)) P ts Ms.
-Proof.
-  introv Hn Hss Hk He1 He2.
-  apply typing_schemes_add_subst_typ_bind; auto.
-Qed.
-
-Lemma typing_schemes_add_subst_typ_bind_empty2 :
-  forall E D1 D2 P x T y U Ms ts,
-    x \notin (dom D1 \u dom D2) ->
-    y \notin (dom D1 \u dom D2 \u \{x}) ->
-    typing_schemes E (D1 & D2) P ts Ms ->
-    type T ->
-    type U ->
-    type_environment E ->
-    environment (D1 & D2) ->
-    typing_schemes
-      E (D1 & (D2 & x ~ sch_empty T & y ~ sch_empty U)) P ts Ms.
-Proof.
-  introv Hn1 Hn2 Hss Hk1 Hk2 He1 He2.
-  rewrite concat_assoc2.
-  apply typing_schemes_env_weakening_l;
-    auto using environment_push2.
-  apply typing_schemes_env_weakening_l; auto.
+  introv Hs Ht.
+  apply typing_scheme_c with (L := L).
+  introv Hf.
+  destruct Hs as [? ? ? ? Hs].
+  specialize (Hs Xs Hf).
+  specialize (Ht Xs Hf).
+  inversion Hs; subst.
+  auto.
 Qed.  
 
-Lemma typing_schemes_add_subst_kinds_bind :
-  forall E D1 D2 P Xs M Ms ts,
-    fresh (dom E) (sch_arity M) Xs ->
-    typing_schemes E (D1 & D2) P ts Ms ->
-    scheme M ->
-    type_environment E ->
-    typing_schemes (E & Xs ~: M) (D1 & D2) P ts Ms.
-Proof.
-  introv Hf Hss Hs He.
-  apply typing_schemes_tenv_weakening_l;
-    auto using type_environment_push_ranges.
-Qed.
-
-Lemma type_environment_add_subst_typ_bind : forall D1 D2 xs Ms x M,
-    environment (D1 & xs ~* Ms & D2) ->
-    length xs = length Ms ->
-    x \notin (dom D1 \u from_list xs \u dom D2) ->
-    scheme M ->
-    environment (D1 & xs ~* Ms & D2 & x ~ M).
-Proof.
-  introv He Hl Hn Hs.
-  apply environment_push; autorewrite with rew_env_dom; auto.
-Qed.
-
-Lemma environment_add_subst_typ_bind :
-    forall D1 D2 xs Ms x M,
-    environment (D1 & xs ~* Ms & D2) ->
-    length xs = length Ms ->
-    x \notin (dom D1 \u from_list xs \u dom D2) ->
-    scheme M ->
-    environment (D1 & xs ~* Ms & D2 & x ~ M).
-Proof.
-  introv He Hl Hn Hk.
-  apply environment_push; autorewrite with rew_env_dom; auto.
-Qed.
-
-Lemma environment_add_subst_typ_bind_empty :
-    forall D1 D2 xs Ms x T,
-    environment (D1 & xs ~* Ms & D2) ->
-    length xs = length Ms ->
-    x \notin (dom D1 \u from_list xs \u dom D2) ->
-    type T ->
-    environment (D1 & xs ~* Ms & D2 & x ~ sch_empty T).
-Proof.
-  introv He Hl Hn Hk.
-  apply environment_push; autorewrite with rew_env_dom; auto.
-Qed.
-
-Lemma environment_add_subst_typ_bind_empty2 :
-    forall D1 D2 xs Ms x T1 y T2,
-    environment (D1 & xs ~* Ms & D2) ->
-    length xs = length Ms ->
-    x \notin (dom D1 \u from_list xs \u dom D2) ->
-    y \notin (dom D1 \u from_list xs \u dom D2 \u \{x}) ->
-    type T1 ->
-    type T2 ->
-    environment (D1 & xs ~* Ms & D2
-                 & x ~ sch_empty T1 & y ~ sch_empty T2).
-Proof.
-  introv He Hl Hn1 Hn2 Hk1 Hk2.
-  apply environment_push; autorewrite with rew_env_dom; auto.
-  apply environment_push; autorewrite with rew_env_dom; auto.
-Qed.
-
-(* ****************************************************** *)
-(** ** Term substitution *)
-
-Lemma value_trm_subst : forall xs ss t,
-    value t ->
-    terms ss ->
-    value (trm_subst xs ss t).
-Proof.
-  introv Hv Ht.
-  induction Hv; simpl; auto.
-  - apply value_abs.
-    replace (trm_abs (trm_subst xs ss t))
-      with (trm_subst xs ss (trm_abs t))
-      by auto.
-    auto using trm_subst_term.
-  - apply value_fix.
-    replace (trm_fix (trm_subst xs ss t))
-      with (trm_subst xs ss (trm_fix t))
-      by auto.
-    auto using trm_subst_term.
-Qed.
-
-Lemma typing_trm_subst_var : forall E D1 D2 P xs Ms ts x M,
-    binds x M (D1 & xs ~* Ms & D2) ->
-    length xs = length Ms ->
-    environment (D1 & xs ~* Ms & D2) ->
-    typing_schemes E (D1 & D2) P ts Ms ->
-    typing_scheme E (D1 & D2) P (trm_var_subst xs ts x) M
-    \/ (binds x M (D1 & D2)
-        /\ trm_var_subst xs ts x = trm_fvar x).
-Proof.
-  introv Hb Hl He Hss.
-  assert (length ts = length Ms) as Hl2
-    by eauto using typing_schemes_length.
-  generalize dependent Ms.
-  generalize dependent ts.
-  induction xs; introv Hb Hl1 He Hss Hl2; destruct Ms; destruct ts;
-    try discriminate; simpl in *;
-    autorewrite with rew_env_concat in *; auto.
-  inversion Hss; subst.
-  case_var.
-  - apply binds_middle_eq_inv in Hb; subst;
-      auto using ok_from_environment.
-  - eauto using binds_subst, environment_remove.
-Qed.
-
-Lemma typing_trm_subst : forall E D1 D2 P xs Ms ts t T,
-    typing E (D1 & xs ~* Ms & D2) P t T ->
-    length xs = length Ms ->
-    type_environment E ->
-    environment (D1 & xs ~* Ms & D2) ->
-    typing_schemes E (D1 & D2) P ts Ms ->
-    typing E (D1 & D2) P (trm_subst xs ts t) T.
-Proof.
-  introv Ht Hl He1 He2 Hss.
-  remember (D1 & xs ~* Ms & D2) as D12.
-  generalize dependent D2.
-  induction Ht; introv Heq Hss; subst; simpl; eauto.
-  - destruct typing_trm_subst_var
-      with (E := E) (D1 := D1) (D2 := D2) (P := P) (xs := xs) (Ms := Ms)
-           (ts := ts) (x := x) (M := M) as [Hs | [Hb Heq]]; auto.
-    + apply typing_equal with (T1 := instance M Us);
-        eauto using type_equal_symmetric, environment_remove,
-          typing_instance.
-    + rewrite Heq.
-      apply typing_var with (M := M) (Us := Us); auto.
-  - apply typing_abs with (L := L \u from_list xs \u dom D1 \u dom D2);
-      auto.
-    intros x Hf.
-    rewrite trm_subst_open_var; auto with wellformed.
-    rewrite <- concat_assoc.
-    eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
-      environment_remove, environment_add_subst_typ_bind_empty
-        with wellformed.
-  - apply typing_let_val
-      with (L := L \u from_list xs \u dom E \u dom D1 \u dom D2)
-        (M := M); auto using value_trm_subst with wellformed.
-    + introv Hf.
-      auto using type_environment_push_ranges,
-        typing_schemes_add_subst_kinds_bind with wellformed.
-    + introv Hn.
-      rewrite trm_subst_open_var; auto with wellformed.
-      rewrite <- concat_assoc.
-      eauto using concat_assoc, typing_schemes_add_subst_typ_bind,
-        environment_remove, environment_add_subst_typ_bind
-          with wellformed.
-  - assert (kinding E T1 knd_type) by eauto using output_typing.
-    apply typing_let
-      with (L := L \u from_list xs \u dom D1 \u dom D2) (T1 := T1);
-      auto.
-    introv Hn.
-    rewrite trm_subst_open_var; auto with wellformed.
-    rewrite <- concat_assoc.
-    eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
-      environment_remove, environment_add_subst_typ_bind_empty
-        with wellformed.
-  - apply typing_match
-      with (L := L \u from_list xs \u dom D1 \u dom D2)
-           (T1 := T1) (T2 := T2) (T3 := T3)
-           (T4 := T4) (T5 := T5) (T6 := T6) (T7 := T7); auto.
-    + introv Hn.
-      rewrite trm_subst_open_var; auto with wellformed.
-      rewrite <- concat_assoc.
-      assert (type (typ_variant T3)) by auto with wellformed.
-      eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
-        environment_remove, environment_add_subst_typ_bind_empty
-          with wellformed.
-    + introv Hn.
-      rewrite trm_subst_open_var; auto with wellformed.
-      rewrite <- concat_assoc.
-      assert (type (typ_variant T5)) by auto with wellformed.
-      eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
-        environment_remove, environment_add_subst_typ_bind_empty
-          with wellformed.
-  - apply typing_destruct
-      with (L := L \u from_list xs \u dom D1 \u dom D2)
-           (T1 := T1) (T2 := T2) (T3 := T3); auto.
-    introv Hn.
-    rewrite trm_subst_open_var; auto with wellformed.
-    rewrite <- concat_assoc.
-    assert (kinding E T3 knd_type) by auto with kinding.
-    eauto using concat_assoc, typing_schemes_add_subst_typ_bind_empty,
-      environment_remove, environment_add_subst_typ_bind_empty
-        with wellformed.
-  - apply typing_fix
-      with (L := L \u from_list xs \u dom D1 \u dom D2); auto.
-    introv Hn1 Hn2.
-    rewrite trm_subst_open_vars; auto with wellformed.
-    rewrite <- concat_assoc2.
-    assert (type (typ_arrow T1 T2)) by auto with wellformed.
-    eauto using concat_assoc2, typing_schemes_add_subst_typ_bind_empty2,
-      environment_remove, environment_add_subst_typ_bind_empty2
-        with wellformed.
-Qed.
-
-Lemma typing_trm_subst_l : forall E D xs Ms P ts t T,
-    typing E (D & xs ~* Ms) P t T ->
-    length xs = length Ms ->
-    type_environment E ->
-    environment (D & xs ~* Ms) ->
-    typing_schemes E D P ts Ms ->
-    typing E D P (trm_subst xs ts t) T.
-Proof.
-  introv Ht Hl He1 He2 Hts.
-  rewrite <- concat_empty_r with (E := D).
-  rewrite <- concat_empty_r with (E := D & xs ~* Ms) in Ht, He2.
-  rewrite <- concat_empty_r with (E := D) in Hts.
-  eauto using typing_trm_subst.
-Qed.
-
-Lemma typing_trm_subst_single : forall E D1 D2 x M P s t T,
-    typing E (D1 & x ~ M & D2) P t T ->
-    type_environment E ->
-    environment (D1 & x ~ M & D2) ->
-    typing_scheme E (D1 & D2) P s M ->
-    typing E (D1 & D2) P (trm_subst_single x s t) T.
-Proof.
-  introv Ht He1 He2 Hs.
-  apply typing_trm_subst with (Ms := cons M nil);
-    simpl; autorewrite with rew_env_concat; auto.
-Qed.
-
-Lemma typing_trm_subst_single_l : forall E D x M P s t T,
-    typing E (D & x ~ M) P t T ->
-    type_environment E ->
-    environment (D & x ~ M) ->
-    typing_scheme E D P s M ->
-    typing E D P (trm_subst_single x s t) T.
-Proof.
-  introv Ht He1 He2 Hts.
-  rewrite <- concat_empty_r with (E := D).
-  rewrite <- concat_empty_r with (E := D & x ~ M) in Ht, He2.
-  rewrite <- concat_empty_r with (E := D) in Hts.
-  eauto using typing_trm_subst_single.
-Qed.
-
-Lemma typing_trm_subst_empty : forall E D1 D2 x P s t T1 T2,
-    typing E (D1 & x ~ sch_empty T2 & D2) P t T1 ->
+Lemma typing_trm_subst_empty : forall v E D1 D2 x P s t T1 T2,
+    typing v E (D1 & x ~ sch_empty T2 & D2) P t T1 ->
     type_environment E ->
     environment (D1 & x ~ sch_empty T2 & D2) ->
-    typing E (D1 & D2) P s T2 ->
-    typing E (D1 & D2) P (trm_subst (x::nil) (s::nil) t) T1.
+    store_type P ->
+    typing v E (D1 & D2) P s T2 ->
+    typing v E (D1 & D2) P (trm_subst (x::nil) (s::nil) t) T1.
 Proof.
-  introv Ht1 He1 He2 Ht2.
+  introv Ht1 He Hd Hp Ht2.
   apply typing_trm_subst with (Ms := cons (sch_empty T2) nil);
     simpl; autorewrite with rew_env_concat; auto.
   apply typing_schemes_cons; auto.
-  apply typing_scheme_empty; auto.
+  rewrite <- typing_scheme_empty; auto.
 Qed.
 
-Lemma typing_trm_subst_empty_l : forall E D x P s t T1 T2,
-    typing E (D & x ~ sch_empty T2) P t T1 ->
+Lemma typing_trm_subst_empty_l : forall v E D x P s t T1 T2,
+    typing v E (D & x ~ sch_empty T2) P t T1 ->
     type_environment E ->
     environment (D & x ~ sch_empty T2) ->
-    typing E D P s T2 ->
-    typing E D P (trm_subst (x::nil) (s::nil) t) T1.
+    store_type P ->
+    typing v E D P s T2 ->
+    typing v E D P (trm_subst (x::nil) (s::nil) t) T1.
 Proof.
-  introv Ht He1 He2 Hts.
+  introv Ht He Hd Hp Hts.
   rewrite <- concat_empty_r with (E := D).
-  rewrite <- concat_empty_r with (E := D & x ~ sch_empty T2) in Ht, He2.
+  rewrite <- concat_empty_r
+    with (E := D & x ~ sch_empty T2) in Ht, Hd.
   rewrite <- concat_empty_r with (E := D) in Hts.
   eauto using typing_trm_subst_empty.
 Qed.
 
-Lemma typing_trm_subst_empty2 : forall E D1 D2 x y P s r t T1 T2 T3,
-    typing E (D1 & x ~ sch_empty T2 & y ~ sch_empty T3 & D2) P t T1 ->
+Lemma typing_trm_subst_empty2 : forall v E D1 D2 x y P s r t T1 T2 T3,
+    typing v E
+      (D1 & x ~ sch_empty T2 & y ~ sch_empty T3 & D2) P t T1 ->
     type_environment E ->
     environment (D1 & x ~ sch_empty T2 & y ~ sch_empty T3 & D2) ->
-    typing E (D1 & D2) P s T2 ->
-    typing E (D1 & D2) P r T3 ->
-    typing E (D1 & D2) P
+    store_type P ->
+    typing v E (D1 & D2) P s T2 ->
+    typing v E (D1 & D2) P r T3 ->
+    typing v E (D1 & D2) P
       (trm_subst (cons y (x::nil)) (cons r (s::nil)) t) T1.
 Proof.
-  introv Ht1 He1 He2 Ht2 Ht3.
+  introv Ht1 He Hd Hp Ht2 Ht3.
   apply typing_trm_subst
     with (Ms := cons (sch_empty T3) (cons (sch_empty T2) nil));
     simpl; autorewrite with rew_env_concat; auto.
   apply typing_schemes_cons.
-  - apply typing_scheme_empty; auto.
+  - rewrite <- typing_scheme_empty; auto.
   - apply typing_schemes_cons; auto.
-    apply typing_scheme_empty; auto.
+    rewrite <- typing_scheme_empty; auto.
 Qed.
 
-Lemma typing_trm_subst_empty2_l : forall E D x y P s r t T1 T2 T3,
-    typing E (D & x ~ sch_empty T2 & y ~ sch_empty T3) P t T1 ->
+Lemma typing_trm_subst_empty2_l : forall v E D x y P s r t T1 T2 T3,
+    typing v E (D & x ~ sch_empty T2 & y ~ sch_empty T3) P t T1 ->
     type_environment E ->
     environment (D & x ~ sch_empty T2 & y ~ sch_empty T3) ->
-    typing E D P s T2 ->
-    typing E D P r T3 ->
-    typing E D P (trm_subst (cons y (x::nil)) (cons r (s::nil)) t) T1.
+    store_type P ->
+    typing v E D P s T2 ->
+    typing v E D P r T3 ->
+    typing v E D P
+      (trm_subst (cons y (x::nil)) (cons r (s::nil)) t) T1.
 Proof.
-  introv Ht1 He1 He2 Ht2 Ht3.
+  introv Ht1 He Hd Hp Ht2 Ht3.
   rewrite <- concat_empty_r with (E := D).
   rewrite <- concat_empty_r
-    with (E := D & x ~ sch_empty T2 & y ~ sch_empty T3) in Ht1, He2.
+    with (E := D & x ~ sch_empty T2 & y ~ sch_empty T3) in Ht1, Hd.
   rewrite <- concat_empty_r with (E := D) in Ht2, Ht3.
-  eapply typing_trm_subst_empty2; eauto.
+  eauto using typing_trm_subst_empty2.
 Qed.
 
 (* ****************************************************** *)
 (** ** Extending the store *)
 
-Lemma typing_extend_store_type : forall E D P P' t T,
-    typing E D P t T ->
+Lemma typing_extend_store_type : forall v E D P P' t T,
+    typing v E D P t T ->
     type_environment E ->
     extends P P' ->
     valid_store_type E P' ->
-    typing E D P' t T.
+    typing v E D P' t T.
 Proof.
   introv Ht He Hex Hs.
   induction Ht; eauto.
-  - apply typing_let_val with (L := L \u dom E) (M := M); auto.
-    auto using type_environment_push_ranges,
-      valid_store_type_weakening_l with wellformed.
+  - apply typing_let_val with (L := L \u dom E) (M := M);
+      eauto using valid_scheme_aux_subset, subset_union_weak_l.
+    introv Hf.
+    assert (type_environment (E & Xs ~: M))
+      by (apply type_environment_push_ranges with L;
+            auto with wellformed).
+    auto using valid_store_type_weakening_l.
 Qed.
 
-Lemma typing_store_ref : forall E D V P l t T,
-    typing_store E D V P ->
+Lemma typing_store_ref : forall v E D V P l t T,
+    typing_store v E D V P ->
     type_environment E ->
     l # P ->
     valid_store_type E P ->
-    typing E D P t T ->
-    typing_store E D (V & l ~ t) (P & l ~ T).
+    kinding E empty T knd_type ->
+    typing v E D P t T ->
+    typing_store v E D (V & l ~ t) (P & l ~ T).
 Proof.
-  introv Hs Hn Hv He Ht.
-  assert (kinding E T knd_type)
-    by eauto using output_typing.
+  introv Hs Hn Hv He Hk Ht.
   destruct Hs.
   apply typing_store_c.
   intro l'.
   case_if_eq l l'.
   - eauto using typing_store_loc_bound,
       typing_extend_store_type.   
-  - assert (typing_store_loc l' E D V P) as Hsl
+  - assert (typing_store_loc l' v E D V P) as Hsl
       by auto.
     destruct Hsl.
     + auto using typing_store_loc_fresh.
@@ -1231,27 +975,131 @@ Proof.
         eauto using typing_extend_store_type.
 Qed.
 
-Lemma typing_store_set : forall E D V P l t T,
-    typing_store E D V P ->
+Lemma typing_store_set : forall v E D V P l t T,
+    typing_store v E D V P ->
     type_environment E ->
     binds l T P ->
     valid_store_type E P ->
-    typing E D P t T ->
-    typing_store E D (V & l ~ t) P.
+    kinding E empty T knd_type ->
+    typing v E D P t T ->
+    typing_store v E D (V & l ~ t) P.
 Proof.
-  introv Hs Hb Hv He Ht.
-  assert (kinding E T knd_type)
-    by eauto using output_typing.
+  introv Hs Hb Hv He Ht Hk.
   destruct Hs.
   apply typing_store_c.
   intro l'.
   case_if_eq l l'.
   - eauto using typing_store_loc_bound,
       typing_extend_store_type.   
-  - assert (typing_store_loc l' E D V P) as Hsl
+  - assert (typing_store_loc l' v E D V P) as Hsl
       by auto.
     destruct Hsl.
     + auto using typing_store_loc_fresh.
     + eapply typing_store_loc_bound;
         eauto using typing_extend_store_type.
+Qed.
+
+(* *************************************************************** *)
+(** Value inversions *)
+
+Lemma invert_value_variant :
+  forall v E D P t T1 (Q : Prop),
+    value t ->
+    typing v E D P t (typ_variant T1) ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall c t1, t = trm_constructor c t1 -> value t1 -> Q) ->
+    Q.
+Proof.
+  introv Hv Ht He Hd Hp Hq.
+  inversion Hv; subst; invert_typing Ht He Hd Hp.
+  - eauto.
+  - exfalso; eauto using invert_coercible_arrow_variant.
+  - exfalso; eauto using invert_coercible_arrow_variant.
+  - exfalso; eauto using invert_coercible_unit_variant.
+  - exfalso; eauto using invert_coercible_prod_variant.
+  - exfalso; eauto using invert_coercible_ref_variant.
+Qed.
+
+Lemma invert_value_arrow :
+  forall v E D P t T1 T2 (Q : Prop),
+    value t ->
+    typing v E D P t (typ_arrow T1 T2) ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall t1, t = trm_abs t1 -> Q) ->
+    (forall t1, t = trm_fix t1 -> Q) ->
+    Q.
+Proof.
+  introv Hv Ht He Hd Hp Hq1 Hq2.
+  inversion Hv; subst; invert_typing Ht He Hd Hp.
+  - exfalso; eauto using invert_coercible_variant_arrow.
+  - eauto.
+  - eauto.
+  - exfalso; eauto using invert_coercible_unit_arrow.
+  - exfalso; eauto using invert_coercible_prod_arrow.
+  - exfalso; eauto using invert_coercible_ref_arrow.
+Qed.
+
+Lemma invert_value_unit :
+  forall v E D P t (Q : Prop),
+    value t ->
+    typing v E D P t typ_unit ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (t = trm_unit -> Q) ->
+    Q.
+Proof.
+  introv Hv Ht He Hd Hp Hq.
+  inversion Hv; subst; invert_typing Ht He Hd Hp.
+  - exfalso; eauto using invert_coercible_variant_unit.
+  - exfalso; eauto using invert_coercible_arrow_unit.
+  - exfalso; eauto using invert_coercible_arrow_unit.
+  - eauto.
+  - exfalso; eauto using invert_coercible_prod_unit.
+  - exfalso; eauto using invert_coercible_ref_unit.
+Qed.
+
+Lemma invert_value_prod :
+  forall v E D P t T1 T2 (Q : Prop),
+    value t ->
+    typing v E D P t (typ_prod T1 T2) ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall t1 t2,
+        t = trm_prod t1 t2 -> value t1 -> value t2 -> Q) ->
+    Q.
+Proof.
+  introv Hv Ht He Hd Hp Hq.
+  inversion Hv; subst; invert_typing Ht He Hd Hp.
+  - exfalso; eauto using invert_coercible_variant_prod.
+  - exfalso; eauto using invert_coercible_arrow_prod.
+  - exfalso; eauto using invert_coercible_arrow_prod.
+  - exfalso; eauto using invert_coercible_unit_prod.
+  - eauto.
+  - exfalso; eauto using invert_coercible_ref_prod.
+Qed.
+
+Lemma invert_value_ref :
+  forall v E D P t T1 (Q : Prop),
+    value t ->
+    typing v E D P t (typ_ref T1) ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall l, t = trm_loc l -> Q) ->
+    Q.
+Proof.
+  introv Hv Ht He Hd Hp Hq.
+  inversion Hv; subst; invert_typing Ht He Hd Hp.
+  - exfalso; eauto using invert_coercible_variant_ref.
+  - exfalso; eauto using invert_coercible_arrow_ref.
+  - exfalso; eauto using invert_coercible_arrow_ref.
+  - exfalso; eauto using invert_coercible_unit_ref.
+  - exfalso; eauto using invert_coercible_prod_ref.
+  - eauto.
 Qed.
