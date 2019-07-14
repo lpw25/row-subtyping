@@ -270,7 +270,8 @@ Proof.
   - eauto using binds_subst, type_environment_remove.     
 Qed.
 
-Lemma type_equal_typ_subst_rec : forall v E1 E2 E3 Xs Rs Us T1 T2 K,
+Lemma type_equal_typ_subst_rec :
+  forall v E1 E2 E3 Q1 Q2 Xs Rs Us T1 T2 K Tl Tr Klr,
   (type_environment (E1 & Xs ~* Rs & E2 & E3) ->
    type_environment_extension
      (E1 & Xs ~* Rs & E2 & E3) empty ->
@@ -281,6 +282,8 @@ Lemma type_equal_typ_subst_rec : forall v E1 E2 E3 Xs Rs Us T1 T2 K,
        (rng_subst_list Xs Us Rs) ->
      type_equal v (tenv_subst Xs Us (E1 & E4))
        (tenv_subst Xs Us empty)
+       ((Tl, Tr, Klr) :: qenv_subst Xs Us (Q2 ++ Q1))%list
+       (qenv_subst Xs Us nil)
        (typ_subst Xs Us T1)
        (typ_subst Xs Us T2) K) ->
   type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
@@ -290,12 +293,16 @@ Lemma type_equal_typ_subst_rec : forall v E1 E2 E3 Xs Rs Us T1 T2 K,
     (rng_subst_list Xs Us Rs) ->
   type_equal v
     (tenv_subst Xs Us (E1 & E2) & tenv_subst Xs Us E3) empty
-    (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+    ((Tl, Tr, Klr)
+       :: (qenv_subst Xs Us Q2) ++ (qenv_subst Xs Us Q1))%list
+    nil (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
 Proof.
   introv IH He1 He2 Hrs.
   rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
   rewrite <- tenv_subst_concat.
   rewrite <- concat_assoc.
+  rewrite <- qenv_subst_nil with (Xs := Xs) (Us := Us).
+  rewrite <- qenv_subst_app.
   apply IH; rewrite? concat_assoc;
     auto using type_environment_extend.
   rewrite tenv_subst_concat.
@@ -307,27 +314,29 @@ Proof.
   assumption.
 Qed.
 
-Lemma type_equal_typ_subst : forall v E1 E2 E3 Xs Rs Us T1 T2 K,
-  type_equal v (E1 & Xs ~* Rs & E2) E3 T1 T2 K ->
+Lemma type_equal_typ_subst : forall v E1 E2 E3 Q1 Q2 Xs Rs Us T1 T2 K,
+  type_equal v (E1 & Xs ~* Rs & E2) E3 Q1 Q2 T1 T2 K ->
   length Xs = length Rs ->
   type_environment (E1 & Xs ~* Rs & E2) ->
   type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
   rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
     Us (rng_subst_list Xs Us Rs) ->
   type_equal v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+    (qenv_subst Xs Us Q1) (qenv_subst Xs Us Q2)
     (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
 Proof.
   introv Hte Hl He1 He2 Hrs.
   remember (E1 & Xs ~* Rs & E2) as E12.
   generalize dependent E2.
-  induction Hte; introv Heq Hrs; subst; simpl; auto.
+  induction Hte; introv Heq Hrs; subst; simpl in *; auto.
   - destruct ranging_typ_subst_var
       with (E1 := E1) (E2 := E3) (E3 := tenv_subst Xs Us (E1 & E3))
            (E4 := tenv_subst Xs Us E2)
            (Xs := Xs) (Rs := Rs) (Us := Us) (Ys := Xs) (Ts := Us)
            (X := X) (R := Rng T1 T2 K) (v := v)
       as [Hr|[Hb Heq]]; auto.
-    + inversion Hr; auto.
+    + inversion Hr; subst.
+      apply type_equal_weakening_eqn_nils; auto.
     + rewrite Heq in *.
       apply tenv_subst_binds with (Zs := Xs) (Us := Us) in Hb.
       unfold rng_subst in Hb; simpl in Hb.
@@ -338,7 +347,8 @@ Proof.
            (Xs := Xs) (Rs := Rs) (Us := Us) (Ys := Xs) (Ts := Us)
            (X := X) (R := Rng T1 T2 K) (v := v)
       as [Hr|[Hb Heq]]; auto.
-    + inversion Hr; auto.
+    + inversion Hr; subst.
+      apply type_equal_weakening_eqn_nils; auto.
     + rewrite Heq in *.
       apply tenv_subst_binds with (Zs := Xs) (Us := Us) in Hb.
       unfold rng_subst in Hb; simpl in Hb.
@@ -348,20 +358,23 @@ Proof.
   - eauto using type_equal_typ_subst_rec.
   - eauto using type_equal_typ_subst_rec.
   - eauto using type_equal_typ_subst_rec.
-  - constructor; eauto using type_equal_core_typ_subst,
+  - apply type_equal_of_core; eauto using type_equal_core_typ_subst,
       kinding_typ_subst, rangings_kindings.
+  - apply type_equal_rec; eauto using kinding_typ_subst,
+      rangings_kindings, qenv_subst_in.
   - eauto using kinding_typ_subst, rangings_kindings.
   - eauto.
 Qed.
 
-Lemma type_equal_typ_subst_l : forall v E1 E2 Xs Rs Us T1 T2 K,
-  type_equal v (E1 & Xs ~* Rs) E2 T1 T2 K ->
+Lemma type_equal_typ_subst_l : forall v E1 E2 Q1 Q2 Xs Rs Us T1 T2 K,
+  type_equal v (E1 & Xs ~* Rs) E2 Q1 Q2 T1 T2 K ->
   length Xs = length Rs ->
   type_environment (E1 & Xs ~* Rs) ->
   type_environment_extension (E1 & Xs ~* Rs) E2 ->
   rangings v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
     Us (rng_subst_list Xs Us Rs) ->
   type_equal v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+    (qenv_subst Xs Us Q1) (qenv_subst Xs Us Q2)
     (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
 Proof.
   introv Hte Hl He1 He2 Hrs.
@@ -372,28 +385,30 @@ Proof.
 Qed.
 
 Lemma type_equal_typ_subst_empty : forall v E1 E2 Xs Rs Us T1 T2 K,
-  type_equal v (E1 & Xs ~* Rs & E2) empty T1 T2 K ->
+  type_equal v (E1 & Xs ~* Rs & E2) empty nil nil T1 T2 K ->
   length Xs = length Rs ->
   type_environment (E1 & Xs ~* Rs & E2) ->
   rangings v (tenv_subst Xs Us (E1 & E2)) empty
     Us (rng_subst_list Xs Us Rs) ->
-  type_equal v (tenv_subst Xs Us (E1 & E2)) empty
+  type_equal v (tenv_subst Xs Us (E1 & E2)) empty nil nil
     (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
 Proof.
   introv Hte Hl He Hrs.
   rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us) in Hrs.
   rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  rewrite <- qenv_subst_nil with (Xs := Xs) (Us := Us).
   apply type_equal_typ_subst with Rs; auto.
 Qed.
 
-Lemma subtype_typ_subst : forall v E1 E2 E3 Xs Rs Us T1 T2 K,
-  subtype v (E1 & Xs ~* Rs & E2) E3 T1 T2 K ->
+Lemma subtype_typ_subst : forall v E1 E2 E3 Q1 Q2 Xs Rs Us T1 T2 K,
+  subtype v (E1 & Xs ~* Rs & E2) E3 Q1 Q2 T1 T2 K ->
   length Xs = length Rs ->
   type_environment (E1 & Xs ~* Rs & E2) ->
   type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
   rangings v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
     Us (rng_subst_list Xs Us Rs) ->
   subtype v (tenv_subst Xs Us (E1 & E2)) (tenv_subst Xs Us E3)
+    (qenv_subst Xs Us Q1) (qenv_subst Xs Us Q2)
     (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
 Proof.
   introv Hsb Hl He1 He2 Hrs.
@@ -403,14 +418,15 @@ Proof.
   eauto using type_equal_typ_subst.
 Qed.
 
-Lemma subtype_typ_subst_l : forall v E1 E2 Xs Rs Us T1 T2 cs,
-  subtype v (E1 & Xs ~* Rs) E2 T1 T2 cs ->
+Lemma subtype_typ_subst_l : forall v E1 E2 Q1 Q2 Xs Rs Us T1 T2 cs,
+  subtype v (E1 & Xs ~* Rs) E2 Q1 Q2 T1 T2 cs ->
   length Xs = length Rs ->
   type_environment (E1 & Xs ~* Rs) ->
   type_environment_extension (E1 & Xs ~* Rs) E2 ->
   rangings v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
     Us (rng_subst_list Xs Us Rs) ->
   subtype v (tenv_subst Xs Us E1) (tenv_subst Xs Us E2)
+    (qenv_subst Xs Us Q1) (qenv_subst Xs Us Q2)
     (typ_subst Xs Us T1) (typ_subst Xs Us T2) cs.
 Proof.
   introv Hsb Hl He1 He2 Hrs.
@@ -421,17 +437,18 @@ Proof.
 Qed.
 
 Lemma subtype_typ_subst_empty : forall v E1 E2 Xs Rs Us T1 T2 K,
-  subtype v (E1 & Xs ~* Rs & E2) empty T1 T2 K ->
+  subtype v (E1 & Xs ~* Rs & E2) empty nil nil T1 T2 K ->
   length Xs = length Rs ->
   type_environment (E1 & Xs ~* Rs & E2) ->
   rangings v (tenv_subst Xs Us (E1 & E2)) empty
     Us (rng_subst_list Xs Us Rs) ->
-  subtype v (tenv_subst Xs Us (E1 & E2)) empty
+  subtype v (tenv_subst Xs Us (E1 & E2)) empty nil nil
     (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
 Proof.
   introv Hs Hl He Hrs.
   rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us) in Hrs.
   rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  rewrite <- qenv_subst_nil with (Xs := Xs) (Us := Us).
   apply subtype_typ_subst with Rs; auto.
 Qed.
 
@@ -451,8 +468,10 @@ Proof.
   introv Hr Hl He1 He2 Hrs.
   remember (E1 & Xs ~* Rs & E2) as E12.
   destruct Hr; subst.
-  constructor; eauto using subtype_typ_subst,
-                 kinding_typ_subst, rangings_kindings.
+  constructor;
+    try rewrite <- qenv_subst_nil with (Xs := Xs) (Us := Us);
+    eauto using subtype_typ_subst,
+      kinding_typ_subst, rangings_kindings.
 Qed.
 
 Lemma valid_tenv_rec_typ_subst : forall v E1 E2 E3 E4 Xs Rs Us,
@@ -599,6 +618,7 @@ Proof.
   remember (E1 & Xs ~* Rs & E2) as E12.
   destruct Hr; subst.
   constructor;
+    try rewrite <- qenv_subst_nil with (Xs := Xs) (Us := Us);
     eauto using subtype_typ_subst, kinding_typ_subst,
       rangings_kindings.
 Qed.

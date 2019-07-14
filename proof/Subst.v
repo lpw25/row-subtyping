@@ -217,7 +217,7 @@ Proof.
   rewrite typ_subst_fvars; auto.
 Qed.
 
-Lemma typ_subst_nil : forall Xs Us T,
+Lemma typ_subst_nils : forall Xs Us T,
     Xs = nil \/ Us = nil ->
     typ_subst Xs Us T = T.
 Proof.
@@ -233,7 +233,7 @@ Lemma typ_subst_list_nil : forall Xs Us Ts,
     typ_subst_list Xs Us Ts = Ts.
 Proof.
   introv Heq.
-  induction Ts; simpl; rewrite? typ_subst_nil; rewrite? IHTs; auto.
+  induction Ts; simpl; rewrite? typ_subst_nils; rewrite? IHTs; auto.
 Qed.
 
 (** Types are stable by type substitution *)
@@ -446,12 +446,12 @@ Proof.
   rewrite rng_subst_intro with (Xs := Xs); auto.
 Qed.
 
-Lemma rng_subst_nil : forall Xs Us R,
+Lemma rng_subst_nils : forall Xs Us R,
     Xs = nil \/ Us = nil ->
     rng_subst Xs Us R = R.
 Proof.
   introv Heq.
-  induction R; unfold rng_subst; simpl; rewrite? typ_subst_nil; auto.
+  induction R; unfold rng_subst; simpl; rewrite? typ_subst_nils; auto.
 Qed.
 
 Lemma rng_subst_list_nil : forall Xs Us Rs,
@@ -459,7 +459,7 @@ Lemma rng_subst_list_nil : forall Xs Us Rs,
     rng_subst_list Xs Us Rs = Rs.
 Proof.
   introv Heq.
-  induction Rs; simpl; rewrite? rng_subst_nil; rewrite? IHRs; auto.
+  induction Rs; simpl; rewrite? rng_subst_nils; rewrite? IHRs; auto.
 Qed.
 
 (** Ranges are stable by type substitution *)
@@ -586,14 +586,14 @@ Proof.
   assumption.
 Qed.
 
-Lemma sch_subst_nil : forall Xs Us M,
+Lemma sch_subst_nils : forall Xs Us M,
     Xs = nil \/ Us = nil ->
     sch_subst Xs Us M = M.
 Proof.
   introv Heq.
   destruct M; unfold sch_subst; simpl.
   rewrite rng_subst_list_nil; auto.
-  rewrite typ_subst_nil; auto.
+  rewrite typ_subst_nils; auto.
 Qed.
 
 Lemma sch_subst_list_nil : forall Xs Us Ms,
@@ -601,7 +601,7 @@ Lemma sch_subst_list_nil : forall Xs Us Ms,
     sch_subst_list Xs Us Ms = Ms.
 Proof.
   introv Heq.
-  induction Ms; simpl; rewrite? sch_subst_nil; rewrite? IHMs; auto.
+  induction Ms; simpl; rewrite? sch_subst_nils; rewrite? IHMs; auto.
 Qed.
 
 Lemma scheme_aux_subset : forall L1 L2 M,
@@ -693,7 +693,7 @@ Qed.
 Definition tenv_subst Zs Us E :=
   map (rng_subst Zs Us) E.
 
-Lemma tenv_subst_nil : forall Xs Us E,
+Lemma tenv_subst_nils : forall Xs Us E,
     Xs = nil \/ Us = nil ->
     tenv_subst Xs Us E = E.
 Proof.
@@ -701,7 +701,7 @@ Proof.
   unfold tenv_subst.
   induction E using env_ind;
     rewrite? map_empty; rewrite? map_push;
-    rewrite? IHE; rewrite? rng_subst_nil; auto.
+    rewrite? IHE; rewrite? rng_subst_nils; auto.
 Qed.
 
 Lemma tenv_subst_empty : forall Xs Us,
@@ -856,7 +856,7 @@ Qed.
 Definition env_subst Zs Us D :=
   map (sch_subst Zs Us) D.
 
-Lemma env_subst_nil : forall Xs Us D,
+Lemma env_subst_nils : forall Xs Us D,
     Xs = nil \/ Us = nil ->
     env_subst Xs Us D = D.
 Proof.
@@ -864,7 +864,7 @@ Proof.
   unfold env_subst.
   induction D using env_ind;
     rewrite? map_empty; rewrite? map_push;
-    rewrite? IHD; rewrite? sch_subst_nil; auto.
+    rewrite? IHD; rewrite? sch_subst_nils; auto.
 Qed.
 
 Lemma env_subst_empty : forall Xs Us,
@@ -981,7 +981,7 @@ Qed.
 Definition styp_subst Zs Us P :=
   map (typ_subst Zs Us) P.
 
-Lemma styp_subst_nil : forall Xs Us P,
+Lemma styp_subst_nils : forall Xs Us P,
     Xs = nil \/ Us = nil ->
     styp_subst Xs Us P = P.
 Proof.
@@ -989,7 +989,7 @@ Proof.
   unfold styp_subst.
   induction P using env_ind;
     rewrite? map_empty; rewrite? map_push;
-    rewrite? IHP; rewrite? typ_subst_nil; auto.
+    rewrite? IHP; rewrite? typ_subst_nils; auto.
 Qed.
 
 Lemma styp_subst_empty : forall Xs Us,
@@ -1069,10 +1069,10 @@ Proof.
   - introv Hs.
     induction P using env_ind; autorewrite with rew_styp_subst in Hs;
       auto.
-    remember (styp_subst Zs Us P & x ~ typ_subst Zs Us v) as Q.
+    remember (styp_subst Zs Us P & x ~ typ_subst Zs Us v) as Px.
     destruct Hs.
-    + apply empty_push_inv in HeqQ; contradiction.
-    + apply eq_push_inv in HeqQ as [A [B C]]; subst.
+    + apply empty_push_inv in HeqPx; contradiction.
+    + apply eq_push_inv in HeqPx as [? [? ?]]; subst.
       apply store_type_push;
         try rewrite typ_subst_type in *;
         autorewrite with rew_styp_dom in *; auto.
@@ -1081,6 +1081,76 @@ Proof.
     apply store_type_push; auto.
     + rewrite typ_subst_type; assumption.
     + autorewrite with rew_styp_dom; assumption.
+Qed.
+
+(* *************************************************************** *)
+(** ** Equation environments *)
+
+Definition qenv_subst Zs Us (Q : qenv) : qenv :=
+  List.map
+    (fun '(T1, T2, K) =>
+       (typ_subst Zs Us T1, typ_subst Zs Us T2, K))
+    Q.
+
+Lemma qenv_subst_nils : forall Xs Us Q,
+    Xs = nil \/ Us = nil ->
+    qenv_subst Xs Us Q = Q.
+Proof.
+  introv Heq.
+  unfold qenv_subst.
+  induction Q as [|[[T1 T2] K]]; simpl.
+  - reflexivity.
+  - rewrite typ_subst_nils, typ_subst_nils by assumption.
+    f_equal; assumption.
+Qed.
+
+Lemma qenv_subst_nil : forall Xs Us,
+  qenv_subst Xs Us nil = nil.
+Proof.
+  intros.
+  unfold qenv_subst; simpl; reflexivity. 
+Qed.
+
+Lemma qenv_subst_cons : forall Xs Us T1 T2 K Q,
+  qenv_subst Xs Us ((T1, T2, K) :: Q)
+  = (typ_subst Xs Us T1, typ_subst Xs Us T2, K)
+      :: qenv_subst Xs Us Q.
+Proof.
+  intros.
+  unfold qenv_subst; simpl; reflexivity.
+Qed.
+
+Lemma qenv_subst_app : forall Xs Us Q1 Q2,
+  qenv_subst Xs Us (Q1 ++ Q2)
+  = qenv_subst Xs Us Q1 ++ qenv_subst Xs Us Q2.
+Proof.
+  intros.
+  unfold qenv_subst; rewrite map_app; reflexivity.
+Qed.
+
+Hint Rewrite qenv_subst_nil qenv_subst_cons
+     qenv_subst_app : rew_qenv_subst.
+
+Lemma qenv_subst_fresh : forall Xs Us Q, 
+  disjoint (qenv_fv Q) (from_list Xs) -> 
+  qenv_subst Xs Us Q = Q.
+Proof.
+  introv Hf.
+  induction Q as [|[[T1 T2] K]];
+    autorewrite with rew_qenv_subst rew_qenv_fv in *.
+  - reflexivity.
+  - rewrite typ_subst_fresh, typ_subst_fresh by auto.
+    rewrite IHQ by auto.
+    reflexivity.
+Qed.
+
+Lemma qenv_subst_in : forall T1 T2 K Q Zs Us,
+    in_qenv Q T1 T2 K ->
+    in_qenv (qenv_subst Zs Us Q)
+      (typ_subst Zs Us T1) (typ_subst Zs Us T2) K.
+Proof.
+  introv Hin.
+  induction Hin; simpl; auto.
 Qed.
 
 (* **************************************************** *)

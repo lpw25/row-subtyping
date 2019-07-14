@@ -52,6 +52,11 @@ Definition env_fv :=
 Definition styp_fv :=
   fv_in_values typ_fv.
 
+Definition qenv_fv (Q : qenv) :=
+  fold_right
+    (fun '(T1, T2, _) acc => typ_fv T1 \u typ_fv T2 \u acc)
+    \{} Q.
+
 Fixpoint trm_fv (t : trm) {struct t} : vars :=
   match t with
   | trm_bvar i => \{}
@@ -95,10 +100,11 @@ Ltac gather_vars :=
   let L := gather_vars_with (fun x : env => env_fv x) in
   let M := gather_vars_with (fun x : env => dom x) in
   let N := gather_vars_with (fun x : styp => styp_fv x) in
-  let O := gather_vars_with (fun x : sch => sch_fv x) in
-  let P := gather_vars_with (fun x : list sch => sch_fv_list x) in
+  let O := gather_vars_with (fun x : qenv => qenv_fv x) in
+  let P := gather_vars_with (fun x : sch => sch_fv x) in
+  let Q := gather_vars_with (fun x : list sch => sch_fv_list x) in
   constr:(A \u B \u C \u D \u E \u F \u G \u H
-            \u I \u J \u K \u L \u M \u N \u O \u P).
+            \u I \u J \u K \u L \u M \u N \u O \u P \u Q).
 
 Tactic Notation "pick_fresh" ident(x) :=
   let L := gather_vars in (pick_fresh_gen L x).
@@ -522,8 +528,38 @@ Qed.
 Hint Rewrite styp_fv_empty styp_fv_single styp_fv_concat
   : rew_styp_fv.
 
+(* *************************************************************** *)
+(** ** Equation environments *)
 
+Lemma qenv_fv_nil :
+  qenv_fv nil = \{}.
+Proof.
+  unfold qenv_fv; simpl; reflexivity.
+Qed.  
 
+Lemma qenv_fv_cons : forall T1 T2 K Q,
+  qenv_fv ((T1, T2, K) :: Q)
+  = typ_fv T1 \u typ_fv T2 \u qenv_fv Q.
+Proof.
+  intros.
+  unfold qenv_fv; simpl.
+  reflexivity.
+Qed.
 
+Lemma qenv_fv_app : forall Q1 Q2,
+  qenv_fv (Q1 ++ Q2) = qenv_fv Q1 \u qenv_fv Q2.
+Proof.
+  intros.
+  unfold qenv_fv.
+  rewrite fold_right_app.
+  induction Q1 as [|[[T1 T2] K]]; simpl.
+  - rewrite union_empty_l; reflexivity.
+  - rewrite IHQ1.
+    rewrite <- union_assoc.
+    rewrite <- union_assoc.
+    reflexivity.
+Qed.
+
+Hint Rewrite qenv_fv_nil qenv_fv_cons qenv_fv_app : rew_qenv_fv.
 
 

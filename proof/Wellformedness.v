@@ -47,8 +47,8 @@ Proof.
   induction Hks; simpl; auto.
 Qed.
 
-Lemma wellformed_type_equal_both : forall v E1 E2 T1 T2 K,
-    type_equal v E1 E2 T1 T2 K ->
+Lemma wellformed_type_equal_both : forall v E1 E2 Q1 Q2 T1 T2 K,
+    type_equal v E1 E2 Q1 Q2 T1 T2 K ->
     type_environment E1 ->
     type_environment_extension E1 E2 ->
     type T1 /\ type T2.
@@ -76,8 +76,8 @@ Proof.
       with wellformed.
 Qed.
 
-Lemma wellformed_type_equal_1 : forall v E1 E2 T1 T2 K,
-    type_equal v E1 E2 T1 T2 K ->
+Lemma wellformed_type_equal_1 : forall v E1 E2 Q1 Q2 T1 T2 K,
+    type_equal v E1 E2 Q1 Q2 T1 T2 K ->
     type_environment E1 ->
     type_environment_extension E1 E2 ->
     type T1.
@@ -87,8 +87,8 @@ Proof.
   assumption.
 Qed.
 
-Lemma wellformed_type_equal_2 : forall v E1 E2 T1 T2 K,
-    type_equal v E1 E2 T1 T2 K ->
+Lemma wellformed_type_equal_2 : forall v E1 E2 Q1 Q2 T1 T2 K,
+    type_equal v E1 E2 Q1 Q2 T1 T2 K ->
     type_environment E1 ->
     type_environment_extension E1 E2 ->
     type T2.
@@ -100,18 +100,18 @@ Qed.
 
 Hint Extern 1 (type ?T) =>
   match goal with
-  | H : type_equal _ ?E1 ?E2 T _ _,
+  | H : type_equal _ ?E1 ?E2 _ _ T _ _,
     He1 : type_environment ?E1,
     He2 : type_environment_extension ?E1 ?E2 |- _ =>
       apply (wellformed_type_equal_1 H He1 He2)
-  | H : type_equal _ ?E1 ?E2 _ T _,
+  | H : type_equal _ ?E1 ?E2 _ _ _ T _,
     He1 : type_environment ?E1,
     He2 : type_environment_extension ?E1 ?E2 |- _ =>
       apply (wellformed_type_equal_2 H He1 He2)
   end : wellformed.
 
-Lemma wellformed_subtype_1 : forall v E1 E2 T1 T2 K,
-    subtype v E1 E2 T1 T2 K ->
+Lemma wellformed_subtype_1 : forall v E1 E2 Q1 Q2 T1 T2 K,
+    subtype v E1 E2 Q1 Q2 T1 T2 K ->
     type_environment E1 ->
     type_environment_extension E1 E2 ->
     type T1.
@@ -121,8 +121,8 @@ Proof.
   auto with wellformed.
 Qed.
 
-Lemma wellformed_subtype_2 : forall v E1 E2 T1 T2 K,
-    subtype v E1 E2 T1 T2 K ->
+Lemma wellformed_subtype_2 : forall v E1 E2 Q1 Q2 T1 T2 K,
+    subtype v E1 E2 Q1 Q2 T1 T2 K ->
     type_environment E1 ->
     type_environment_extension E1 E2 ->
     type T2.
@@ -136,11 +136,11 @@ Qed.
 
 Hint Extern 1 (type ?T) =>
   match goal with
-  | H : subtype _ ?E1 ?E2 T _ _,
+  | H : subtype _ ?E1 ?E2 _ _ T _ _,
     He1 : type_environment ?E1,
     He2 : type_environment_extension ?E1 ?E2 |- _ =>
       apply (wellformed_subtype_1 H He1 He2)
-  | H : subtype _ ?E1 ?E2 _ T _,
+  | H : subtype _ ?E1 ?E2 _ _ _ T _,
     He1 : type_environment ?E1,
     He2 : type_environment_extension ?E1 ?E2 |- _ =>
       apply (wellformed_subtype_2 H He1 He2)
@@ -545,8 +545,9 @@ Hint Extern 1 (kinds ?Ks) =>
                (@type_environment_extension_empty (E1 & E2)))
   end : wellformed.
 
-Lemma wellformed_output_type_equal : forall v E1 E2 T1 T2 K,
-  type_equal v E1 E2 T1 T2 K ->
+Lemma wellformed_output_type_equal :
+  forall v E1 E2 Q1 Q2 T1 T2 K,
+  type_equal v E1 E2 Q1 Q2 T1 T2 K ->
   type_environment E1 ->
   type_environment_extension E1 E2 ->
   kind K.
@@ -564,17 +565,17 @@ Qed.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
-  | H : type_equal _ ?E1 ?E2 _ _ K,
+  | H : type_equal _ ?E1 ?E2 _ _ _ _ K,
     He1 : type_environment ?E1,
     He2 : type_environment_extension ?E1 ?E2 |- _ =>
       apply (wellformed_output_type_equal H He1 He2)
-  | H : type_equal _ ?E1 ?E2 _ _ K,
+  | H : type_equal _ ?E1 ?E2 _ _ _ _ K,
     He1 : valid_tenv _ ?E1,
     He2 : valid_tenv_extension _ ?E1 ?E2 |- _ =>
       apply (wellformed_output_type_equal H
                (wellformed_valid_tenv He1)
                (wellformed_valid_tenv_extension He2))
-  | H : type_equal _ (?E1 & ?E2) empty _ _ K,
+  | H : type_equal _ (?E1 & ?E2) empty _ _ _ _ K,
     He1 : valid_tenv _ ?E1,
     He2 : valid_tenv_extension _ ?E1 ?E2 |- _ =>
       apply (wellformed_output_type_equal H
@@ -584,11 +585,12 @@ Hint Extern 1 (kind ?K) =>
                (@type_environment_extension_empty (E1 & E2)))
   end : wellformed.
 
-Lemma wellformed_output_subtype : forall v E1 E2 T1 T2 K,
-  subtype v E1 E2 T1 T2 K ->
-  type_environment E1 ->
-  type_environment_extension E1 E2 ->
-  kind K.
+Lemma wellformed_output_subtype :
+  forall v E1 E2 Q1 Q2 T1 T2 K,
+    subtype v E1 E2 Q1 Q2 T1 T2 K ->
+    type_environment E1 ->
+    type_environment_extension E1 E2 ->
+    kind K.
 Proof.
   introv Hs He1 He2.
   unfold subtype in Hs.
@@ -597,17 +599,17 @@ Qed.
 
 Hint Extern 1 (kind ?K) =>
   match goal with
-  | H : subtype _ ?E1 ?E2 _ _ K,
+  | H : subtype _ ?E1 ?E2 _ _ _ _ K,
     He1 : type_environment ?E1,
     He2 : type_environment_extension ?E1 ?E2 |- _ =>
       apply (wellformed_output_subtype H He1 He2)
-  | H : subtype _ ?E1 ?E2 _ _ K,
+  | H : subtype _ ?E1 ?E2 _ _ _ _ K,
     He1 : valid_tenv _ ?E1,
     He2 : valid_tenv_extension _ ?E1 ?E2 |- _ =>
       apply (wellformed_output_subtype H
                (wellformed_valid_tenv He1)
                (wellformed_valid_tenv_extension He2))
-  | H : subtype _ (?E1 & ?E2) empty _ _ K,
+  | H : subtype _ (?E1 & ?E2) empty _ _ _ _ K,
     He1 : valid_tenv _ ?E1,
     He2 : valid_tenv_extension _ ?E1 ?E2 |- _ =>
       apply (wellformed_output_subtype H

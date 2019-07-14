@@ -204,11 +204,12 @@ Qed.
 (* *************************************************************** *)
 (** Weakening type equality *)
 
-Lemma type_equal_weakening : forall v E1 E2 E3 E4 T1 T2 K,
-   type_equal v (E1 & E3) E4 T1 T2 K -> 
-   type_environment (E1 & E2 & E3) ->
-   type_environment_extension (E1 & E2 & E3) E4 ->
-   type_equal v (E1 & E2 & E3) E4 T1 T2 K.
+Lemma type_equal_weakening :
+  forall v E1 E2 E3 E4 Q1 Q2 T1 T2 K,
+    type_equal v (E1 & E3) E4 Q1 Q2 T1 T2 K -> 
+    type_environment (E1 & E2 & E3) ->
+    type_environment_extension (E1 & E2 & E3) E4 ->
+    type_equal v (E1 & E2 & E3) E4 Q1 Q2 T1 T2 K.
 Proof.
   introv Hte He1 He2.
   remember (E1 & E3) as E13.
@@ -222,8 +223,8 @@ Proof.
         type_environment (E1 & E2 & E5) ->
         type_environment_extension 
           (E1 & E2 & E5) empty ->
-        type_equal v (E1 & E2 & E5) empty ?Tl ?Tr ?Kt
-      |- type_equal v (E1 & E2 & E4 & ?E) empty ?Tl ?Tr _ =>
+        type_equal v (E1 & E2 & E5) empty _ _ ?Tl ?Tr ?Kt
+      |- type_equal v (E1 & E2 & E4 & ?E) empty _ _ ?Tl ?Tr _ =>
       rewrite <- concat_assoc;
         apply IH; rewrite concat_assoc;
           auto using type_environment_extend
@@ -231,11 +232,11 @@ Proof.
     end.
 Qed.
 
-Lemma type_equal_weakening_l : forall v E1 E2 E3 T1 T2 K,
-   type_equal v E1 E3 T1 T2 K -> 
+Lemma type_equal_weakening_l : forall v E1 E2 E3 Q1 Q2 T1 T2 K,
+   type_equal v E1 E3 Q1 Q2 T1 T2 K -> 
    type_environment (E1 & E2) ->
    type_environment_extension (E1 & E2) E3 ->
-   type_equal v (E1 & E2) E3 T1 T2 K.
+   type_equal v (E1 & E2) E3 Q1 Q2 T1 T2 K.
 Proof.
   introv Hv He1 He2.
   rewrite <- concat_empty_r with (E := E1 & E2).
@@ -243,21 +244,21 @@ Proof.
     rewrite concat_empty_r; assumption.
 Qed.
 
-Lemma subtype_weakening : forall v E1 E2 E3 E4 T1 T2 K,
-   subtype v (E1 & E3) E4 T1 T2 K -> 
+Lemma subtype_weakening : forall v E1 E2 E3 E4 Q1 Q2 T1 T2 K,
+   subtype v (E1 & E3) E4 Q1 Q2 T1 T2 K -> 
    type_environment (E1 & E2 & E3) ->
    type_environment_extension (E1 & E2 & E3) E4 ->
-   subtype v (E1 & E2 & E3) E4 T1 T2 K.
+   subtype v (E1 & E2 & E3) E4 Q1 Q2 T1 T2 K.
 Proof.
   intros.
   apply type_equal_weakening; auto.
 Qed.
 
-Lemma subtype_weakening_l : forall v E1 E2 E3 T1 T2 K,
-   subtype v E1 E3 T1 T2 K -> 
+Lemma subtype_weakening_l : forall v E1 E2 E3 Q1 Q2 T1 T2 K,
+   subtype v E1 E3 Q1 Q2 T1 T2 K -> 
    type_environment (E1 & E2) ->
    type_environment_extension (E1 & E2) E3 ->
-   subtype v (E1 & E2) E3 T1 T2 K.
+   subtype v (E1 & E2) E3 Q1 Q2 T1 T2 K.
 Proof.
   intros.
   apply type_equal_weakening_l; auto.
@@ -266,11 +267,12 @@ Qed.
 (* *************************************************************** *)
 (** Weakening recursive environment of type equaliy *)
 
-Lemma type_equal_weakening_assoc : forall v E1 E2 E3 E4 T1 T2 K,
-    type_equal v (E1 & (E2 & E4)) empty T1 T2 K ->
+Lemma type_equal_weakening_assoc :
+  forall v E1 E2 E3 E4 T1 Q1 Q2 T2 K,
+    type_equal v (E1 & (E2 & E4)) empty Q1 Q2 T1 T2 K ->
     type_environment E1 ->
     type_environment_extension E1 (E2 & E3 & E4) ->
-    type_equal v (E1 & (E2 & E3 & E4)) empty T1 T2 K.
+    type_equal v (E1 & (E2 & E3 & E4)) empty Q1 Q2 T1 T2 K.
 Proof.
   introv Hte He1 He2.
   autorewrite with rew_env_concat in *.
@@ -281,11 +283,11 @@ Proof.
     autorewrite with rew_env_concat in *; auto.
 Qed.
 
-Lemma type_equal_weakening_rec : forall v E1 E2 E3 E4 T1 T2 K,
-   type_equal v E1 (E2 & E4) T1 T2 K -> 
+Lemma type_equal_weakening_rec : forall v E1 E2 E3 E4 Q1 Q2 T1 T2 K,
+   type_equal v E1 (E2 & E4) Q1 Q2 T1 T2 K -> 
    type_environment E1 ->
    type_environment_extension E1 (E2 & E3 & E4) ->
-   type_equal v E1 (E2 & E3 & E4) T1 T2 K.
+   type_equal v E1 (E2 & E3 & E4) Q1 Q2 T1 T2 K.
 Proof.
   introv Hte He1 He2.
   remember (E2 & E4) as E24.
@@ -294,11 +296,11 @@ Proof.
     eauto.
 Qed.
 
-Lemma type_equal_weakening_rec_l : forall v E1 E2 E3 T1 T2 K,
-   type_equal v E1 E2 T1 T2 K -> 
+Lemma type_equal_weakening_rec_l : forall v E1 E2 E3 Q1 Q2 T1 T2 K,
+   type_equal v E1 E2 Q1 Q2 T1 T2 K -> 
    type_environment E1 ->
    type_environment_extension E1 (E2 & E3) ->
-   type_equal v E1 (E2 & E3) T1 T2 K.
+   type_equal v E1 (E2 & E3) Q1 Q2 T1 T2 K.
 Proof.
   introv Hte He1 He2.
   rewrite <- concat_empty_r with (E := E2 & E3).
@@ -306,21 +308,21 @@ Proof.
     rewrite? concat_empty_r; auto.
 Qed.
 
-Lemma subtype_weakening_rec : forall v E1 E2 E3 E4 T1 T2 K,
-   subtype v E1 (E2 & E4) T1 T2 K -> 
+Lemma subtype_weakening_rec : forall v E1 E2 E3 E4 Q1 Q2 T1 T2 K,
+   subtype v E1 (E2 & E4) Q1 Q2 T1 T2 K -> 
    type_environment E1 ->
    type_environment_extension E1 (E2 & E3 & E4) ->
-   subtype v E1 (E2 & E3 & E4) T1 T2 K.
+   subtype v E1 (E2 & E3 & E4) Q1 Q2 T1 T2 K.
 Proof.
   intros.
   apply type_equal_weakening_rec; auto.
 Qed.
 
-Lemma subtype_weakening_assoc : forall v E1 E2 E3 E4 T1 T2 K,
-    subtype v (E1 & (E2 & E4)) empty T1 T2 K ->
+Lemma subtype_weakening_assoc : forall v E1 E2 E3 E4 Q1 Q2 T1 T2 K,
+    subtype v (E1 & (E2 & E4)) empty Q1 Q2 T1 T2 K ->
     type_environment E1 ->
     type_environment_extension E1 (E2 & E3 & E4) ->
-    subtype v (E1 & (E2 & E3 & E4)) empty T1 T2 K.
+    subtype v (E1 & (E2 & E3 & E4)) empty Q1 Q2 T1 T2 K.
 Proof.
   introv Hte He1 He2.
   unfold subtype in *.
@@ -330,10 +332,10 @@ Qed.
 (* *************************************************************** *)
 (** Extending environment with recursive environment *)
 
-Lemma type_equal_extend : forall v E1 E2 E3 T1 T2 K,
-   type_equal v E1 (E2 & E3) T1 T2 K -> 
+Lemma type_equal_extend : forall v E1 E2 E3 Q1 Q2 T1 T2 K,
+   type_equal v E1 (E2 & E3) Q1 Q2 T1 T2 K -> 
    type_environment_extension E1 E2 ->
-   type_equal v (E1 & E2) E3 T1 T2 K.
+   type_equal v (E1 & E2) E3 Q1 Q2 T1 T2 K.
 Proof.
   introv Hte He.
   remember (E2 & E3) as E23.
@@ -349,23 +351,193 @@ Proof.
   - eauto.    
 Qed.
 
-Lemma type_equal_extend_empty : forall v E1 E2 T1 T2 K,
-   type_equal v E1 E2 T1 T2 K -> 
+Lemma type_equal_extend_empty : forall v E1 E2 Q1 Q2 T1 T2 K,
+   type_equal v E1 E2 Q1 Q2 T1 T2 K -> 
    type_environment_extension E1 E2 ->
-   type_equal v (E1 & E2) empty T1 T2 K.
+   type_equal v (E1 & E2) empty Q1 Q2 T1 T2 K.
 Proof.
   introv Hte He.
   apply type_equal_extend;
     autorewrite with rew_env_concat; auto.
 Qed.
 
-Lemma subtype_extend : forall v E1 E2 E3 T1 T2 K,
-   subtype v E1 (E2 & E3) T1 T2 K -> 
+Lemma subtype_extend : forall v E1 E2 E3 Q1 Q2 T1 T2 K,
+   subtype v E1 (E2 & E3) Q1 Q2 T1 T2 K -> 
    type_environment_extension E1 E2 ->
-   subtype v (E1 & E2) E3 T1 T2 K.
+   subtype v (E1 & E2) E3 Q1 Q2 T1 T2 K.
 Proof.
   introv Hs He.
   apply type_equal_extend; auto.
+Qed.
+
+(* *************************************************************** *)
+(** Weakening equation environment of type equaliy *)
+
+Lemma type_equal_weakening_eqn :
+  forall v E1 E2 Q1 Q2 Q3 Q4 T1 T2 K,
+    type_equal v E1 E2 (Q1 ++ Q3) Q4 T1 T2 K -> 
+    type_equal v E1 E2 (Q1 ++ Q2 ++ Q3) Q4 T1 T2 K.
+Proof.
+  introv Hte.
+  remember (app Q1 Q3) as Q13.
+  generalize dependent Q1.
+  induction Hte; introv HeqQ13; subst;
+    try solve
+      [constructor;
+       match goal with
+       | IH : forall Q5',
+           ((?Tl, ?Tr, ?Klr) :: ?Q1' ++ ?Q2' ++ ?Q4'
+            = Q5' ++ ?Q4')%list ->
+           type_equal _ _ _ (Q5' ++ ?Q3' ++ ?Q4') _ ?Ta ?Tb _
+         |- type_equal _ _ _
+              ((?Tl, ?Tr, ?Klr)
+                 :: (?Q1' ++ ?Q2' ++ ?Q3' ++ ?Q4'))%list
+              _ ?Ta ?Tb _ =>
+         rewrite List.app_assoc;
+         rewrite List.app_comm_cons;
+         apply IH;
+         rewrite List.app_assoc;
+         reflexivity
+       | _ => auto
+       end]; eauto.
+  - apply type_equal_rec; auto.
+    assert (in_qenv (Q4 ++ Q3) T1 T1' K) as Hin by assumption.
+    apply (in_qenv_concat_inv Hin); introv Hin2;
+      auto using in_qenv_concat_l, in_qenv_concat_r.
+Qed.
+
+Lemma type_equal_weakening_eqn_r :
+  forall v E1 E2 Q1 Q2 Q3 T1 T2 K,
+    type_equal v E1 E2 Q2 Q3 T1 T2 K -> 
+    type_equal v E1 E2 (Q1 ++ Q2) Q3 T1 T2 K.
+Proof.
+  introv Hte.
+  rewrite <- List.app_nil_l with (l := app Q1 Q2).
+  apply type_equal_weakening_eqn.
+  rewrite List.app_nil_l.
+  assumption.
+Qed.
+
+Lemma type_equal_weakening_eqn_cons :
+  forall v E1 E2 Q1 Q2 T1 T2 K T1' T2' K',
+    type_equal v E1 E2 Q1 Q2 T1 T2 K -> 
+    type_equal v E1 E2 ((T1', T2', K') :: Q1) Q2 T1 T2 K.
+Proof.
+  introv Hte.
+  rewrite <- List.app_nil_l with (l := cons (T1', T2', K') Q1).
+  rewrite <- List.app_nil_l with (l := Q1).
+  rewrite List.app_comm_cons.
+  apply type_equal_weakening_eqn.
+  rewrite List.app_nil_l.
+  assumption.
+Qed.
+
+Lemma type_equal_eqn_extend : forall v E1 E2 Q1 Q2 Q3 T1 T2 K,
+   type_equal v E1 E2 Q1 (Q2 ++ Q3) T1 T2 K -> 
+   type_equal v E1 E2 (Q3 ++ Q1) Q2 T1 T2 K.
+Proof.
+  introv Hte.
+  remember (Q2 ++ Q3)%list as Q23.
+  generalize dependent Q2.
+  induction Hte; introv HeqQ23; subst; auto;
+    try solve [ constructor; rewrite? List.app_assoc; auto ].
+  - eauto.
+  - eauto.
+  - apply type_equal_rec; auto using in_qenv_concat_r.
+  - eauto.
+Qed.
+
+Lemma type_equal_eqn_extend_nil : forall v E1 E2 Q1 Q2 T1 T2 K,
+   type_equal v E1 E2 Q1 Q2 T1 T2 K -> 
+   type_equal v E1 E2 (Q2 ++ Q1) nil T1 T2 K.
+Proof.
+  introv Hte.
+  apply type_equal_eqn_extend.
+  rewrite List.app_nil_l.
+  assumption.
+Qed.
+
+Lemma type_equal_weakening_eqn_rec :
+  forall v E1 E2 Q1 Q2 Q3 Q4 T1 T2 K,
+    type_equal v E1 E2 Q1 (Q2 ++ Q4) T1 T2 K -> 
+    type_equal v E1 E2 Q1 (Q2 ++ Q3 ++ Q4) T1 T2 K.
+Proof.
+  introv Hte.
+  remember (app Q2 Q4) as Q24.
+  generalize dependent Q2.
+  induction Hte; introv HeqQ24; subst;
+    try solve
+      [constructor;
+         match goal with
+         | H : type_equal _ _ _
+               ((?Tl, ?Tr, ?Klr) :: ((?Q1 ++ ?Q3) ++ ?Q4)%list)
+               nil ?Ta ?Tb _
+           |- type_equal _ _ _
+                ((?Tl, ?Tr, ?Klr) :: ((?Q1 ++ ?Q2 ++ ?Q3) ++ ?Q4)%list)
+                nil ?Ta ?Tb _ =>
+           rewrite <- List.app_assoc;
+           rewrite <- List.app_assoc;
+           rewrite List.app_comm_cons;
+           apply type_equal_weakening_eqn;
+           rewrite <- List.app_comm_cons;
+           rewrite List.app_assoc;
+           assumption
+         | IH : forall Q4',
+             ((?Tl, ?Tr, ?Klr) :: ?Q1' ++ ?Q3'
+              = Q4' ++ ?Q3')%list ->
+             type_equal _ _ _ _ (Q4' ++ ?Q2' ++ ?Q3') ?Ta ?Tb _
+           |- type_equal _ _ _ _
+                ((?Tl, ?Tr, ?Klr)
+                   :: (?Q1' ++ ?Q2' ++ ?Q3'))%list
+                ?Ta ?Tb _ =>
+           rewrite List.app_comm_cons;
+           apply IH;
+           rewrite <- List.app_comm_cons;
+           reflexivity
+         | _ => auto
+         end].
+  - eauto.
+  - eauto.
+  - eapply type_equal_transitive.
+    + rewrite List.app_comm_cons.
+      apply IHHte1.
+      rewrite <- List.app_comm_cons.
+      reflexivity.
+    + rewrite List.app_comm_cons.
+      apply IHHte2.
+      rewrite <- List.app_comm_cons.
+      reflexivity.
+Qed.
+
+Lemma type_equal_weakening_eqn_rec_cons :
+  forall v E1 E2 Q1 Q2 T1 T2 K T1' T2' K',
+    type_equal v E1 E2 Q1 Q2 T1 T2 K -> 
+    type_equal v E1 E2 Q1 ((T1', T2', K') :: Q2) T1 T2 K.
+Proof.
+  introv Hte.
+  rewrite <- List.app_nil_l with (l := cons (T1', T2', K') Q2).
+  rewrite <- List.app_nil_l with (l := Q2).
+  rewrite List.app_comm_cons.
+  apply type_equal_weakening_eqn_rec.
+  rewrite List.app_nil_l.
+  assumption.
+Qed.
+
+Lemma type_equal_weakening_eqn_nils :
+  forall v E1 E2 Q1 Q2 T1 T2 K,
+    type_equal v E1 E2 nil nil T1 T2 K -> 
+    type_equal v E1 E2 Q1 Q2 T1 T2 K.
+Proof.
+  introv Hte.
+  rewrite <- List.app_nil_l with (l := Q1).
+  rewrite <- List.app_nil_r with (l := Q1).
+  apply type_equal_weakening_eqn.
+  rewrite List.app_nil_l.
+  rewrite <- List.app_nil_l with (l := Q2).
+  rewrite <- List.app_nil_r with (l := Q2).
+  apply type_equal_weakening_eqn_rec.
+  rewrite List.app_nil_l.
+  assumption.
 Qed.
 
 (* *************************************************************** *)

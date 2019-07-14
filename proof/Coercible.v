@@ -14,10 +14,12 @@ Require Import LibLN Utilities Cofinite Disjoint Definitions
 
 Inductive coercible : version -> tenv -> typ -> typ -> Prop :=
 | coercible_row : forall E T1 T2,
-    type_equal version_row_subtyping E empty T1 T2 knd_type ->
+    type_equal version_row_subtyping E empty nil nil
+      T1 T2 knd_type ->
     coercible version_row_subtyping E T1 T2
 | coercible_full : forall E T1 T2,
-    subtype version_full_subtyping E empty T1 T2 knd_type ->
+    subtype version_full_subtyping E empty nil nil
+      T1 T2 knd_type ->
     coercible version_full_subtyping E T1 T2.
 
 Hint Constructors coercible.
@@ -38,7 +40,7 @@ Lemma coercible_transitive : forall v E T1 T2 T3,
 Proof.
   introv Hc1 Hc2 He.
   inversion Hc1; inversion Hc2; subst; try discriminate.
-  - eauto.
+  - eauto using type_equal_transitive_nonrec.
   - eauto using subtype_transitive.
 Qed.
 
@@ -81,7 +83,7 @@ Hint Extern 1 (type ?T) =>
 Lemma subtype_coercible : forall v E T1 T2,
     coercible v E T1 T2 ->
     valid_tenv v E ->
-    subtype v E empty T1 T2 knd_type.
+    subtype v E empty nil nil T1 T2 knd_type.
 Proof.
   introv Hc.
   inversion Hc; subst; auto using subtype_reflexive.
@@ -153,7 +155,8 @@ Proof.
   - apply coercible_row.
     rewrite <- concat_empty_r with (E := E).
     apply invert_subtype_arrow_left_row
-      with (T2 := T4) (T4 := T2); auto using subtype_reflexive.
+      with (T2 := T4) (T4 := T2);
+        auto using subtype_reflexive, type_equal_symmetric_nonrec.
   - apply coercible_full.
     rewrite <- concat_empty_r with (E := E).
     apply invert_subtype_arrow_left
@@ -171,7 +174,8 @@ Proof.
   - apply coercible_row.
     rewrite <- concat_empty_r with (E := E).
     apply invert_subtype_arrow_right_row
-      with (T1 := T1) (T3 := T3); auto using subtype_reflexive.
+      with (T1 := T1) (T3 := T3);
+        auto using subtype_reflexive, type_equal_symmetric_nonrec.
   - apply coercible_full.
     rewrite <- concat_empty_r with (E := E).
     apply invert_subtype_arrow_right
@@ -203,7 +207,8 @@ Proof.
   inversion Hc; subst.
   - apply coercible_row.
     rewrite <- concat_empty_r with (E := E).
-    apply invert_subtype_ref; auto using subtype_reflexive.
+    apply invert_subtype_ref;
+      auto using subtype_reflexive, type_equal_symmetric_nonrec.
   - apply coercible_full.
     apply subtype_reflexive; auto.
     rewrite <- concat_empty_r with (E := E).
@@ -250,7 +255,7 @@ Qed.
 Lemma invert_coercible_variant : forall v E T1 T2,
     coercible v E (typ_variant T1) (typ_variant T2) ->
     valid_tenv v E ->
-    subtype v E empty T1 T2 knd_row_all.
+    subtype v E empty nil nil T1 T2 knd_row_all.
 Proof.
   introv Hc He.
   apply subtype_coercible in Hc; auto.
@@ -261,11 +266,11 @@ Qed.
 Lemma invert_coercible_variant_constructor :
   forall v E c T1 T2 T3 T4,
     coercible v E (typ_variant T1) (typ_variant T2) ->
-    subtype v E empty
+    subtype v E empty nil nil
       (typ_constructor c T3)
       (typ_proj CSet.universe (CSet.singleton c) T1)
       (knd_row (CSet.singleton c)) ->
-    subtype v E empty
+    subtype v E empty nil nil
       (typ_proj CSet.universe (CSet.singleton c) T2)
       (typ_constructor c T4)
       (knd_row (CSet.singleton c)) ->

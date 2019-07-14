@@ -62,7 +62,7 @@ Record typing_with_envs v E D P t T :=
 Hint Constructors typing_with_envs.
 
 Lemma typing_with_envs_ind :
-  forall (Q : version -> tenv -> env -> styp ->
+  forall (C : version -> tenv -> env -> styp ->
               trm -> typ -> Prop),
     (forall (E : tenv) (D : env) (P : styp) 
             (t : trm) (T1 T2 : typ),
@@ -71,10 +71,10 @@ Lemma typing_with_envs_ind :
         valid_env version_row_subtyping E D ->
         valid_store_type E P ->
         typing version_row_subtyping E D P t T1 ->
-        Q version_row_subtyping E D P t T1 ->
+        C version_row_subtyping E D P t T1 ->
         type_equal version_row_subtyping
-                   E empty T1 T2 knd_type ->
-        Q version_row_subtyping E D P t T2) ->
+                   E empty nil nil T1 T2 knd_type ->
+        C version_row_subtyping E D P t T2) ->
     (forall (E : tenv) (D : env) (P : styp) 
             (t : trm) (T1 T2 : typ),
         valid_tenv version_full_subtyping E ->
@@ -82,10 +82,10 @@ Lemma typing_with_envs_ind :
         valid_env version_full_subtyping E D ->
         valid_store_type E P ->
         typing version_full_subtyping E D P t T1 ->
-        Q version_full_subtyping E D P t T1 ->
+        C version_full_subtyping E D P t T1 ->
         subtype version_full_subtyping
-                E empty T1 T2 knd_type ->
-        Q version_full_subtyping E D P t T2) ->
+                E empty nil nil T1 T2 knd_type ->
+        C version_full_subtyping E D P t T2) ->
     (forall (v : version) (E : tenv)
             (D : LibEnv.env sch) (P : styp) 
             (x : var) (M : sch) (T1 : typ) 
@@ -97,7 +97,7 @@ Lemma typing_with_envs_ind :
         binds x M D ->
         valid_instance v E Us M ->
         T1 = instance M Us ->
-        Q v E D P (trm_fvar x) T1) ->
+        C v E D P (trm_fvar x) T1) ->
     (forall (L : fset var) (v : version) 
             (E : tenv) (D : LibEnv.env sch) 
             (P : styp) (T1 T2 : typ) (t1 : trm),
@@ -111,8 +111,8 @@ Lemma typing_with_envs_ind :
             typing v E (D & x ~ sch_empty T1) P (t1 ^ x) T2) ->
         (forall x : var,
             x \notin (L \u dom D) ->
-            Q v E (D & x ~ sch_empty T1) P (t1 ^ x) T2) ->
-        Q v E D P (trm_abs t1) (typ_arrow T1 T2)) ->
+            C v E (D & x ~ sch_empty T1) P (t1 ^ x) T2) ->
+        C v E D P (trm_abs t1) (typ_arrow T1 T2)) ->
     (forall (v : version) (E : tenv) 
             (P : styp) (D : env) (T1 T2 : typ) 
             (t1 t2 : trm),
@@ -121,9 +121,9 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 (typ_arrow T1 T2) ->
-        Q v E D P t1 (typ_arrow T1 T2) ->
+        C v E D P t1 (typ_arrow T1 T2) ->
         typing v E D P t2 T1 ->
-        Q v E D P t2 T1 -> Q v E D P (trm_app t1 t2) T2) ->
+        C v E D P t2 T1 -> C v E D P (trm_app t1 t2) T2) ->
     (forall (L : vars) (M : sch) (v : version)
             (E : tenv) (D : env) (P : styp) 
             (T2 : typ) (t1 t2 : trm),
@@ -139,14 +139,14 @@ Lemma typing_with_envs_ind :
                    (instance_vars M Xs)) ->
         (forall Xs : list var,
             fresh L (sch_arity M) Xs ->
-            Q v (E & Xs ~: M) D P t1 (instance_vars M Xs)) ->
+            C v (E & Xs ~: M) D P t1 (instance_vars M Xs)) ->
         (forall x : var,
             x \notin (L \u dom D) ->
             typing v E (D & x ~ M) P (t2 ^ x) T2) ->
         (forall x : var,
             x \notin (L \u dom D) ->
-            Q v E (D & x ~ M) P (t2 ^ x) T2) ->
-        Q v E D P (trm_let t1 t2) T2) ->
+            C v E (D & x ~ M) P (t2 ^ x) T2) ->
+        C v E D P (trm_let t1 t2) T2) ->
     (forall (L : fset var) (v : version) 
             (E : tenv) (D : env) (P : styp) 
             (T1 T2 : typ) (t1 t2 : trm),
@@ -156,14 +156,14 @@ Lemma typing_with_envs_ind :
         valid_store_type E P ->
         kinding E empty T1 knd_type ->
         typing v E D P t1 T1 ->
-        Q v E D P t1 T1 ->
+        C v E D P t1 T1 ->
         (forall x : var,
             x \notin (L \u dom D) ->
             typing v E (D & x ~ sch_empty T1) P (t2 ^ x) T2) ->
         (forall x : var,
             x \notin (L \u dom D) ->
-            Q v E (D & x ~ sch_empty T1) P (t2 ^ x) T2) ->
-        Q v E D P (trm_let t1 t2) T2) ->
+            C v E (D & x ~ sch_empty T1) P (t2 ^ x) T2) ->
+        C v E D P (trm_let t1 t2) T2) ->
     (forall (c : CSet.MSet.elt) (v : version) 
             (E : tenv) (D : env) (P : styp) 
             (T1 T2 : typ) (t : trm),
@@ -172,11 +172,11 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t T1 ->
-        Q v E D P t T1 ->
-        subtype v E empty (typ_constructor c T1)
+        C v E D P t T1 ->
+        subtype v E empty nil nil (typ_constructor c T1)
                 (typ_proj CSet.universe (CSet.singleton c) T2)
                 (knd_row (CSet.singleton c)) ->
-        Q v E D P (trm_constructor c t) (typ_variant T2)) ->
+        C v E D P (trm_constructor c t) (typ_variant T2)) ->
     (forall (L : fset var) (c : CSet.MSet.elt)
             (v : version) (E : tenv) (D : env) 
             (P : styp) (T1 T2 T3 T4 : typ) 
@@ -186,12 +186,12 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 (typ_variant T1) ->
-        Q v E D P t1 (typ_variant T1) ->
-        subtype v E empty
+        C v E D P t1 (typ_variant T1) ->
+        subtype v E empty nil nil
                 (typ_proj CSet.universe (CSet.singleton c) T1)
                 (typ_proj CSet.universe (CSet.singleton c) T2)
                 (knd_row (CSet.singleton c)) ->
-        subtype v E empty
+        subtype v E empty nil nil
                 (typ_proj CSet.universe (CSet.cosingleton c) T1)
                 (typ_proj CSet.universe (CSet.cosingleton c) T3)
                 (knd_row (CSet.cosingleton c)) ->
@@ -201,7 +201,7 @@ Lemma typing_with_envs_ind :
                    (t2 ^ x) T4) ->
         (forall x : var,
             x \notin (L \u dom D) ->
-            Q v E (D & x ~ sch_empty (typ_variant T2)) P
+            C v E (D & x ~ sch_empty (typ_variant T2)) P
               (t2 ^ x) T4) ->
         (forall y : var,
             y \notin (L \u dom D) ->
@@ -209,9 +209,9 @@ Lemma typing_with_envs_ind :
                    (t3 ^ y) T4) ->
         (forall y : var,
             y \notin (L \u dom D) ->
-            Q v E (D & y ~ sch_empty (typ_variant T3)) P
+            C v E (D & y ~ sch_empty (typ_variant T3)) P
               (t3 ^ y) T4) ->
-        Q v E D P (trm_match t1 c t2 t3) T4) ->
+        C v E D P (trm_match t1 c t2 t3) T4) ->
     (forall (L : fset var) (c : CSet.MSet.elt)
             (v : version) (E : tenv) (D : env) 
             (P : styp) (T1 T2 T3 : typ) 
@@ -221,12 +221,12 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 (typ_variant T1) ->
-        Q v E D P t1 (typ_variant T1) ->
-        subtype v E empty
+        C v E D P t1 (typ_variant T1) ->
+        subtype v E empty nil nil
                 (typ_proj CSet.universe (CSet.singleton c) T1)
                 (typ_constructor c T2)
                 (knd_row (CSet.singleton c)) ->
-        subtype v E empty
+        subtype v E empty nil nil
                 (typ_proj CSet.universe (CSet.cosingleton c) T1)
                 (typ_bot (knd_row (CSet.cosingleton c)))
                 (knd_row (CSet.cosingleton c)) ->
@@ -235,8 +235,8 @@ Lemma typing_with_envs_ind :
             typing v E (D & x ~ sch_empty T2) P (t2 ^ x) T3) ->
         (forall x : var,
             x \notin (L \u dom D) ->
-            Q v E (D & x ~ sch_empty T2) P (t2 ^ x) T3) ->
-        Q v E D P (trm_destruct t1 c t2) T3) ->
+            C v E (D & x ~ sch_empty T2) P (t2 ^ x) T3) ->
+        C v E D P (trm_destruct t1 c t2) T3) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : styp) (T1 T2 : typ) 
             (t1 : trm),
@@ -245,11 +245,11 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 (typ_variant T1) ->
-        Q v E D P t1 (typ_variant T1) ->
-        subtype v E empty T1 (typ_bot knd_row_all)
+        C v E D P t1 (typ_variant T1) ->
+        subtype v E empty nil nil T1 (typ_bot knd_row_all)
                 knd_row_all ->
         kinding E empty T2 knd_type ->
-        Q v E D P (trm_absurd t1) T2) ->
+        C v E D P (trm_absurd t1) T2) ->
     (forall (L : fset var) (v : version) 
             (E : tenv) (D : LibEnv.env sch) 
             (P : styp) (T1 T2 : typ) (t1 : trm),
@@ -269,18 +269,18 @@ Lemma typing_with_envs_ind :
         (forall x y : var,
             x \notin (L \u dom D) ->
             y \notin (L \u dom D \u \{ x}) ->
-            Q v E
+            C v E
               (D & x ~ sch_empty (typ_arrow T1 T2) &
                y ~ sch_empty T1) P
               (t1 ^* y :: (x :: nil)%list) T2) ->
-        Q v E D P (trm_fix t1) (typ_arrow T1 T2)) ->
+        C v E D P (trm_fix t1) (typ_arrow T1 T2)) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : styp),
         valid_tenv v E ->
         valid_tenv_extension v E empty ->
         valid_env v E D ->
         valid_store_type E P ->
-        Q v E D P trm_unit typ_unit) ->
+        C v E D P trm_unit typ_unit) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : styp) (T1 T2 : typ) 
             (t1 t2 : trm),
@@ -289,10 +289,10 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 T1 ->
-        Q v E D P t1 T1 ->
+        C v E D P t1 T1 ->
         typing v E D P t2 T2 ->
-        Q v E D P t2 T2 ->
-        Q v E D P (trm_prod t1 t2) (typ_prod T1 T2)) ->
+        C v E D P t2 T2 ->
+        C v E D P (trm_prod t1 t2) (typ_prod T1 T2)) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : styp) (T1 T2 : typ) 
             (t1 : trm),
@@ -301,8 +301,8 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 (typ_prod T1 T2) ->
-        Q v E D P t1 (typ_prod T1 T2) ->
-        Q v E D P (trm_fst t1) T1) ->
+        C v E D P t1 (typ_prod T1 T2) ->
+        C v E D P (trm_fst t1) T1) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : styp) (T1 T2 : typ) 
             (t1 : trm),
@@ -311,8 +311,8 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 (typ_prod T1 T2) ->
-        Q v E D P t1 (typ_prod T1 T2) ->
-        Q v E D P (trm_snd t1) T2) ->
+        C v E D P t1 (typ_prod T1 T2) ->
+        C v E D P (trm_snd t1) T2) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : LibEnv.env typ) 
             (l : var) (T1 : typ),
@@ -320,7 +320,7 @@ Lemma typing_with_envs_ind :
         valid_tenv_extension v E empty ->
         valid_env v E D ->
         valid_store_type E P ->
-        binds l T1 P -> Q v E D P (trm_loc l) (typ_ref T1)) ->
+        binds l T1 P -> C v E D P (trm_loc l) (typ_ref T1)) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : styp) (t1 : trm) 
             (T1 : typ),
@@ -329,8 +329,8 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 T1 ->
-        Q v E D P t1 T1 ->
-        Q v E D P (trm_ref t1) (typ_ref T1)) ->
+        C v E D P t1 T1 ->
+        C v E D P (trm_ref t1) (typ_ref T1)) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : styp) (t1 : trm) 
             (T1 : typ),
@@ -339,8 +339,8 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 (typ_ref T1) ->
-        Q v E D P t1 (typ_ref T1) ->
-        Q v E D P (trm_get t1) T1) ->
+        C v E D P t1 (typ_ref T1) ->
+        C v E D P (trm_get t1) T1) ->
     (forall (v : version) (E : tenv) 
             (D : env) (P : styp) (t1 t2 : trm) 
             (T1 : typ),
@@ -349,15 +349,15 @@ Lemma typing_with_envs_ind :
         valid_env v E D ->
         valid_store_type E P ->
         typing v E D P t1 (typ_ref T1) ->
-        Q v E D P t1 (typ_ref T1) ->
+        C v E D P t1 (typ_ref T1) ->
         typing v E D P t2 T1 ->
-        Q v E D P t2 T1 ->
-        Q v E D P (trm_set t1 t2) typ_unit) ->
+        C v E D P t2 T1 ->
+        C v E D P (trm_set t1 t2) typ_unit) ->
     forall (v : version) (E : tenv) 
            (D : env) (P : styp) (t : trm) 
            (T : typ),
       typing_with_envs v E D P t T ->
-      Q v E D P t T.
+      C v E D P t T.
 Proof.
   introv H1 H2 H3 H4 H5 H6 H7 H8 H9 H10.
   introv H11 H12 H13 H14 H15 H16 H17 H18 H19 H20.
@@ -463,7 +463,7 @@ Ltac solve_inv :=
      end
   |  eauto 6 using coercible_refl ].
 
-Lemma typing_var_inv : forall v E D P x T (Q : Prop),
+Lemma typing_var_inv : forall v E D P x T (C : Prop),
     typing v E D P (trm_fvar x) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -474,11 +474,11 @@ Lemma typing_var_inv : forall v E D P x T (Q : Prop),
       binds x M D -> 
       valid_instance v E Us M ->
       T1 = instance M Us ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
-Lemma typing_abs_inv : forall v E D P t1 T (Q : Prop),
+Lemma typing_abs_inv : forall v E D P t1 T (C : Prop),
     typing v E D P (trm_abs t1) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -489,11 +489,11 @@ Lemma typing_abs_inv : forall v E D P t1 T (Q : Prop),
         kinding E empty T1 knd_type ->
         (forall x, x \notin (L \u dom D) -> 
           typing v E (D & x ~ sch_empty T1) P (t1 ^ x) T2) -> 
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
-Lemma typing_app_inv : forall v E D P t1 t2 T (Q : Prop),
+Lemma typing_app_inv : forall v E D P t1 t2 T (C : Prop),
     typing v E D P (trm_app t1 t2) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -503,11 +503,11 @@ Lemma typing_app_inv : forall v E D P t1 t2 T (Q : Prop),
       typing v E D P (trm_app t1 t2) T2 ->
       typing v E D P t1 (typ_arrow T1 T2) ->
       typing v E D P t2 T1 ->   
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
-Lemma typing_let_inv : forall v E D P t1 t2 T (Q : Prop),
+Lemma typing_let_inv : forall v E D P t1 t2 T (C : Prop),
     typing v E D P (trm_let t1 t2) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -525,7 +525,7 @@ Lemma typing_let_inv : forall v E D P t1 t2 T (Q : Prop),
       (forall x,
           x \notin (L \u dom D) ->
           typing v E (D & x ~ M) P (t2 ^ x) T2) ->
-      Q) ->
+      C) ->
     (forall L T1 T2,
         coercible v E T2 T ->
         typing v E D P (trm_let t1 t2) T2 ->
@@ -533,8 +533,8 @@ Lemma typing_let_inv : forall v E D P t1 t2 T (Q : Prop),
         (forall x,
             x \notin (L \u dom D) ->
             typing v E (D & x ~ sch_empty T1) P (t2 ^ x) T2) ->
-        Q) ->
-    Q.
+        C) ->
+    C.
 Proof.
   introv Ht He Hd Hp Hq1 Hq2.
   remember (trm_let t1 t2) as t.
@@ -558,7 +558,7 @@ Proof.
         subset_union_weak_l.
 Qed.
 
-Lemma typing_constructor_inv : forall v E D P c t1 T (Q : Prop),
+Lemma typing_constructor_inv : forall v E D P c t1 T (C : Prop),
     typing v E D P (trm_constructor c t1) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -567,16 +567,16 @@ Lemma typing_constructor_inv : forall v E D P c t1 T (Q : Prop),
       coercible v E (typ_variant T2) T ->
       typing v E D P (trm_constructor c t1) (typ_variant T2) ->
       typing v E D P t1 T1 ->
-      subtype v E empty
+      subtype v E empty nil nil
         (typ_constructor c T1)
         (typ_proj CSet.universe (CSet.singleton c) T2)
         (knd_row (CSet.singleton c)) ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_match_inv :
-  forall v E D P t1 c t2 t3 T (Q : Prop),
+  forall v E D P t1 c t2 t3 T (C : Prop),
     typing v E D P (trm_match t1 c t2 t3) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -585,11 +585,11 @@ Lemma typing_match_inv :
       coercible v E T4 T ->
       typing v E D P (trm_match t1 c t2 t3) T4 ->
       typing v E D P t1 (typ_variant T1) ->
-      subtype v E empty
+      subtype v E empty nil nil
         (typ_proj CSet.universe (CSet.singleton c) T1)
         (typ_proj CSet.universe (CSet.singleton c) T2)
         (knd_row (CSet.singleton c)) ->
-      subtype v E empty
+      subtype v E empty nil nil
         (typ_proj CSet.universe (CSet.cosingleton c) T1)
         (typ_proj CSet.universe (CSet.cosingleton c) T3)
         (knd_row (CSet.cosingleton c)) ->
@@ -599,12 +599,12 @@ Lemma typing_match_inv :
       (forall y, y \notin L -> 
          typing v E (D & y ~ (sch_empty (typ_variant T3))) P
                 (t3 ^ y) T4) ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_destruct_inv :
-  forall v E D P t1 c t2 T (Q : Prop),
+  forall v E D P t1 c t2 T (C : Prop),
     typing v E D P (trm_destruct t1 c t2) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -613,23 +613,23 @@ Lemma typing_destruct_inv :
       coercible v E T3 T ->
       typing v E D P (trm_destruct t1 c t2) T3 ->
       typing v E D P t1 (typ_variant T1) ->
-      subtype v E empty
+      subtype v E empty nil nil
         (typ_proj CSet.universe (CSet.singleton c) T1)
         (typ_constructor c T2)
         (knd_row (CSet.singleton c)) ->
-      subtype v E empty
+      subtype v E empty nil nil
         (typ_proj CSet.universe (CSet.cosingleton c) T1)
         (typ_bot (knd_row (CSet.cosingleton c)))
         (knd_row (CSet.cosingleton c)) ->
       (forall x, x \notin L ->
          typing v E (D & x ~ (sch_empty T2)) P
                 (t2 ^ x) T3) ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_absurd_inv :
-  forall v E D P t1 T (Q : Prop),
+  forall v E D P t1 T (C : Prop),
     typing v E D P (trm_absurd t1) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -638,14 +638,15 @@ Lemma typing_absurd_inv :
       coercible v E T2 T ->
       typing v E D P (trm_absurd t1) T2 ->
       typing v E D P t1 (typ_variant T1) ->
-      subtype v E empty T1 (typ_bot knd_row_all) knd_row_all ->
+      subtype v E empty nil nil
+        T1 (typ_bot knd_row_all) knd_row_all ->
       kinding E empty T2 knd_type ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_fix_inv :
-  forall v E D P t1 T (Q : Prop),
+  forall v E D P t1 T (C : Prop),
     typing v E D P (trm_fix t1) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -661,24 +662,24 @@ Lemma typing_fix_inv :
             v E (D & x ~ sch_empty (typ_arrow T1 T2)
                  & y ~ sch_empty T1)
             P (t1 ^* (cons y (cons x nil))) T2) -> 
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_unit_inv :
-  forall v E D P T (Q : Prop),
+  forall v E D P T (C : Prop),
     typing v E D P trm_unit T ->
     valid_tenv v E ->
     valid_env v E D ->
     valid_store_type E P ->
     (coercible v E typ_unit T ->
      typing v E D P trm_unit typ_unit ->
-     Q) ->
-    Q.
+     C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_prod_inv :
-  forall v E D P t1 t2 T (Q : Prop),
+  forall v E D P t1 t2 T (C : Prop),
     typing v E D P (trm_prod t1 t2) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -688,12 +689,12 @@ Lemma typing_prod_inv :
       typing v E D P (trm_prod t1 t2) (typ_prod T1 T2) ->
       typing v E D P t1 T1 ->
       typing v E D P t2 T2 ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_fst_inv :
-  forall v E D P t1 T (Q : Prop),
+  forall v E D P t1 T (C : Prop),
     typing v E D P (trm_fst t1) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -702,12 +703,12 @@ Lemma typing_fst_inv :
       coercible v E T1 T ->
       typing v E D P (trm_fst t1) T1 ->
       typing v E D P t1 (typ_prod T1 T2) ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_snd_inv :
-  forall v E D P t1 T (Q : Prop),
+  forall v E D P t1 T (C : Prop),
     typing v E D P (trm_snd t1) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -716,12 +717,12 @@ Lemma typing_snd_inv :
       coercible v E T2 T ->
       typing v E D P (trm_snd t1) T2 ->
       typing v E D P t1 (typ_prod T1 T2) ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_loc_inv :
-  forall v E D P l T (Q : Prop),
+  forall v E D P l T (C : Prop),
     typing v E D P (trm_loc l) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -730,12 +731,12 @@ Lemma typing_loc_inv :
       coercible v E (typ_ref T1) T ->
       typing v E D P (trm_loc l) (typ_ref T1) ->
       binds l T1 P ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_ref_inv :
-  forall v E D P t1 T (Q : Prop),
+  forall v E D P t1 T (C : Prop),
     typing v E D P (trm_ref t1) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -744,12 +745,12 @@ Lemma typing_ref_inv :
       coercible v E (typ_ref T1) T ->
       typing v E D P (trm_ref t1) (typ_ref T1) ->
       typing v E D P t1 T1 ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_get_inv :
-  forall v E D P t1 T (Q : Prop),
+  forall v E D P t1 T (C : Prop),
     typing v E D P (trm_get t1) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -758,12 +759,12 @@ Lemma typing_get_inv :
       coercible v E T1 T ->
       typing v E D P (trm_get t1) T1 ->
       typing v E D P t1 (typ_ref T1) ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Lemma typing_set_inv :
-  forall v E D P t1 t2 T (Q : Prop),
+  forall v E D P t1 t2 T (C : Prop),
     typing v E D P (trm_set t1 t2) T ->
     valid_tenv v E ->
     valid_env v E D ->
@@ -773,8 +774,8 @@ Lemma typing_set_inv :
       typing v E D P (trm_set t1 t2) typ_unit ->
       typing v E D P t1 (typ_ref T1) ->
       typing v E D P t2 T1 ->
-      Q) ->
-    Q.
+      C) ->
+    C.
 Proof. solve_inv. Qed.
 
 Ltac invert_typing Ht He Hd Hp :=
@@ -1003,14 +1004,14 @@ Qed.
 (** Value inversions *)
 
 Lemma invert_value_variant :
-  forall v E D P t T1 (Q : Prop),
+  forall v E D P t T1 (C : Prop),
     value t ->
     typing v E D P t (typ_variant T1) ->
     valid_tenv v E ->
     valid_env v E D ->
     valid_store_type E P ->
-    (forall c t1, t = trm_constructor c t1 -> value t1 -> Q) ->
-    Q.
+    (forall c t1, t = trm_constructor c t1 -> value t1 -> C) ->
+    C.
 Proof.
   introv Hv Ht He Hd Hp Hq.
   inversion Hv; subst; invert_typing Ht He Hd Hp.
@@ -1023,15 +1024,15 @@ Proof.
 Qed.
 
 Lemma invert_value_arrow :
-  forall v E D P t T1 T2 (Q : Prop),
+  forall v E D P t T1 T2 (C : Prop),
     value t ->
     typing v E D P t (typ_arrow T1 T2) ->
     valid_tenv v E ->
     valid_env v E D ->
     valid_store_type E P ->
-    (forall t1, t = trm_abs t1 -> Q) ->
-    (forall t1, t = trm_fix t1 -> Q) ->
-    Q.
+    (forall t1, t = trm_abs t1 -> C) ->
+    (forall t1, t = trm_fix t1 -> C) ->
+    C.
 Proof.
   introv Hv Ht He Hd Hp Hq1 Hq2.
   inversion Hv; subst; invert_typing Ht He Hd Hp.
@@ -1044,14 +1045,14 @@ Proof.
 Qed.
 
 Lemma invert_value_unit :
-  forall v E D P t (Q : Prop),
+  forall v E D P t (C : Prop),
     value t ->
     typing v E D P t typ_unit ->
     valid_tenv v E ->
     valid_env v E D ->
     valid_store_type E P ->
-    (t = trm_unit -> Q) ->
-    Q.
+    (t = trm_unit -> C) ->
+    C.
 Proof.
   introv Hv Ht He Hd Hp Hq.
   inversion Hv; subst; invert_typing Ht He Hd Hp.
@@ -1064,15 +1065,15 @@ Proof.
 Qed.
 
 Lemma invert_value_prod :
-  forall v E D P t T1 T2 (Q : Prop),
+  forall v E D P t T1 T2 (C : Prop),
     value t ->
     typing v E D P t (typ_prod T1 T2) ->
     valid_tenv v E ->
     valid_env v E D ->
     valid_store_type E P ->
     (forall t1 t2,
-        t = trm_prod t1 t2 -> value t1 -> value t2 -> Q) ->
-    Q.
+        t = trm_prod t1 t2 -> value t1 -> value t2 -> C) ->
+    C.
 Proof.
   introv Hv Ht He Hd Hp Hq.
   inversion Hv; subst; invert_typing Ht He Hd Hp.
@@ -1085,14 +1086,14 @@ Proof.
 Qed.
 
 Lemma invert_value_ref :
-  forall v E D P t T1 (Q : Prop),
+  forall v E D P t T1 (C : Prop),
     value t ->
     typing v E D P t (typ_ref T1) ->
     valid_tenv v E ->
     valid_env v E D ->
     valid_store_type E P ->
-    (forall l, t = trm_loc l -> Q) ->
-    Q.
+    (forall l, t = trm_loc l -> C) ->
+    C.
 Proof.
   introv Hv Ht He Hd Hp Hq.
   inversion Hv; subst; invert_typing Ht He Hd Hp.

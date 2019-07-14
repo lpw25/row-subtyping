@@ -285,8 +285,8 @@ Qed.
 (* *************************************************************** *)
 (** Kinding from type equality *)
 
-Lemma type_equal_kinding_both : forall v E1 E2 T1 T2 K,
-    type_equal v E1 E2 T1 T2 K ->
+Lemma type_equal_kinding_both : forall v E1 E2 Q1 Q2 T1 T2 K,
+    type_equal v E1 E2 Q1 Q2 T1 T2 K ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     kinding E1 E2 T1 K /\ kinding E1 E2 T2 K.
@@ -312,8 +312,8 @@ Proof.
       kinding_from_valid_tenv_upper with wellformed.
 Qed.
 
-Lemma type_equal_kinding_1 : forall v E1 E2 T1 T2 K,
-    type_equal v E1 E2 T1 T2 K ->
+Lemma type_equal_kinding_1 : forall v E1 E2 Q1 Q2 T1 T2 K,
+    type_equal v E1 E2 Q1 Q2 T1 T2 K ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     kinding E1 E2 T1 K.
@@ -323,8 +323,8 @@ Proof.
   assumption.
 Qed.
 
-Lemma type_equal_kinding_2 : forall v E1 E2 T1 T2 K,
-    type_equal v E1 E2 T1 T2 K ->
+Lemma type_equal_kinding_2 : forall v E1 E2 Q1 Q2 T1 T2 K,
+    type_equal v E1 E2 Q1 Q2 T1 T2 K ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     kinding E1 E2 T2 K.
@@ -334,8 +334,8 @@ Proof.
   assumption.
 Qed.
 
-Lemma subtype_kinding_1 : forall v E1 E2 T1 T2 K,
-    subtype v E1 E2 T1 T2 K ->
+Lemma subtype_kinding_1 : forall v E1 E2 Q1 Q2 T1 T2 K,
+    subtype v E1 E2 Q1 Q2 T1 T2 K ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     kinding E1 E2 T1 K.
@@ -345,8 +345,8 @@ Proof.
   eauto using type_equal_kinding_1.
 Qed.
 
-Lemma subtype_kinding_2 : forall v E1 E2 T1 T2 K,
-    subtype v E1 E2 T1 T2 K ->
+Lemma subtype_kinding_2 : forall v E1 E2 Q1 Q2 T1 T2 K,
+    subtype v E1 E2 Q1 Q2 T1 T2 K ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     kinding E1 E2 T2 K.
@@ -500,32 +500,32 @@ Ltac kinding :=
       match Th with
       | context[T] => extract_kinding E H T
       end
-    | H : ?Q -> kinding _ _ ?Th _, Hq : ?Q |- _ =>
+    | H : ?Pre -> kinding _ _ ?Th _, Hpre : ?Pre |- _ =>
       match Th with
-      | context[T] => extract_kinding E (H Hq) T
+      | context[T] => extract_kinding E (H Hpre) T
       end
-    | H : ?Q1 -> ?Q2 -> kinding _ _ ?Th _,
-      Hq1 : ?Q1, Hq2 : ?Q2 |- _ =>
+    | H : ?Pre1 -> ?Pre2 -> kinding _ _ ?Th _,
+      Hpre1 : ?Pre1, Hpre2 : ?Pre2 |- _ =>
       match Th with
-      | context[T] => extract_kinding E (H Hq1 Hq2) T
+      | context[T] => extract_kinding E (H Hpre1 Hpre2) T
       end
     | He1 : valid_tenv ?v ?E1,
       He2 : valid_tenv_extension ?v ?E1 ?E2,
-      H : type_equal ?v ?E1 ?E2 ?Th _ _ |- _ =>
+      H : type_equal ?v ?E1 ?E2 _ _ ?Th _ _ |- _ =>
       match Th with
       | context[T] =>
           extract_kinding E (type_equal_kinding_1 H He1 He2) T
       end
     | He1 : valid_tenv ?v ?E1,
       He2 : valid_tenv_extension ?v ?E1 ?E2,
-      H : type_equal ?v ?E1 ?E2 _ ?Th _ |- _ =>
+      H : type_equal ?v ?E1 ?E2 _ _ _ ?Th _ |- _ =>
       match Th with
       | context[T] =>
           extract_kinding E (type_equal_kinding_2 H He1 He2) T
       end
     | He1 : valid_tenv ?v ?E1,
       He2 : valid_tenv_extension ?v ?E1 ?E2,
-      H : type_equal ?v (?E1 & ?E2) empty ?Th _ _ |- _ =>
+      H : type_equal ?v (?E1 & ?E2) empty _ _ ?Th _ _ |- _ =>
       match Th with
       | context[T] =>
           extract_kinding E
@@ -534,7 +534,7 @@ Ltac kinding :=
       end
     | He1 : valid_tenv ?v ?E1,
       He2 : valid_tenv_extension ?v ?E1 ?E2,
-      H : type_equal ?v (?E1 & ?E2) empty _ ?Th _ |- _ =>
+      H : type_equal ?v (?E1 & ?E2) empty _ _ _ ?Th _ |- _ =>
       match Th with
       | context[T] =>
           extract_kinding E
@@ -543,21 +543,21 @@ Ltac kinding :=
       end
     | He1 : valid_tenv ?v ?E1,
       He2 : valid_tenv_extension ?v ?E1 ?E2,
-      H : subtype ?v ?E1 ?E2 ?Th _ _ |- _ =>
+      H : subtype ?v ?E1 ?E2 _ _ ?Th _ _ |- _ =>
       match Th with
       | context[T] =>
           extract_kinding E (subtype_kinding_1 H He1 He2) T
       end
     | He1 : valid_tenv ?v ?E1,
       He2 : valid_tenv_extension ?v ?E1 ?E2,
-      H : subtype ?v ?E1 ?E2 _ ?Th _ |- _ =>
+      H : subtype ?v ?E1 ?E2 _ _ _ ?Th _ |- _ =>
       match Th with
       | context[T] =>
           extract_kinding E (subtype_kinding_2 H He1 He2) T
       end
     | He1 : valid_tenv ?v ?E1,
       He2 : valid_tenv_extension ?v ?E1 ?E2,
-      H : subtype ?v (?E1 & ?E2) empty ?Th _ _ |- _ =>
+      H : subtype ?v (?E1 & ?E2) empty _ _ ?Th _ _ |- _ =>
       match Th with
       | context[T] =>
           extract_kinding E
@@ -566,7 +566,7 @@ Ltac kinding :=
       end
     | He1 : valid_tenv ?v ?E1,
       He2 : valid_tenv_extension ?v ?E1 ?E2,
-      H : subtype ?v (?E1 & ?E2) empty _ ?Th _ |- _ =>
+      H : subtype ?v (?E1 & ?E2) empty _ _ _ ?Th _ |- _ =>
       match Th with
       | context[T] =>
           extract_kinding E

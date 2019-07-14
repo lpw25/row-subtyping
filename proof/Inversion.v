@@ -10,14 +10,168 @@ Require Import LibLN Utilities Cofinite Disjoint Definitions
         Weakening Substitution Kinding Subtyping.
 
 (* ****************************************************** *)
+(** Unfolding recursive equations *)
+
+Lemma type_equal_eqn_subst :
+  forall v E1 E2 Q1 Q2 Q3 T1 T2 K T1' T2' K',
+    type_equal v E1 E2 (Q1 ++ (T1, T2, K) :: Q2) Q3 T1' T2' K' ->
+    type_equal v E1 E2 (Q1 ++ Q2) Q3 T1 T2 K ->
+    type_environment_extension E1 E2 ->
+    type_equal v E1 E2 (Q1 ++ Q2) Q3 T1' T2' K'.
+Proof.
+  introv Hte1 Hte2 He.
+  remember (Q1 ++ (T1, T2, K) :: Q2)%list as Q12.
+  generalize dependent Q1.
+  induction Hte1; introv HeqQ12 Hte2; subst;
+    auto using type_equal_weakening_eqn_rec_cons;
+    try solve
+      [constructor;
+       match goal with
+       | IH :
+           type_environment_extension (E1 & E2) empty ->
+           (forall Q,
+            ((?Tl, ?Tr, ?Klr)
+               :: ?Q1 ++ ?Q2 ++ (T1, T2, K) :: ?Q3)%list =
+            (Q ++ (T1, T2, K) :: ?Q3)%list ->
+            type_equal _ _ _ (Q ++ ?Q3) nil T1 T2 K ->
+            type_equal _ _ _ (Q ++ ?Q3) nil ?Ta ?Tb _),
+         Ht : type_equal _ _ _ (?Q2 ++ ?Q3) ?Q1 T1 T2 K
+         |- type_equal _ _ _
+              ((?Tl, ?Tr, ?Klr) :: (?Q1 ++ ?Q2 ++ ?Q3))%list nil
+              ?Ta ?Tb _ =>
+         rewrite List.app_comm_cons;
+         rewrite List.app_assoc;
+         apply IH;
+           try rewrite <- List.app_assoc;
+           try rewrite <- List.app_comm_cons; auto;
+         apply type_equal_weakening_eqn_cons;
+         apply type_equal_eqn_extend_nil;
+         apply type_equal_extend_empty; auto
+       | _ => auto
+       end].
+  - eauto.
+  - eauto.
+  - eapply in_qenv_middle_inv; try eassumption;
+      intros; subst; auto.    
+  - apply type_equal_transitive with T3;
+      auto using type_equal_weakening_eqn_rec_cons.
+Qed.
+
+Lemma type_equal_eqn_rec_subst :
+  forall v E1 E2 Q1 Q2 Q3 T1 T2 K T1' T2' K',
+    type_equal v E1 E2 Q1 (Q2 ++ (T1, T2, K) :: Q3) T1' T2' K' ->
+    type_equal v E1 E2 Q1 (Q2 ++ Q3) T1 T2 K ->
+    type_environment_extension E1 E2 ->
+    type_equal v E1 E2 Q1 (Q2 ++ Q3) T1' T2' K'.
+Proof.
+  introv Hte1 Hte2 He.
+  remember (Q2 ++ (T1, T2, K) :: Q3)%list as Q23.
+  generalize dependent Q2.
+  induction Hte1; introv HeqQ2 Hte2; subst; auto;
+    try solve
+        [constructor;
+         match goal with
+         | IH : type_environment_extension E1 E2 ->
+                (forall Q : list (typ * typ * knd),
+                  ((?Tl, ?Tr, ?Klr)
+                     :: ?Q2 ++ (T1, T2, K) :: ?Q3)%list
+                  = (Q ++ (T1, T2, K) :: ?Q3)%list ->
+                  type_equal _ _ _ ?Q1 (Q ++ ?Q3) _ _ _ ->
+                  type_equal _ _ _ ?Q1 (Q ++ ?Q3) ?Ta ?Tb _)
+           |- type_equal _ _ _ ?Q1
+                ((?Tl, ?Tr, ?Klr) :: 
+                  (?Q2 ++ ?Q3)%list) ?Ta ?Tb _ =>
+                 rewrite List.app_comm_cons;
+                 apply IH; auto;
+                 rewrite <- List.app_comm_cons;
+                 apply type_equal_weakening_eqn_rec_cons; auto
+         | _ =>
+           auto;
+           solve
+             [rewrite <- List.app_assoc;
+              rewrite List.app_comm_cons;
+              apply type_equal_eqn_subst
+                with (T1 := T1) (T2 := T2) (K := K);
+                [> rewrite List.app_comm_cons;
+                   rewrite List.app_assoc; auto
+                | apply type_equal_eqn_extend_nil;
+                  apply type_equal_weakening_eqn_rec_cons;
+                  apply type_equal_eqn_extend;
+                  apply type_equal_extend_empty; auto
+                | auto]]
+         end].
+  - eauto.
+  - eauto.
+  - apply type_equal_transitive with T3.
+    + rewrite List.app_comm_cons.
+      apply IHHte1_1; auto.
+      rewrite <- List.app_comm_cons.
+      apply type_equal_weakening_eqn_rec_cons; auto.
+    + rewrite List.app_comm_cons.
+      apply IHHte1_2; auto.
+      rewrite <- List.app_comm_cons.
+      apply type_equal_weakening_eqn_rec_cons; auto.
+Qed.
+
+Inductive type_equal_eqn_subs
+  : version -> tenv -> tenv -> qenv -> Prop :=
+| type_equal_eqn_subs_nil : forall v E1 E2,
+    type_equal_eqn_subs v E1 E2 nil
+| type_equal_eqn_subs_cons : forall v E1 E2 Q T1 T2 K,
+    type_equal_eqn_subs v E1 E2 Q ->
+    type_equal v E1 E2 nil nil T1 T2 K ->
+    type_equal_eqn_subs v E1 E2 ((T1, T2, K) :: Q).
+
+Hint Constructors type_equal_eqn_subs.
+
+Lemma type_equal_eqn_subst_subs :
+  forall v E1 E2 Q T1 T2 K,
+    type_equal v (E1 & E2) empty Q nil T1 T2 K ->
+    type_equal_eqn_subs v E1 E2 Q ->
+    type_environment_extension E1 E2 ->
+    type_equal v (E1 & E2) empty nil nil T1 T2 K.
+Proof.
+  introv Hte Hes He.
+  induction Hes; auto.
+  assert (type_equal v E1 E2 nil nil T0 T3 K0)
+    as Hte2 by assumption.
+  apply type_equal_extend_empty in Hte2; auto.
+  apply type_equal_weakening_eqn_nils
+    with (Q1 := Q) (Q2 := nil) in Hte2.
+  rewrite <- List.app_nil_l
+    with (l := ((T0, T3, K0) :: Q)%list) in Hte.
+  apply type_equal_eqn_subst
+    with (T1 := T0) (T2 := T3) (K := K0) in Hte; auto.
+Qed.  
+
+Lemma type_equal_eqn_rec_subst_subs :
+  forall v E1 E2 Q T1 T2 K,
+    type_equal v E1 E2 nil Q T1 T2 K ->
+    type_equal_eqn_subs v E1 E2 Q ->
+    type_environment_extension E1 E2 ->
+    type_equal v E1 E2 nil nil T1 T2 K.
+Proof.
+  introv Hte Hes He.
+  induction Hes; auto.
+  assert (type_equal v E1 E2 nil nil T0 T3 K0)
+    as Hte2 by assumption.
+  apply type_equal_weakening_eqn_nils
+    with (Q1 := nil) (Q2 := Q) in Hte2.
+  rewrite <- List.app_nil_l
+    with (l := ((T0, T3, K0) :: Q)%list) in Hte.
+  apply type_equal_eqn_rec_subst
+    with (T1 := T0) (T2 := T3) (K := K0) in Hte; auto.
+Qed.
+
+(* ****************************************************** *)
 (** Useful lemmas *)
 
 Lemma subtype_equal_bot : forall v E1 E2 T1 T2 K,
-    type_equal v E1 E2 T1 (typ_bot K) K ->
-    subtype v E1 E2 T2 T1 K ->
+    type_equal v E1 E2 nil nil T1 (typ_bot K) K ->
+    subtype v E1 E2 nil nil T2 T1 K ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    type_equal v E1 E2 T2 (typ_bot K) K.
+    type_equal v E1 E2 nil nil T2 (typ_bot K) K.
 Proof.
   introv Hte Hs He1 He2.
   pose subtype_bot as Hs2.
@@ -30,11 +184,11 @@ Proof.
 Qed.
 
 Lemma subtype_equal_top : forall v E1 E2 T1 T2 K,
-    type_equal v E1 E2 T1 (typ_top K) K ->
-    subtype v E1 E2 T1 T2 K ->
+    type_equal v E1 E2 nil nil T1 (typ_top K) K ->
+    subtype v E1 E2 nil nil T1 T2 K ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    type_equal v E1 E2 T2 (typ_top K) K.
+    type_equal v E1 E2 nil nil T2 (typ_top K) K.
 Proof.
   introv Hte Hs He1 He2.
   pose (@subtype_top v E1 E2 T2 K) as Hs2.
@@ -48,11 +202,11 @@ Proof.
 Qed.
 
 Lemma subtype_join_bot_l : forall v E1 E2 T1 T2 T3 K,
-  subtype v E1 E2 T1 T3 K ->
-  type_equal v E1 E2 T2 (typ_bot K) K ->
+  subtype v E1 E2 nil nil T1 T3 K ->
+  type_equal v E1 E2 nil nil T2 (typ_bot K) K ->
   valid_tenv v E1 ->
   valid_tenv_extension v E1 E2 ->
-  subtype v E1 E2 (typ_join T1 T2) T3 K.
+  subtype v E1 E2 nil nil (typ_join T1 T2) T3 K.
 Proof.
   introv Hs Hte He1 He2.
   rewrite <- Hs.
@@ -62,17 +216,58 @@ Proof.
 Qed.
 
 Lemma subtype_meet_top_r : forall v E1 E2 T1 T2 T3 K,
-  subtype v E1 E2 T1 T2 K ->
-  type_equal v E1 E2 T3 (typ_top K) K ->
+  subtype v E1 E2 nil nil T1 T2 K ->
+  type_equal v E1 E2 nil nil T3 (typ_top K) K ->
   valid_tenv v E1 ->
   valid_tenv_extension v E1 E2 ->
-  subtype v E1 E2 T1 (typ_meet T2 T3) K.
+  subtype v E1 E2 nil nil T1 (typ_meet T2 T3) K.
 Proof.
   introv Hs Hte He1 He2.
   rewrite Hs.
   rewrite Hte.
   rewrite type_equal_meet_identity by auto with kinding.
   sreflexivity.
+Qed.
+
+Lemma type_equal_eqn_subs_apply :
+  forall v E1 E2 E3 Q T1 T2 K T1' T2' K',
+    type_equal v (E1 & E2 & E3) empty
+      ((T1, T2, K) :: Q ++ nil)%list nil T1' T2' K' ->
+    type_equal v E1 (E2 & E3) nil Q T1 T2 K ->
+    type_equal_eqn_subs v E1 (E2 & E3) Q ->
+    type_environment (E1 & E2) ->
+    type_environment_extension (E1 & E2) E3 ->
+    type_equal v (E1 & E2 & E3) empty nil nil T1' T2' K'.
+Proof.
+  introv Hte1 Hte2 Hes He1 He2.
+  rewrite List.app_nil_r in Hte1.
+  assert (type_environment_extension E1 (E2 & E3))
+    by auto using type_environment_extension_extend,
+         type_environment_extend_inv.
+  apply type_equal_extend_empty in Hte2; auto.
+  rewrite concat_assoc in Hte2.
+  apply type_equal_eqn_extend_nil in Hte2.
+  rewrite List.app_nil_r in Hte2.
+  rewrite <- List.app_nil_l
+    with (l := ((T1, T2, K) :: Q)%list) in Hte1.
+  apply type_equal_eqn_subst
+    with (T1 := T1) (T2 := T2) (K := K) in Hte1; auto.
+  rewrite <- concat_assoc.
+  apply type_equal_eqn_subst_subs with (Q := Q);
+    try rewrite concat_assoc; auto.  
+Qed.
+
+Lemma type_equal_eqn_subs_push : forall v E1 E2 E3 Q T1 T2 K,
+    type_equal_eqn_subs v E1 (E2 & E3) Q ->
+    type_equal v E1 (E2 & E3) nil Q T1 T2 K ->
+    type_environment (E1 & E2) ->
+    type_environment_extension (E1 & E2) E3 ->
+    type_equal_eqn_subs v E1 (E2 & E3) ((T1, T2, K) :: Q).
+Proof.
+  introv Hes Hte He1 He2.
+  apply type_equal_eqn_rec_subst_subs in Hte;
+    auto using type_environment_extension_extend,
+      type_environment_extend_inv.
 Qed.
 
 (* *************************************************************** *)
@@ -138,7 +333,7 @@ Inductive covariant_inv :
   | covariant_inv_join : forall z s1 s2 s3 v E1 E2 T1 T2 T3 T4 T5,
       covariant_inv z s1 v E1 E2 T2 T4 ->
       covariant_inv z s2 v E1 E2 T3 T5 ->
-      type_equal v (E1 & E2) empty T1
+      type_equal v (E1 & E2) empty nil nil T1
                  (typ_join T2 T3) (cov_input_kind z) ->
       s3 = orb s1 s2 ->
       covariant_inv z s3 v E1 E2 T1 (typ_join T4 T5)
@@ -149,23 +344,24 @@ Inductive covariant_inv :
       covariant_inv z s v E1 E2 T1 T2 ->
       covariant_inv z s v E1 E2 T1 (typ_fvar X)
   | covariant_inv_variant : forall s v E1 E2 T1 T2,
-      subtype v (E1 & E2) empty T1 T2 knd_row_all ->
+      subtype v (E1 & E2) empty nil nil T1 T2 knd_row_all ->
       covariant_inv ctx_variant s v E1 E2 T1 (typ_variant T2)
   | covariant_inv_arrow_left : forall s E1 E2 T1 T2 T3,
-      subtype version_row_subtyping (E1 & E2) empty T1 T2 knd_type ->
+      subtype version_row_subtyping (E1 & E2) empty nil nil
+        T1 T2 knd_type ->
       covariant_inv ctx_arrow_left_row s version_row_subtyping
         E1 E2 T1 (typ_arrow T2 T3)
   | covariant_inv_arrow_right : forall s v E1 E2 T1 T2 T3,
-      subtype v (E1 & E2) empty T1 T3 knd_type ->
+      subtype v (E1 & E2) empty nil nil T1 T3 knd_type ->
       covariant_inv ctx_arrow_right s v E1 E2 T1 (typ_arrow T2 T3)
   | covariant_inv_ref : forall s v E1 E2 T1 T2,
-      subtype v (E1 & E2) empty T1 T2 knd_type ->
+      subtype v (E1 & E2) empty nil nil T1 T2 knd_type ->
       covariant_inv ctx_ref_co s v E1 E2 T1 (typ_ref T2)
   | covariant_inv_prod_left : forall s v E1 E2 T1 T2 T3,
-      subtype v (E1 & E2) empty T1 T2 knd_type ->
+      subtype v (E1 & E2) empty nil nil T1 T2 knd_type ->
       covariant_inv ctx_prod_left s v E1 E2 T1 (typ_prod T2 T3)
   | covariant_inv_prod_right : forall s v E1 E2 T1 T2 T3,
-      subtype v (E1 & E2) empty T1 T3 knd_type ->
+      subtype v (E1 & E2) empty nil nil T1 T3 knd_type ->
       covariant_inv ctx_prod_right s v E1 E2 T1 (typ_prod T2 T3)
   | covariant_inv_or_l : forall c s v E1 E2 cs1 cs2 cs3 T1 T2 T3,
       covariant_inv (ctx_constructor c cs1) s v E1 E2 T1 T2 ->
@@ -182,13 +378,13 @@ Inductive covariant_inv :
       covariant_inv (ctx_constructor c cs2) s
         v E1 E2 T1 (typ_proj cs1 cs2 T2)
   | covariant_inv_constructor : forall c cs s v E1 E2 T1 T2,
-      subtype v (E1 & E2) empty T1 T2 knd_type ->
+      subtype v (E1 & E2) empty nil nil T1 T2 knd_type ->
       covariant_inv (ctx_constructor c cs) s
         v E1 E2 T1 (typ_constructor c T2)
   | covariant_inv_unit : forall s v E1 E2 T1,
       covariant_inv ctx_unit s v E1 E2 T1 typ_unit
   | covariant_inv_bot : forall z v E1 E2 T1 T2,
-      type_equal v (E1 & E2) empty T1
+      type_equal v (E1 & E2) empty nil nil T1
         (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
       covariant_inv z false v E1 E2 T1 T2.
 
@@ -197,7 +393,7 @@ Hint Constructors covariant_inv.
 Lemma covariant_inv_meet_inv : forall z s v E1 E2 T1 T2 T3 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_meet T2 T3) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (covariant_inv z s v E1 E2 T1 T2 ->
@@ -213,13 +409,13 @@ Lemma covariant_inv_join_inv :
   forall z s1 v E1 E2 T1 T2 T3 (P : Prop),
     covariant_inv z s1 v E1 E2 T1 (typ_join T2 T3) ->
     (s1 = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (forall s2 s3 T4 T5,
         covariant_inv z s2 v E1 E2 T4 T2 ->
         covariant_inv z s3 v E1 E2 T5 T3 ->
-        type_equal v (E1 & E2) empty T1
+        type_equal v (E1 & E2) empty nil nil T1
                    (typ_join T4 T5) (cov_input_kind z) ->
         s1 = orb s2 s3 ->
         P) ->
@@ -232,7 +428,7 @@ Qed.
 Lemma covariant_inv_var_inv : forall z s v E1 E2 X T1 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_fvar X) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (forall T2 T3,
@@ -248,11 +444,11 @@ Qed.
 Lemma covariant_inv_variant_inv : forall z s v E1 E2 T1 T2 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_variant T2) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (z = ctx_variant ->
-     subtype v (E1 & E2) empty T1 T2 knd_row_all ->
+     subtype v (E1 & E2) empty nil nil T1 T2 knd_row_all ->
      P) ->
     P.
 Proof.
@@ -263,15 +459,15 @@ Qed.
 Lemma covariant_inv_arrow_inv : forall z s v E1 E2 T1 T2 T3 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_arrow T2 T3) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (z = ctx_arrow_left_row ->
      v = version_row_subtyping ->
-     subtype v (E1 & E2) empty T1 T2 knd_type ->
+     subtype v (E1 & E2) empty nil nil T1 T2 knd_type ->
      P) ->
     (z = ctx_arrow_right ->
-     subtype v (E1 & E2) empty T1 T3 knd_type ->
+     subtype v (E1 & E2) empty nil nil T1 T3 knd_type ->
      P) ->
     P.
 Proof.
@@ -282,11 +478,11 @@ Qed.
 Lemma covariant_inv_ref_inv : forall z s v E1 E2 T1 T2 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_ref T2) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (z = ctx_ref_co ->
-     subtype v (E1 & E2) empty T1 T2 knd_type ->
+     subtype v (E1 & E2) empty nil nil T1 T2 knd_type ->
      P) ->
     P.
 Proof.
@@ -297,14 +493,14 @@ Qed.
 Lemma covariant_inv_prod_inv : forall z s v E1 E2 T1 T2 T3 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_prod T2 T3) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (z = ctx_prod_left ->
-     subtype v (E1 & E2) empty T1 T2 knd_type ->
+     subtype v (E1 & E2) empty nil nil T1 T2 knd_type ->
      P) ->
     (z = ctx_prod_right ->
-     subtype v (E1 & E2) empty T1 T3 knd_type ->
+     subtype v (E1 & E2) empty nil nil T1 T3 knd_type ->
      P) ->
     P.
 Proof.
@@ -316,7 +512,7 @@ Lemma covariant_inv_or_inv :
   forall z s v E1 E2 cs1 cs2 T1 T2 T3 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_or cs1 cs2 T2 T3) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (forall c cs3,
@@ -339,7 +535,7 @@ Lemma covariant_inv_proj_inv :
   forall z s v E1 E2 cs1 cs2 T1 T2 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_proj cs1 cs2 T2) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (forall c,
@@ -356,12 +552,12 @@ Lemma covariant_inv_constructor_inv :
   forall z s v E1 E2 c T1 T2 (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_constructor c T2) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (forall cs,
         z = ctx_constructor c cs ->
-        subtype v (E1 & E2) empty T1 T2 knd_type ->
+        subtype v (E1 & E2) empty nil nil T1 T2 knd_type ->
         P) ->
     P.
 Proof.
@@ -373,7 +569,7 @@ Lemma covariant_inv_unit_inv :
   forall z s v E1 E2 T1 (P : Prop),
     covariant_inv z s v E1 E2 T1 typ_unit ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     (z = ctx_unit -> P) ->
@@ -387,7 +583,7 @@ Lemma covariant_inv_bot_inv :
   forall z s v E1 E2 T1 K (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_bot K) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
      P) ->
     P.
@@ -533,7 +729,7 @@ Ltac choose_covariant_inv_join_type z Td T :=
       |- _ => constr:(typ_join Tt1 Tt2)
     | H : covariant_inv _ _ _ _ _ ?Tt T |- _ =>
       constr:(Tt)
-    | Hte : type_equal _ _ _ ?Tb (typ_bot _) _ |- _ =>
+    | Hte : type_equal _ _ _ nil nil ?Tb (typ_bot _) _ |- _ =>
       constr:(Tb)
     end
   end.
@@ -573,7 +769,7 @@ Ltac choose_covariant_inv_join_bool z sd T :=
       H2 : covariant_inv _ ?s2 _ _ _ _ T
       |- _ => constr:(orb s1 s2)
     | H : covariant_inv _ ?s _ _ _ _ T |- _ => constr:(s)
-    | Hte : type_equal _ _ _ ?Tb (typ_bot _) _ |- _ =>
+    | Hte : type_equal _ _ _ nil nil ?Tb (typ_bot _) _ |- _ =>
       constr:(false)
     end
   end.
@@ -592,12 +788,12 @@ Ltac construct_covariant_inv_bot :=
     treflexivity
   | |- covariant_inv _ _ _ _ _ ?Tt _ =>
     match goal with
-    | H : type_equal _ _ _ Tt (typ_bot _) _ |- _ =>
+    | H : type_equal _ _ _ nil nil Tt (typ_bot _) _ |- _ =>
       apply covariant_inv_bot;
       apply H
-    | H: type_equal _ _ _ Tt (typ_join ?Ttl ?Ttr) _,
-      Hl : type_equal _ _ _ ?Ttl (typ_bot _) _,
-      Hr : type_equal _ _ _ ?Ttr (typ_bot _) _ |- _ =>
+    | H: type_equal _ _ _ nil nil Tt (typ_join ?Ttl ?Ttr) _,
+      Hl : type_equal _ _ _ nil nil ?Ttl (typ_bot _) _,
+      Hr : type_equal _ _ _ nil nil ?Ttr (typ_bot _) _ |- _ =>
       apply covariant_inv_bot;
       rewrite H;
       rewrite Hl;
@@ -673,7 +869,7 @@ Ltac construct_covariant_inv :=
 
 Lemma covariant_inv_sub : forall z s1 s2 v E1 E2 K1 T1 T2 T3,
     covariant_inv z s1 v E1 E2 T1 T2 ->
-    subtype v (E1 & E2) empty T3 T1 K1 ->
+    subtype v (E1 & E2) empty nil nil T3 T1 K1 ->
     leb s2 s1 ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
@@ -727,7 +923,7 @@ Instance covariant_inv_eq_morph_impl
   `{ He1 : valid_tenv v E1 }
   `{ He2 : valid_tenv_extension v E1 E2 }
   : Morphisms.Proper
-      (type_equal' v (E1 & E2) empty (cov_input_kind z) ==>
+      (type_equal' v (E1 & E2) empty nil nil (cov_input_kind z) ==>
        eq ==> Basics.impl)
       (covariant_inv z s v E1 E2) | 3
   := { }.
@@ -747,7 +943,7 @@ Instance covariant_inv_eq_morph_flip_impl
   `{ He1 : valid_tenv v E1 }
   `{ He2 : valid_tenv_extension v E1 E2 }
   : Morphisms.Proper
-      (type_equal' v (E1 & E2) empty (cov_input_kind z) ==>
+      (type_equal' v (E1 & E2) empty nil nil (cov_input_kind z) ==>
        eq ==> Basics.flip Basics.impl)
       (covariant_inv z s v E1 E2) | 3
   := { }.
@@ -767,7 +963,7 @@ Instance covariant_inv_sub_morph_impl
   `{ He1 : valid_tenv v E1 }
   `{ He2 : valid_tenv_extension v E1 E2 }
   : Morphisms.Proper
-      (subtype' v (E1 & E2) empty (cov_input_kind z) ==>
+      (subtype' v (E1 & E2) empty nil nil (cov_input_kind z) ==>
        eq ==> Basics.flip Basics.impl)
       (covariant_inv z s v E1 E2) | 3
   := { }.
@@ -850,17 +1046,28 @@ Ltac invert_kindings_cov :=
       inversion H; subst; clear H
     end.
 
+Ltac unroll_recursive_eqns :=
+  repeat match goal with
+  | Hte1 : type_equal _ (?E1 & ?E2 & ?E3) empty
+            ((?Tl, ?Tr, ?Klr) :: (?Q ++ nil)%list) nil
+            _ _ _,
+    Hte2 : type_equal _ ?E1 (?E2 & ?E3)
+             nil ?Q ?Tl ?Tr ?Klr |- _ =>
+    apply type_equal_eqn_subs_apply in Hte1;
+      auto with wellformed
+  end.    
+
 Ltac solve_covariant_inv_side_conditions :=
   try match goal with
-  | |- type_equal _ _ _ ?T ?T _ =>
+  | |- type_equal _ _ _ _ _ ?T ?T _ =>
     treflexivity
-  | |- subtype _ _ _ (typ_meet ?T1 ?T2) ?T1 _ =>
+  | |- subtype _ _ _ nil nil (typ_meet ?T1 ?T2) ?T1 _ =>
     auto using subtype_lower_bound_l with kinding wellformed
-  | |- subtype _ _ _ (typ_meet ?T1 ?T2) ?T2 _ =>
+  | |- subtype _ _ _ nil nil (typ_meet ?T1 ?T2) ?T2 _ =>
     auto using subtype_lower_bound_r with kinding wellformed
-  | Hs1 : subtype _ _ _ ?T1 ?T2 _,
-    Hs2 : subtype _ _ _ ?T1 ?T3 _
-    |- subtype _ _ _ ?T1 (typ_meet ?T2 ?T3) _ =>
+  | Hs1 : subtype _ _ _ nil nil ?T1 ?T2 _,
+    Hs2 : subtype _ _ _ nil nil ?T1 ?T3 _
+    |- subtype _ _ _ nil nil ?T1 (typ_meet ?T2 ?T3) _ =>
     apply subtype_greatest_lower_bound;
     auto using valid_tenv_extend
   | |- @eq bool ?s1 ?s2 =>
@@ -868,26 +1075,26 @@ Ltac solve_covariant_inv_side_conditions :=
     repeat match goal with
     | s : bool |- _ => destruct s
     end; solve [auto]
-  | Hs : subtype _ _ _ ?T1 (typ_meet ?T2 ?T3) _
-    |- subtype _ _ _ ?T1 ?T2 _ =>
+  | Hs : subtype _ _ _ nil nil ?T1 (typ_meet ?T2 ?T3) _
+    |- subtype _ _ _ nil nil ?T1 ?T2 _ =>
     rewrite Hs;
     apply subtype_lower_bound_l;
     auto with kinding wellformed
-  | Hs : subtype _ _ _ ?T1 (typ_meet ?T2 ?T3) _
-    |- subtype _ _ _ ?T1 ?T3 _ =>
+  | Hs : subtype _ _ _ nil nil ?T1 (typ_meet ?T2 ?T3) _
+    |- subtype _ _ _ nil nil ?T1 ?T3 _ =>
     rewrite Hs;
     apply subtype_lower_bound_r;
     auto with kinding wellformed
-  | Hs : subtype _ _ _ ?T1 (typ_join ?T2 ?T3) _ |-
-    type_equal _ _ _ ?T1
+  | Hs : subtype _ _ _ nil nil ?T1 (typ_join ?T2 ?T3) _ |-
+    type_equal _ _ _ nil nil ?T1
       (typ_join (typ_meet ?T1 ?T2) (typ_meet ?T1 ?T3)) _ =>
     rewrite <- type_equal_meet_distribution
       by auto with kinding;
     auto
-  | Hte1 : type_equal _ _ _ ?T1 (typ_join ?T2 ?T3) _,
-    Hte2 : type_equal _ _ _ ?T3 (typ_bot _) _,
-    Hs : subtype _ _ _ ?T2 ?T4 _
-    |- subtype _ _ _ ?T1 (typ_join ?T4 _) _ =>
+  | Hte1 : type_equal _ _ _ nil nil ?T1 (typ_join ?T2 ?T3) _,
+    Hte2 : type_equal _ _ _ nil nil ?T3 (typ_bot _) _,
+    Hs : subtype _ _ _ nil nil ?T2 ?T4 _
+    |- subtype _ _ _ nil nil ?T1 (typ_join ?T4 _) _ =>
     rewrite Hte1;
     rewrite Hte2;
     rewrite type_equal_join_identity
@@ -896,10 +1103,10 @@ Ltac solve_covariant_inv_side_conditions :=
       by auto with kinding wellformed;
     rewrite Hs;
     sreflexivity
-  | Hte1 : type_equal _ _ _ ?T1 (typ_join ?T2 ?T3) _,
-    Hte2 : type_equal _ _ _ ?T2 (typ_bot _) _,
-    Hs : subtype _ _ _ ?T3 ?T4 _
-    |- subtype _ _ _ ?T1 (typ_join _ ?T4) _ =>
+  | Hte1 : type_equal _ _ _ nil nil ?T1 (typ_join ?T2 ?T3) _,
+    Hte2 : type_equal _ _ _ nil nil ?T2 (typ_bot _) _,
+    Hs : subtype _ _ _ nil nil ?T3 ?T4 _
+    |- subtype _ _ _ nil nil ?T1 (typ_join _ ?T4) _ =>
     rewrite Hte1;
     rewrite Hte2;
     rewrite type_equal_join_commutative
@@ -910,25 +1117,25 @@ Ltac solve_covariant_inv_side_conditions :=
       by auto with kinding wellformed;
     rewrite Hs;
     sreflexivity
-  | Hte : type_equal _ _ _ ?T1 (typ_join ?T2 ?T3) _,
-    Hs1 : subtype _ _ _ ?T2 ?T4 _,
-    Hs2 : subtype _ _ _ ?T3 ?T5 _
-    |- subtype _ _ _ ?T1 (typ_join ?T4 ?T5) _ =>
+  | Hte : type_equal _ _ _ nil nil ?T1 (typ_join ?T2 ?T3) _,
+    Hs1 : subtype _ _ _ nil nil ?T2 ?T4 _,
+    Hs2 : subtype _ _ _ nil nil ?T3 ?T5 _
+    |- subtype _ _ _ nil nil ?T1 (typ_join ?T4 ?T5) _ =>
     rewrite Hte;
     apply subtype_least_upper_bound;
       try rewrite Hs1; try rewrite Hs2;
       auto using valid_tenv_extend,
         subtype_upper_bound_l, subtype_upper_bound_r
           with kinding wellformed
-  | Hte : type_equal _ _ _ ?T1 ?T2 _,
-    Hs : subtype _ _ _ ?T3 ?T1 _
-    |- subtype _ _ _ ?T3 ?T2 _ =>
+  | Hte : type_equal _ _ _ nil nil ?T1 ?T2 _,
+    Hs : subtype _ _ _ nil nil ?T3 ?T1 _
+    |- subtype _ _ _ nil nil ?T3 ?T2 _ =>
     rewrite Hs;
     rewrite Hte;
     sreflexivity
-  | Hte : type_equal _ _ _ ?T1 ?T2 _,
-    Hs : subtype _ _ _ ?T3 ?T2 _
-    |- subtype _ _ _ ?T3 ?T1 _ =>
+  | Hte : type_equal _ _ _ nil nil ?T1 ?T2 _,
+    Hs : subtype _ _ _ nil nil ?T3 ?T2 _
+    |- subtype _ _ _ nil nil ?T3 ?T1 _ =>
     rewrite Hs;
     rewrite Hte;
     sreflexivity
@@ -945,8 +1152,8 @@ Ltac solve_covariant_inv_side_conditions :=
       auto using subtype_lower_bound_r, leb_lower_bound_r
         with kinding wellformed
   | Hi : covariant_inv _ ?s1 _ _ _ ?Tsl ?Tt,
-    Hte1 : type_equal _ _ _ ?Ts (typ_join ?Tsl ?Tsr) _,
-    Hte2 : type_equal _ _ _ ?Tsr (typ_bot _) _ |-
+    Hte1 : type_equal _ _ _ nil nil ?Ts (typ_join ?Tsl ?Tsr) _,
+    Hte2 : type_equal _ _ _ nil nil ?Tsr (typ_bot _) _ |-
     covariant_inv _ ?s2  _ _ _ ?Ts ?Tt =>
     rewrite Hte1;
     rewrite Hte2;
@@ -954,8 +1161,8 @@ Ltac solve_covariant_inv_side_conditions :=
     replace s2 with s1 by ring;
     assumption
   | Hi : covariant_inv _ ?s1 _ _ _ ?Tsr ?Tt,
-    Hte1 : type_equal _ _ _ ?Ts (typ_join ?Tsl ?Tsr) _,
-    Hte2 : type_equal _ _ _ ?Tsl (typ_bot _) _ |-
+    Hte1 : type_equal _ _ _ nil nil ?Ts (typ_join ?Tsl ?Tsr) _,
+    Hte2 : type_equal _ _ _ nil nil ?Tsl (typ_bot _) _ |-
     covariant_inv _ ?s2  _ _ _ ?Ts ?Tt =>
     rewrite Hte1;
     rewrite Hte2;
@@ -965,7 +1172,7 @@ Ltac solve_covariant_inv_side_conditions :=
     assumption
   | Hil : covariant_inv _ ?s1 _ _ _ ?Tsl ?Tt,
     Hir : covariant_inv _ ?s2 _ _ _ ?Tsr ?Tt,
-    Hte : type_equal _ _ _ ?Ts (typ_join ?Tsl ?Tsr) _ |-
+    Hte : type_equal _ _ _ nil nil ?Ts (typ_join ?Tsl ?Tsr) _ |-
     covariant_inv _ (orb ?s1 ?s2) _ _ _ ?Ts ?Tt =>
     rewrite Hte;
     apply covariant_inv_upper_bound;
@@ -996,6 +1203,8 @@ Ltac solve_covariant_inv_side_conditions :=
   | |- CSet.In _ _ =>
     invert_kindings_cov;
     csetdec
+  | Hin : in_qenv nil _ _ _ |- _ =>
+    inversion Hin
   end.
 
 Lemma type_equal_core_covariant_inv_l :
@@ -1128,8 +1337,9 @@ Proof.
 Qed.
 
 Lemma type_equal_covariant_inv' :
-  forall z s v E1 E2 E3 T1 T2 T3,
-    type_equal v E1 (E2 & E3) T2 T3 (cov_output_kind z) ->
+  forall z s v E1 E2 E3 Q2 T1 T2 T3,
+    type_equal v E1 (E2 & E3) nil Q2 T2 T3 (cov_output_kind z) ->
+    type_equal_eqn_subs v E1 (E2 & E3) Q2 ->
     kinding (E1 & E2 & E3) empty T1 (cov_input_kind z) ->
     kinding (E1 & E2) E3 T2 (cov_output_kind z) ->
     kinding (E1 & E2) E3 T3 (cov_output_kind z) ->
@@ -1145,9 +1355,12 @@ Lemma type_equal_covariant_inv' :
     covariant_inv z s v (E1 & E2) E3 T1 T2 <->
     covariant_inv z s v (E1 & E2) E3 T1 T3.
 Proof.
-  introv Hte Hk1 Hk2 Hk3 Hz He1 He2 Hb.
+  introv Hte Hes Hk1 Hk2 Hk3 Hz He1 He2 Hb.
   remember (cov_output_kind z) as K.
   remember (E2 & E3) as E23.
+  remember Hte as Hte2 eqn:Heq.
+  clear Heq.
+  remember nil as Q1 in Hte at 1.
   generalize dependent z.
   generalize dependent s.
   generalize dependent T1.
@@ -1155,49 +1368,90 @@ Proof.
     autorewrite with rew_env_concat in *;
     split; introv Hi; invert_covariant_inv; subst;
       construct_covariant_inv;
+      unroll_recursive_eqns;
       solve_covariant_inv_side_conditions.
   - apply binds_tenv_weakening_l; auto with wellformed.
   - apply binds_tenv_weakening_l; auto with wellformed.
   - eauto.
   - apply binds_tenv_weakening_l; auto with wellformed.
-  - rewrite <- IHHte1 by auto with kinding; auto.
-  - rewrite <- IHHte2 by auto with kinding; auto.
-  - rewrite IHHte1 by auto with kinding; auto.
-  - rewrite IHHte2 by auto with kinding; auto.
+  - rewrite <- IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite <- IHHte2; 
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite IHHte1; 
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite IHHte2; 
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
   - rewrite <- IHHte
-      by (invert_kindings_cov; auto with kinding); auto.
+      by (auto using type_equal_eqn_subs_push with wellformed;
+          invert_kindings_cov;
+          auto with kinding); auto.
   - rewrite IHHte
-      by (invert_kindings_cov; auto with kinding); auto.
-  - rewrite <- IHHte1 by auto with kinding; auto.
-  - rewrite <- IHHte2 by auto with kinding; auto.
-  - rewrite IHHte1 by auto with kinding; auto.
-  - rewrite IHHte2 by auto with kinding; auto.
+      by (auto using type_equal_eqn_subs_push with wellformed;
+          invert_kindings_cov;
+          auto with kinding); auto.
+  - rewrite <- IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite <- IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
   - apply covariant_inv_join
       with (s1 := s2) (s2 := s3) (T2 := T4) (T3 := T5);
       solve_covariant_inv_side_conditions; auto.
-    + rewrite <- IHHte1 by auto with kinding; auto.
-    + rewrite <- IHHte2 by auto with kinding; auto.
+    + rewrite <- IHHte1;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
+    + rewrite <- IHHte2;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
   - apply covariant_inv_join
       with (s1 := s2) (s2 := s3) (T2 := T4) (T3 := T5);
       solve_covariant_inv_side_conditions; auto.
-    + rewrite IHHte1 by auto with kinding; auto.
-    + rewrite IHHte2 by auto with kinding; auto.
+    + rewrite IHHte1;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
+    + rewrite IHHte2;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
   - apply type_equal_core_covariant_inv_l with T1; auto.
   - apply type_equal_core_covariant_inv_r with T1'; auto.
-  - rewrite IHHte by auto; auto.
-  - rewrite <- IHHte by auto; auto.
-  - apply type_equal_extend in Hte1;
+  - rewrite IHHte;
+      auto using type_equal_eqn_subs_push
+        with wellformed.
+  - rewrite <- IHHte;
+      auto using type_equal_eqn_subs_push
+        with wellformed.
+  - apply type_equal_extend in Hte1 as Hte1';
       auto using type_environment_extend_inv with wellformed.
-    rewrite <- IHHte2 by auto with kinding.
-    rewrite <- IHHte1 by auto with kinding; auto.
-  - apply type_equal_extend in Hte1;
+    rewrite <- IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+    rewrite <- IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - apply type_equal_extend in Hte1 as Hte1';
       auto using type_environment_extend_inv with wellformed.
-    rewrite IHHte1 by auto with kinding.
-    rewrite IHHte2 by auto with kinding; auto.
+    rewrite IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+    rewrite IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
 Qed.
 
 Lemma subtype_covariant_inv' : forall z s v E1 E2 E3 T1 T2 T3,
-    subtype v E1 (E2 & E3)T2 T3 (cov_output_kind z) ->
+    subtype v E1 (E2 & E3) nil nil T2 T3 (cov_output_kind z) ->
     kinding (E1 & E2 & E3) empty T1 (cov_input_kind z) ->
     kinding (E1 & E2) E3 T2 (cov_output_kind z) ->
     kinding (E1 & E2) E3 T3 (cov_output_kind z) ->
@@ -1217,7 +1471,8 @@ Proof.
   unfold subtype in Hs.
   assert (covariant_inv z s v (E1 & E2) E3
             T1 (typ_meet T2 T3)) as Hi2
-    by (rewrite type_equal_covariant_inv' with (T3 := T2); auto).
+    by (rewrite type_equal_covariant_inv' with (T3 := T2);
+        try symmetry; auto).
   inversion Hi2; subst; auto.
 Qed.
 
@@ -1259,7 +1514,7 @@ Qed.
 
 Lemma type_equal_covariant_inv :
   forall z s v E1 E2 T1 T2 T3,
-    type_equal v E1 E2 T2 T3 (cov_output_kind z) ->
+    type_equal v E1 E2 nil nil T2 T3 (cov_output_kind z) ->
     kinding (E1 & E2) empty T1 (cov_input_kind z) ->
     valid_covariant_context z ->
     valid_tenv v E1 ->
@@ -1269,7 +1524,7 @@ Lemma type_equal_covariant_inv :
 Proof.
   introv Hte Hk Hz He1 He2.
   replace E1 with (E1 & empty) by apply concat_empty_r.
-  apply type_equal_covariant_inv';
+  apply type_equal_covariant_inv' with (Q2 := nil);
     autorewrite with rew_env_concat; auto with kinding.
   introv Hb' Hz' Hk' Hi'.
   rewrite <- concat_empty_r with (E := E1).
@@ -1284,7 +1539,7 @@ Qed.
 
 Lemma subtype_covariant_inv :
   forall z s v E1 E2 T1 T2 T3,
-    subtype v E1 E2 T2 T3 (cov_output_kind z) ->
+    subtype v E1 E2 nil nil T2 T3 (cov_output_kind z) ->
     kinding (E1 & E2) empty T1 (cov_input_kind z) ->
     valid_covariant_context z ->
     valid_tenv v E1 ->
@@ -1295,15 +1550,17 @@ Proof.
   introv Hs Hk Hz He1 He2 Hi.
   unfold subtype in Hs.
   assert (covariant_inv z s v E1 E2 T1 (typ_meet T2 T3)) as Hi2
-    by (rewrite type_equal_covariant_inv with (T3 := T2); auto).
+    by (rewrite type_equal_covariant_inv with (T3 := T2);
+        try symmetry; auto).
   inversion Hi2; subst; auto.
 Qed.
 
 Lemma invert_subtype_variant : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_variant T1) (typ_variant T2) knd_type ->
+    subtype v E1 E2 nil nil
+      (typ_variant T1) (typ_variant T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    subtype v (E1 & E2) empty T1 T2 knd_row_all.
+    subtype v (E1 & E2) empty nil nil T1 T2 knd_row_all.
 Proof.
   introv Hs He1 He2.
   assert (covariant_inv ctx_variant true v E1 E2 T1 (typ_variant T1))
@@ -1314,11 +1571,12 @@ Proof.
 Qed.
 
 Lemma invert_subtype_arrow_left_row_covariant : forall E1 E2 T1 T2 T3 T4,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_arrow T1 T2) (typ_arrow T3 T4) knd_type ->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    subtype version_row_subtyping (E1 & E2) empty T1 T3 knd_type.
+    subtype version_row_subtyping (E1 & E2) empty nil nil
+      T1 T3 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (covariant_inv ctx_arrow_left_row true version_row_subtyping
@@ -1331,10 +1589,11 @@ Proof.
 Qed.
 
 Lemma invert_subtype_arrow_right : forall v E1 E2 T1 T2 T3 T4,
-    subtype v E1 E2 (typ_arrow T1 T2) (typ_arrow T3 T4) knd_type ->
+    subtype v E1 E2 nil nil
+      (typ_arrow T1 T2) (typ_arrow T3 T4) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    subtype v (E1 & E2) empty T2 T4 knd_type.
+    subtype v (E1 & E2) empty nil nil T2 T4 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (covariant_inv ctx_arrow_right true v E1 E2
@@ -1347,10 +1606,10 @@ Proof.
 Qed.
 
 Lemma invert_subtype_ref_covariant : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_ref T1) (typ_ref T2) knd_type ->
+    subtype v E1 E2 nil nil (typ_ref T1) (typ_ref T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    subtype v (E1 & E2) empty T1 T2 knd_type.
+    subtype v (E1 & E2) empty nil nil T1 T2 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (covariant_inv ctx_ref_co true v E1 E2 T1 (typ_ref T1))
@@ -1361,10 +1620,11 @@ Proof.
 Qed.
 
 Lemma invert_subtype_prod_left : forall v E1 E2 T1 T2 T3 T4,
-    subtype v E1 E2 (typ_prod T1 T2) (typ_prod T3 T4) knd_type ->
+    subtype v E1 E2 nil nil
+      (typ_prod T1 T2) (typ_prod T3 T4) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    subtype v (E1 & E2) empty T1 T3 knd_type.
+    subtype v (E1 & E2) empty nil nil T1 T3 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (covariant_inv ctx_prod_left true v E1 E2
@@ -1377,10 +1637,11 @@ Proof.
 Qed.
 
 Lemma invert_subtype_prod_right : forall v E1 E2 T1 T2 T3 T4,
-    subtype v E1 E2 (typ_prod T1 T2) (typ_prod T3 T4) knd_type ->
+    subtype v E1 E2 nil nil
+      (typ_prod T1 T2) (typ_prod T3 T4) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    subtype v (E1 & E2) empty T2 T4 knd_type.
+    subtype v (E1 & E2) empty nil nil T2 T4 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (covariant_inv ctx_prod_right true v E1 E2
@@ -1393,11 +1654,11 @@ Proof.
 Qed.
 
 Lemma invert_subtype_constructor : forall v c cs E1 E2 T1 T2,
-    subtype v E1 E2 (typ_constructor c T1)
+    subtype v E1 E2 nil nil (typ_constructor c T1)
       (typ_constructor c T2) (knd_row cs)->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    subtype v (E1 & E2) empty T1 T2 knd_type.
+    subtype v (E1 & E2) empty nil nil T1 T2 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (covariant_inv (ctx_constructor c cs) true v E1 E2
@@ -1416,7 +1677,8 @@ Qed.
 (** Impossible subtyping inversions *)
 
 Lemma invert_subtype_variant_arrow : forall v E1 E2 T1 T2 T3,
-    subtype v E1 E2 (typ_variant T1) (typ_arrow T2 T3) knd_type ->
+    subtype v E1 E2 nil nil
+      (typ_variant T1) (typ_arrow T2 T3) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1430,7 +1692,8 @@ Proof.
 Qed.
 
 Lemma invert_subtype_variant_ref : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_variant T1) (typ_ref T2) knd_type ->
+    subtype v E1 E2 nil nil
+      (typ_variant T1) (typ_ref T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1444,7 +1707,8 @@ Proof.
 Qed.
 
 Lemma invert_subtype_variant_unit : forall v E1 E2 T1,
-    subtype v E1 E2 (typ_variant T1) typ_unit knd_type ->
+    subtype v E1 E2 nil nil
+      (typ_variant T1) typ_unit knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1458,7 +1722,8 @@ Proof.
 Qed.
 
 Lemma invert_subtype_variant_prod : forall v E1 E2 T1 T2 T3,
-    subtype v E1 E2 (typ_variant T1) (typ_prod T2 T3) knd_type ->
+    subtype v E1 E2  nil nil
+      (typ_variant T1) (typ_prod T2 T3) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1472,7 +1737,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_variant_bot : forall v E1 E2 T1,
-    subtype v E1 E2 (typ_variant T1) (typ_bot knd_type) knd_type ->
+    subtype v E1 E2 nil nil (typ_variant T1) (typ_bot knd_type) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1486,7 +1751,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_arrow_variant : forall v E1 E2 T1 T2 T3,
-    subtype v E1 E2 (typ_arrow T1 T2) (typ_variant T3) knd_type ->
+    subtype v E1 E2 nil nil (typ_arrow T1 T2) (typ_variant T3) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1502,7 +1767,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_arrow_ref : forall v E1 E2 T1 T2 T3,
-    subtype v E1 E2 (typ_arrow T1 T2) (typ_ref T3) knd_type ->
+    subtype v E1 E2 nil nil (typ_arrow T1 T2) (typ_ref T3) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1518,7 +1783,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_arrow_unit : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_arrow T1 T2) typ_unit knd_type ->
+    subtype v E1 E2 nil nil (typ_arrow T1 T2) typ_unit knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1534,7 +1799,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_arrow_prod : forall v E1 E2 T1 T2 T3 T4,
-    subtype v E1 E2 (typ_arrow T1 T2) (typ_prod T3 T4) knd_type ->
+    subtype v E1 E2 nil nil (typ_arrow T1 T2) (typ_prod T3 T4) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1550,7 +1815,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_arrow_bot : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_arrow T1 T2) (typ_bot knd_type) knd_type ->
+    subtype v E1 E2 nil nil (typ_arrow T1 T2) (typ_bot knd_type) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1566,7 +1831,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_ref_variant : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_ref T1) (typ_variant T2) knd_type ->
+    subtype v E1 E2 nil nil (typ_ref T1) (typ_variant T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1580,7 +1845,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_ref_arrow : forall v E1 E2 T1 T2 T3,
-    subtype v E1 E2 (typ_ref T1) (typ_arrow T2 T3) knd_type ->
+    subtype v E1 E2 nil nil (typ_ref T1) (typ_arrow T2 T3) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1594,7 +1859,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_ref_unit : forall v E1 E2 T1,
-    subtype v E1 E2 (typ_ref T1) typ_unit knd_type ->
+    subtype v E1 E2 nil nil (typ_ref T1) typ_unit knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1608,7 +1873,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_ref_prod : forall v E1 E2 T1 T2 T3,
-    subtype v E1 E2 (typ_ref T1) (typ_prod T2 T3) knd_type ->
+    subtype v E1 E2 nil nil (typ_ref T1) (typ_prod T2 T3) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1622,7 +1887,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_ref_bot : forall v E1 E2 T1,
-    subtype v E1 E2 (typ_ref T1) (typ_bot knd_type) knd_type ->
+    subtype v E1 E2 nil nil (typ_ref T1) (typ_bot knd_type) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1636,7 +1901,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_unit_variant : forall v E1 E2 T1,
-    subtype v E1 E2 typ_unit (typ_variant T1) knd_type ->
+    subtype v E1 E2 nil nil typ_unit (typ_variant T1) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1651,7 +1916,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_unit_arrow : forall v E1 E2 T1 T2,
-    subtype v E1 E2 typ_unit (typ_arrow T1 T2) knd_type ->
+    subtype v E1 E2 nil nil typ_unit (typ_arrow T1 T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1666,7 +1931,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_unit_ref : forall v E1 E2 T1,
-    subtype v E1 E2 typ_unit (typ_ref T1) knd_type ->
+    subtype v E1 E2 nil nil typ_unit (typ_ref T1) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1680,7 +1945,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_unit_prod : forall v E1 E2 T1 T2,
-    subtype v E1 E2 typ_unit (typ_prod T1 T2) knd_type ->
+    subtype v E1 E2 nil nil typ_unit (typ_prod T1 T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1695,7 +1960,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_unit_bot : forall v E1 E2,
-    subtype v E1 E2 typ_unit (typ_bot knd_type) knd_type ->
+    subtype v E1 E2 nil nil typ_unit (typ_bot knd_type) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1710,7 +1975,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_prod_variant : forall v E1 E2 T1 T2 T3,
-    subtype v E1 E2 (typ_prod T1 T2) (typ_variant T3) knd_type ->
+    subtype v E1 E2 nil nil (typ_prod T1 T2) (typ_variant T3) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1726,7 +1991,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_prod_arrow : forall v E1 E2 T1 T2 T3 T4,
-    subtype v E1 E2 (typ_prod T1 T2) (typ_arrow T3 T4) knd_type ->
+    subtype v E1 E2 nil nil (typ_prod T1 T2) (typ_arrow T3 T4) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1742,7 +2007,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_prod_ref : forall v E1 E2 T1 T2 T3,
-    subtype v E1 E2 (typ_prod T1 T2) (typ_ref T3) knd_type ->
+    subtype v E1 E2 nil nil (typ_prod T1 T2) (typ_ref T3) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1758,7 +2023,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_prod_unit : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_prod T1 T2) typ_unit knd_type ->
+    subtype v E1 E2 nil nil (typ_prod T1 T2) typ_unit knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1774,7 +2039,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_prod_bot : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_prod T1 T2) (typ_bot knd_type) knd_type ->
+    subtype v E1 E2 nil nil (typ_prod T1 T2) (typ_bot knd_type) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1790,7 +2055,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_constructor_bot : forall v c cs E1 E2 T1,
-    subtype v E1 E2 (typ_constructor c T1)
+    subtype v E1 E2 nil nil (typ_constructor c T1)
       (typ_bot (knd_row cs)) (knd_row cs) ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
@@ -1810,7 +2075,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_top_variant : forall v E1 E2 T1,
-    subtype v E1 E2 (typ_top knd_type) (typ_variant T1) knd_type ->
+    subtype v E1 E2 nil nil (typ_top knd_type) (typ_variant T1) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1826,7 +2091,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_top_arrow : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_top knd_type) (typ_arrow T1 T2) knd_type ->
+    subtype v E1 E2 nil nil (typ_top knd_type) (typ_arrow T1 T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1842,7 +2107,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_top_ref : forall v E1 E2 T1,
-    subtype v E1 E2 (typ_top knd_type) (typ_ref T1) knd_type ->
+    subtype v E1 E2 nil nil (typ_top knd_type) (typ_ref T1) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1858,7 +2123,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_top_unit : forall v E1 E2,
-    subtype v E1 E2 (typ_top knd_type) typ_unit knd_type ->
+    subtype v E1 E2 nil nil (typ_top knd_type) typ_unit knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1874,7 +2139,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_top_prod : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_top knd_type) (typ_prod T1 T2) knd_type ->
+    subtype v E1 E2 nil nil (typ_top knd_type) (typ_prod T1 T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1890,7 +2155,7 @@ Proof.
 Qed.
 
 Lemma invert_subtype_top_bot : forall v E1 E2 K,
-    subtype v E1 E2 (typ_top K) (typ_bot K) K ->
+    subtype v E1 E2 nil nil (typ_top K) (typ_bot K) K ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
     False.
@@ -1975,7 +2240,7 @@ Inductive contravariant_inv :
   | contravariant_inv_join : forall z s1 s2 s3 v E1 E2 T1 T2 T3 T4 T5,
       contravariant_inv z s1 v E1 E2 T2 T4 ->
       contravariant_inv z s2 v E1 E2 T3 T5 ->
-      type_equal v (E1 & E2) empty T1
+      type_equal v (E1 & E2) empty nil nil T1
                  (typ_meet T2 T3) (con_input_kind z) ->
       s3 = orb s1 s2 ->
       contravariant_inv z s3 v E1 E2 T1 (typ_join T4 T5)
@@ -1986,22 +2251,25 @@ Inductive contravariant_inv :
       contravariant_inv z s v E1 E2 T1 T2 ->
       contravariant_inv z s v E1 E2 T1 (typ_fvar X)
   | contravariant_inv_arrow_left : forall s v E1 E2 T1 T2 T3,
-      subtype v (E1 & E2) empty T2 T1 knd_type ->
+      subtype v (E1 & E2) empty nil nil T2 T1 knd_type ->
       contravariant_inv ctx_arrow_left s v
         E1 E2 T1 (typ_arrow T2 T3)
   | contravariant_inv_arrow_right : forall s E1 E2 T1 T2 T3,
-      subtype version_row_subtyping (E1 & E2) empty T3 T1 knd_type ->
+      subtype version_row_subtyping (E1 & E2) empty nil nil
+        T3 T1 knd_type ->
       contravariant_inv ctx_arrow_right_row s version_row_subtyping
         E1 E2 T1 (typ_arrow T2 T3)
   | contravariant_inv_ref : forall s v E1 E2 T1 T2,
-      subtype v (E1 & E2) empty T2 T1 knd_type ->
+      subtype v (E1 & E2) empty nil nil T2 T1 knd_type ->
       contravariant_inv ctx_ref_contra s v E1 E2 T1 (typ_ref T2)
   | contravariant_inv_prod_left : forall s E1 E2 T1 T2 T3,
-      subtype version_row_subtyping (E1 & E2) empty T2 T1 knd_type ->
+      subtype version_row_subtyping (E1 & E2) empty nil nil
+        T2 T1 knd_type ->
       contravariant_inv ctx_prod_left_row s version_row_subtyping
         E1 E2 T1 (typ_prod T2 T3)
   | contravariant_inv_prod_right : forall s E1 E2 T1 T2 T3,
-      subtype version_row_subtyping (E1 & E2) empty T3 T1 knd_type ->
+      subtype version_row_subtyping (E1 & E2) empty nil nil
+        T3 T1 knd_type ->
       contravariant_inv ctx_prod_right_row s version_row_subtyping
         E1 E2 T1 (typ_prod T2 T3)
   | contravariant_inv_or_l : forall c s v E1 E2 cs1 cs2 cs3 T1 T2 T3,
@@ -2019,20 +2287,22 @@ Inductive contravariant_inv :
       contravariant_inv (ctx_constructor_row c cs2) s
         v E1 E2 T1 (typ_proj cs1 cs2 T2)
   | contravariant_inv_constructor : forall c cs s E1 E2 T1 T2,
-      subtype version_row_subtyping (E1 & E2) empty T2 T1 knd_type ->
+      subtype version_row_subtyping (E1 & E2) empty nil nil
+        T2 T1 knd_type ->
       contravariant_inv (ctx_constructor_row c cs) s
         version_row_subtyping E1 E2 T1 (typ_constructor c T2)
   | contravariant_inv_bot : forall z v E1 E2 T1 T2,
-      type_equal v (E1 & E2) empty T1
-        (typ_top (con_input_kind z)) (con_input_kind z) ->
+      type_equal v (E1 & E2) empty nil nil
+        T1 (typ_top (con_input_kind z)) (con_input_kind z) ->
       contravariant_inv z false v E1 E2 T1 T2.
 
 Hint Constructors contravariant_inv.
 
-Lemma contravariant_inv_meet_inv : forall z s v E1 E2 T1 T2 T3 (P : Prop),
+Lemma contravariant_inv_meet_inv :
+  forall z s v E1 E2 T1 T2 T3 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_meet T2 T3) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (contravariant_inv z s v E1 E2 T1 T2 ->
@@ -2048,13 +2318,13 @@ Lemma contravariant_inv_join_inv :
   forall z s1 v E1 E2 T1 T2 T3 (P : Prop),
     contravariant_inv z s1 v E1 E2 T1 (typ_join T2 T3) ->
     (s1 = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (forall s2 s3 T4 T5,
         contravariant_inv z s2 v E1 E2 T4 T2 ->
         contravariant_inv z s3 v E1 E2 T5 T3 ->
-        type_equal v (E1 & E2) empty T1
+        type_equal v (E1 & E2) empty nil nil T1
                    (typ_meet T4 T5) (con_input_kind z) ->
         s1 = orb s2 s3 ->
         P) ->
@@ -2067,7 +2337,7 @@ Qed.
 Lemma contravariant_inv_var_inv : forall z s v E1 E2 X T1 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_fvar X) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (forall T2 T3,
@@ -2083,7 +2353,7 @@ Qed.
 Lemma contravariant_inv_variant_inv : forall z s v E1 E2 T1 T2 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_variant T2) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     P.
@@ -2095,15 +2365,15 @@ Qed.
 Lemma contravariant_inv_arrow_inv : forall z s v E1 E2 T1 T2 T3 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_arrow T2 T3) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (z = ctx_arrow_left ->
-     subtype v (E1 & E2) empty T2 T1 knd_type ->
+     subtype v (E1 & E2) empty nil nil T2 T1 knd_type ->
      P) ->
     (z = ctx_arrow_right_row ->
      v = version_row_subtyping ->
-     subtype v (E1 & E2) empty T3 T1 knd_type ->
+     subtype v (E1 & E2) empty nil nil T3 T1 knd_type ->
      P) ->
     P.
 Proof.
@@ -2114,11 +2384,11 @@ Qed.
 Lemma contravariant_inv_ref_inv : forall z s v E1 E2 T1 T2 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_ref T2) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (z = ctx_ref_contra ->
-     subtype v (E1 & E2) empty T2 T1 knd_type ->
+     subtype v (E1 & E2) empty nil nil T2 T1 knd_type ->
      P) ->
     P.
 Proof.
@@ -2129,16 +2399,16 @@ Qed.
 Lemma contravariant_inv_prod_inv : forall z s v E1 E2 T1 T2 T3 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_prod T2 T3) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (z = ctx_prod_left_row ->
      v = version_row_subtyping ->
-     subtype v (E1 & E2) empty T2 T1 knd_type ->
+     subtype v (E1 & E2) empty nil nil T2 T1 knd_type ->
      P) ->
     (z = ctx_prod_right_row ->
      v = version_row_subtyping ->
-     subtype v (E1 & E2) empty T3 T1 knd_type ->
+     subtype v (E1 & E2) empty nil nil T3 T1 knd_type ->
      P) ->
     P.
 Proof.
@@ -2150,7 +2420,7 @@ Lemma contravariant_inv_or_inv :
   forall z s v E1 E2 cs1 cs2 T1 T2 T3 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_or cs1 cs2 T2 T3) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (forall c cs3,
@@ -2173,7 +2443,7 @@ Lemma contravariant_inv_proj_inv :
   forall z s v E1 E2 cs1 cs2 T1 T2 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_proj cs1 cs2 T2) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (forall c,
@@ -2190,13 +2460,13 @@ Lemma contravariant_inv_constructor_inv :
   forall z s v E1 E2 c T1 T2 (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_constructor c T2) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     (forall cs,
         z = ctx_constructor_row c cs ->
         v = version_row_subtyping ->
-        subtype v (E1 & E2) empty T2 T1 knd_type ->
+        subtype v (E1 & E2) empty nil nil T2 T1 knd_type ->
         P) ->
     P.
 Proof.
@@ -2208,7 +2478,7 @@ Lemma contravariant_inv_bot_inv :
   forall z s v E1 E2 T1 K (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_bot K) ->
     (s = false ->
-     type_equal v (E1 & E2) empty T1
+     type_equal v (E1 & E2) empty nil nil T1
        (typ_top (con_input_kind z)) (con_input_kind z) ->
      P) ->
     P.
@@ -2324,7 +2594,7 @@ Ltac choose_contravariant_inv_join_type z Td T :=
       |- _ => constr:(typ_meet Tt1 Tt2)
     | H : contravariant_inv _ _ _ _ _ ?Tt T |- _ =>
       constr:(Tt)
-    | Hte : type_equal _ _ _ ?Tb (typ_top _) _ |- _ =>
+    | Hte : type_equal _ _ _ nil nil ?Tb (typ_top _) _ |- _ =>
       constr:(Tb)
     end
   end.
@@ -2369,7 +2639,7 @@ Ltac choose_contravariant_inv_join_bool z sd T :=
       H2 : contravariant_inv _ ?s2 _ _ _ _ T
       |- _ => constr:(orb s1 s2)
     | H : contravariant_inv _ ?s _ _ _ _ T |- _ => constr:(s)
-    | Hte : type_equal _ _ _ ?Tb (typ_top _) _ |- _ =>
+    | Hte : type_equal _ _ _ nil nil ?Tb (typ_top _) _ |- _ =>
       constr:(false)
     end
   end.
@@ -2388,12 +2658,12 @@ Ltac construct_contravariant_inv_bot :=
     treflexivity
   | |- contravariant_inv _ _ _ _ _ ?Tt _ =>
     match goal with
-    | H : type_equal _ _ _ Tt (typ_top _) _ |- _ =>
+    | H : type_equal _ _ _ nil nil Tt (typ_top _) _ |- _ =>
       apply contravariant_inv_bot;
       apply H
-    | H: type_equal _ _ _ Tt (typ_meet ?Ttl ?Ttr) _,
-      Hl : type_equal _ _ _ ?Ttl (typ_top _) _,
-      Hr : type_equal _ _ _ ?Ttr (typ_top _) _ |- _ =>
+    | H: type_equal _ _ _ nil nil Tt (typ_meet ?Ttl ?Ttr) _,
+      Hl : type_equal _ _ _ nil nil ?Ttl (typ_top _) _,
+      Hr : type_equal _ _ _ nil nil ?Ttr (typ_top _) _ |- _ =>
       apply contravariant_inv_bot;
       rewrite H;
       rewrite Hl;
@@ -2467,7 +2737,7 @@ Ltac construct_contravariant_inv :=
 
 Lemma contravariant_inv_sub : forall z s1 s2 v E1 E2 K1 T1 T2 T3,
     contravariant_inv z s1 v E1 E2 T1 T2 ->
-    subtype v (E1 & E2) empty T1 T3 K1 ->
+    subtype v (E1 & E2) empty nil nil T1 T3 K1 ->
     leb s2 s1 ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
@@ -2519,7 +2789,7 @@ Instance contravariant_inv_eq_morph_impl
   `{ He1 : valid_tenv v E1 }
   `{ He2 : valid_tenv_extension v E1 E2 }
   : Morphisms.Proper
-      (type_equal' v (E1 & E2) empty (con_input_kind z) ==>
+      (type_equal' v (E1 & E2) empty nil nil (con_input_kind z) ==>
        eq ==> Basics.impl)
       (contravariant_inv z s v E1 E2) | 3
   := { }.
@@ -2539,7 +2809,7 @@ Instance contravariant_inv_eq_morph_flip_impl
   `{ He1 : valid_tenv v E1 }
   `{ He2 : valid_tenv_extension v E1 E2 }
   : Morphisms.Proper
-      (type_equal' v (E1 & E2) empty (con_input_kind z) ==>
+      (type_equal' v (E1 & E2) empty nil nil (con_input_kind z) ==>
        eq ==> Basics.flip Basics.impl)
       (contravariant_inv z s v E1 E2) | 3
   := { }.
@@ -2559,7 +2829,7 @@ Instance contravariant_inv_sub_morph_impl
   `{ He1 : valid_tenv v E1 }
   `{ He2 : valid_tenv_extension v E1 E2 }
   : Morphisms.Proper
-      (subtype' v (E1 & E2) empty (con_input_kind z) ==>
+      (subtype' v (E1 & E2) empty nil nil (con_input_kind z) ==>
        eq ==> Basics.impl)
       (contravariant_inv z s v E1 E2) | 3
   := { }.
@@ -2644,15 +2914,15 @@ Ltac invert_kindings_con :=
 
 Ltac solve_contravariant_inv_side_conditions :=
   try match goal with
-  | |- type_equal _ _ _ ?T ?T _ =>
+  | |- type_equal _ _ _ _ _ ?T ?T _ =>
     treflexivity
-  | |- subtype _ _ _ ?T1 (typ_join ?T1 ?T2) _ =>
+  | |- subtype _ _ _ nil nil ?T1 (typ_join ?T1 ?T2) _ =>
     auto using subtype_upper_bound_l with kinding wellformed
-  | |- subtype _ _ _ ?T2 (typ_join ?T1 ?T2) _ =>
+  | |- subtype _ _ _ nil nil ?T2 (typ_join ?T1 ?T2) _ =>
     auto using subtype_upper_bound_r with kinding wellformed
-  | Hs1 : subtype _ _ _ ?T1 ?T3 _,
-    Hs2 : subtype _ _ _ ?T2 ?T3 _
-    |- subtype _ _ _ (typ_join ?T1 ?T2) ?T3 _ =>
+  | Hs1 : subtype _ _ _ nil nil ?T1 ?T3 _,
+    Hs2 : subtype _ _ _ nil nil ?T2 ?T3 _
+    |- subtype _ _ _ nil nil (typ_join ?T1 ?T2) ?T3 _ =>
     apply subtype_least_upper_bound;
     auto using valid_tenv_extend
   | |- @eq bool ?s1 ?s2 =>
@@ -2660,27 +2930,27 @@ Ltac solve_contravariant_inv_side_conditions :=
     repeat match goal with
     | s : bool |- _ => destruct s
     end; solve [auto]
-  | Hs : subtype _ _ _ (typ_join ?T1 ?T2) ?T3 _
-    |- subtype _ _ _ ?T1 ?T3 _ =>
+  | Hs : subtype _ _ _ nil nil (typ_join ?T1 ?T2) ?T3 _
+    |- subtype _ _ _ nil nil ?T1 ?T3 _ =>
     rewrite <- Hs;
     apply subtype_upper_bound_l;
     auto with kinding wellformed
-  | Hs : subtype _ _ _ (typ_join ?T1 ?T2) ?T3 _
-    |- subtype _ _ _ ?T2 ?T3 _ =>
+  | Hs : subtype _ _ _ nil nil (typ_join ?T1 ?T2) ?T3 _
+    |- subtype _ _ _ nil nil ?T2 ?T3 _ =>
     rewrite <- Hs;
     apply subtype_upper_bound_r;
     auto with kinding wellformed
-  | Hs : subtype _ _ _ (typ_meet ?T2 ?T3) ?T1 _ |-
-    type_equal _ _ _ ?T1
+  | Hs : subtype _ _ _ nil nil (typ_meet ?T2 ?T3) ?T1 _ |-
+    type_equal _ _ _ nil nil ?T1
       (typ_meet (typ_join ?T1 ?T2) (typ_join ?T1 ?T3)) _ =>
     rewrite <- type_equal_join_distribution
       by auto with kinding;
     rewrite subtype_dual in Hs;
     auto using valid_tenv_extend
-  | Hte1 : type_equal _ _ _ ?T1 (typ_meet ?T2 ?T3) _,
-    Hte2 : type_equal _ _ _ ?T3 (typ_top _) _,
-    Hs : subtype _ _ _ ?T4 ?T2 _
-    |- subtype _ _ _ (typ_meet ?T4 _) ?T1 _ =>
+  | Hte1 : type_equal _ _ _ nil nil ?T1 (typ_meet ?T2 ?T3) _,
+    Hte2 : type_equal _ _ _ nil nil ?T3 (typ_top _) _,
+    Hs : subtype _ _ _ nil nil ?T4 ?T2 _
+    |- subtype _ _ _ nil nil (typ_meet ?T4 _) ?T1 _ =>
     rewrite Hte1;
     rewrite Hte2;
     rewrite type_equal_meet_identity
@@ -2689,10 +2959,10 @@ Ltac solve_contravariant_inv_side_conditions :=
     rewrite subtype_lower_bound_l
       by auto with kinding wellformed;
     sreflexivity
-  | Hte1 : type_equal _ _ _ ?T1 (typ_meet ?T2 ?T3) _,
-    Hte2 : type_equal _ _ _ ?T2 (typ_top ?K) _,
-    Hs : subtype _ _ _ ?T4 ?T3 _
-    |- subtype _ _ _ (typ_meet _ ?T4) ?T1 _ =>
+  | Hte1 : type_equal _ _ _ nil nil ?T1 (typ_meet ?T2 ?T3) _,
+    Hte2 : type_equal _ _ _ nil nil ?T2 (typ_top ?K) _,
+    Hs : subtype _ _ _ nil nil ?T4 ?T3 _
+    |- subtype _ _ _ nil nil (typ_meet _ ?T4) ?T1 _ =>
     rewrite Hte1;
     rewrite Hte2;
     rewrite type_equal_meet_commutative
@@ -2703,25 +2973,25 @@ Ltac solve_contravariant_inv_side_conditions :=
     rewrite subtype_lower_bound_r
       by auto with kinding wellformed;
     sreflexivity
-  | Hte : type_equal _ _ _ ?T1 (typ_meet ?T2 ?T3) _,
-    Hs1 : subtype _ _ _ ?T4 ?T2 _,
-    Hs2 : subtype _ _ _ ?T5 ?T3 _
-    |- subtype _ _ _ (typ_meet ?T4 ?T5) ?T1 _ =>
+  | Hte : type_equal _ _ _ nil nil ?T1 (typ_meet ?T2 ?T3) _,
+    Hs1 : subtype _ _ _ nil nil ?T4 ?T2 _,
+    Hs2 : subtype _ _ _ nil nil ?T5 ?T3 _
+    |- subtype _ _ _ nil nil (typ_meet ?T4 ?T5) ?T1 _ =>
     rewrite Hte;
     apply subtype_greatest_lower_bound;
       try rewrite <- Hs1; try rewrite <- Hs2;
       auto using valid_tenv_extend,
         subtype_lower_bound_l, subtype_lower_bound_r
           with kinding wellformed
-  | Hte : type_equal _ _ _ ?T1 ?T2 _,
-    Hs : subtype _ _ _ ?T1 ?T3 _
-    |- subtype _ _ _ ?T2 ?T3 _ =>
+  | Hte : type_equal _ _ _ nil nil ?T1 ?T2 _,
+    Hs : subtype _ _ _ nil nil ?T1 ?T3 _
+    |- subtype _ _ _ nil nil ?T2 ?T3 _ =>
     rewrite <- Hs;
     rewrite Hte;
     sreflexivity
-  | Hte : type_equal _ _ _ ?T1 ?T2 _,
-    Hs : subtype _ _ _ ?T2 ?T3 _
-    |- subtype _ _ _ ?T1 ?T3 _ =>
+  | Hte : type_equal _ _ _ nil nil ?T1 ?T2 _,
+    Hs : subtype _ _ _ nil nil ?T2 ?T3 _
+    |- subtype _ _ _ nil nil ?T1 ?T3 _ =>
     rewrite <- Hs;
     rewrite Hte;
     sreflexivity
@@ -2738,8 +3008,8 @@ Ltac solve_contravariant_inv_side_conditions :=
       auto using subtype_upper_bound_r, leb_lower_bound_r
         with kinding wellformed
   | Hi : contravariant_inv _ ?s1 _ _ _ ?Tsl ?Tt,
-    Hte1 : type_equal _ _ _ ?Ts (typ_meet ?Tsl ?Tsr) _,
-    Hte2 : type_equal _ _ _ ?Tsr (typ_top _) _ |-
+    Hte1 : type_equal _ _ _ nil nil ?Ts (typ_meet ?Tsl ?Tsr) _,
+    Hte2 : type_equal _ _ _ nil nil ?Tsr (typ_top _) _ |-
     contravariant_inv _ ?s2  _ _ _ ?Ts ?Tt =>
     rewrite Hte1;
     rewrite Hte2;
@@ -2747,8 +3017,8 @@ Ltac solve_contravariant_inv_side_conditions :=
     replace s2 with s1 by ring;
     assumption
   | Hi : contravariant_inv _ ?s1 _ _ _ ?Tsr ?Tt,
-    Hte1 : type_equal _ _ _ ?Ts (typ_meet ?Tsl ?Tsr) _,
-    Hte2 : type_equal _ _ _ ?Tsl (typ_top _) _ |-
+    Hte1 : type_equal _ _ _ nil nil ?Ts (typ_meet ?Tsl ?Tsr) _,
+    Hte2 : type_equal _ _ _ nil nil ?Tsl (typ_top _) _ |-
     contravariant_inv _ ?s2  _ _ _ ?Ts ?Tt =>
     rewrite Hte1;
     rewrite Hte2;
@@ -2758,7 +3028,7 @@ Ltac solve_contravariant_inv_side_conditions :=
     assumption
   | Hil : contravariant_inv _ ?s1 _ _ _ ?Tsl ?Tt,
     Hir : contravariant_inv _ ?s2 _ _ _ ?Tsr ?Tt,
-    Hte : type_equal _ _ _ ?Ts (typ_meet ?Tsl ?Tsr) _ |-
+    Hte : type_equal _ _ _ nil nil ?Ts (typ_meet ?Tsl ?Tsr) _ |-
     contravariant_inv _ (orb ?s1 ?s2) _ _ _ ?Ts ?Tt =>
     rewrite Hte;
     apply contravariant_inv_lower_bound;
@@ -2789,6 +3059,8 @@ Ltac solve_contravariant_inv_side_conditions :=
   | |- CSet.In _ _ =>
     invert_kindings_con;
     csetdec
+  | Hin : in_qenv nil _ _ _ |- _ =>
+    inversion Hin
   end.
 
 Lemma type_equal_core_contravariant_inv_l :
@@ -2922,8 +3194,9 @@ Proof.
 Qed.
 
 Lemma type_equal_contravariant_inv' :
-  forall z s v E1 E2 E3 T1 T2 T3,
-    type_equal v E1 (E2 & E3) T2 T3 (con_output_kind z) ->
+  forall z s v E1 E2 E3 Q2 T1 T2 T3,
+    type_equal v E1 (E2 & E3) nil Q2 T2 T3 (con_output_kind z) ->
+    type_equal_eqn_subs v E1 (E2 & E3) Q2 ->
     kinding (E1 & E2 & E3) empty T1 (con_input_kind z) ->
     kinding (E1 & E2) E3 T2 (con_output_kind z) ->
     kinding (E1 & E2) E3 T3 (con_output_kind z) ->
@@ -2939,11 +3212,12 @@ Lemma type_equal_contravariant_inv' :
     contravariant_inv z s v (E1 & E2) E3 T1 T2 <->
     contravariant_inv z s v (E1 & E2) E3 T1 T3.
 Proof.
-  introv Hte Hk1 Hk2 Hk3 Hz He1 He2 Hb.
-  pose (From := T2).
-  pose (To := T3).
+  introv Hte Hes Hk1 Hk2 Hk3 Hz He1 He2 Hb.
   remember (con_output_kind z) as K.
   remember (E2 & E3) as E23.
+  remember Hte as Hte2 eqn:Heq.
+  clear Heq.
+  remember nil as Q1 in Hte at 1.
   generalize dependent z.
   generalize dependent s.
   generalize dependent T1.
@@ -2951,49 +3225,88 @@ Proof.
     autorewrite with rew_env_concat in *;
     split; introv Hi; invert_contravariant_inv; subst;
       construct_contravariant_inv;
+      unroll_recursive_eqns;
       solve_contravariant_inv_side_conditions.
   - apply binds_tenv_weakening_l; auto with wellformed.
   - apply binds_tenv_weakening_l; auto with wellformed.
   - eauto.
   - apply binds_tenv_weakening_l; auto with wellformed.
-  - rewrite <- IHHte1 by auto with kinding; auto.
-  - rewrite <- IHHte2 by auto with kinding; auto.
-  - rewrite IHHte1 by auto with kinding; auto.
-  - rewrite IHHte2 by auto with kinding; auto.
+  - rewrite <- IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite <- IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
   - rewrite <- IHHte
-      by (invert_kindings_con; auto with kinding); auto.
+      by (auto using type_equal_eqn_subs_push with wellformed;
+          invert_kindings_con; auto with kinding); auto.
   - rewrite IHHte
-      by (invert_kindings_con; auto with kinding); auto.
-  - rewrite <- IHHte1 by auto with kinding; auto.
-  - rewrite <- IHHte2 by auto with kinding; auto.
-  - rewrite IHHte1 by auto with kinding; auto.
-  - rewrite IHHte2 by auto with kinding; auto.
+      by (auto using type_equal_eqn_subs_push with wellformed;
+          invert_kindings_con; auto with kinding); auto.
+  - rewrite <- IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite <- IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - rewrite IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
   - apply contravariant_inv_join
       with (s1 := s2) (s2 := s3) (T2 := T4) (T3 := T5);
       solve_contravariant_inv_side_conditions; auto.
-    + rewrite <- IHHte1 by auto with kinding; auto.
-    + rewrite <- IHHte2 by auto with kinding; auto.
+    + rewrite <- IHHte1;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
+    + rewrite <- IHHte2;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
   - apply contravariant_inv_join
       with (s1 := s2) (s2 := s3) (T2 := T4) (T3 := T5);
       solve_contravariant_inv_side_conditions; auto.
-    + rewrite IHHte1 by auto with kinding; auto.
-    + rewrite IHHte2 by auto with kinding; auto.
+    + rewrite IHHte1;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
+    + rewrite IHHte2;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
   - apply type_equal_core_contravariant_inv_l with T1; auto.
   - apply type_equal_core_contravariant_inv_r with T1'; auto.
-  - rewrite IHHte by auto; auto.
-  - rewrite <- IHHte by auto; auto.
-  - apply type_equal_extend in Hte1;
+  - rewrite IHHte;
+      auto using type_equal_eqn_subs_push
+        with wellformed.
+  - rewrite <- IHHte;
+      auto using type_equal_eqn_subs_push
+        with wellformed.
+  - apply type_equal_extend in Hte1 as Hte1';
       auto using type_environment_extend_inv with wellformed.
-    rewrite <- IHHte2 by auto with kinding.
-    rewrite <- IHHte1 by auto with kinding; auto.
-  - apply type_equal_extend in Hte1;
+    rewrite <- IHHte2;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
+    rewrite <- IHHte1;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
+  - apply type_equal_extend in Hte1 as Hte1';
       auto using type_environment_extend_inv with wellformed.
-    rewrite IHHte1 by auto with kinding.
-    rewrite IHHte2 by auto with kinding; auto.
+    rewrite IHHte1;
+        auto using type_equal_eqn_subs_push
+          with kinding wellformed.
+    rewrite IHHte2;
+      auto using type_equal_eqn_subs_push
+        with kinding wellformed.
 Qed.
 
 Lemma subtype_contravariant_inv' : forall z s v E1 E2 E3 T1 T2 T3,
-    subtype v E1 (E2 & E3) T2 T3 (con_output_kind z) ->
+    subtype v E1 (E2 & E3) nil nil T2 T3 (con_output_kind z) ->
     kinding (E1 & E2 & E3) empty T1 (con_input_kind z) ->
     kinding (E1 & E2) E3 T2 (con_output_kind z) ->
     kinding (E1 & E2) E3 T3 (con_output_kind z) ->
@@ -3013,7 +3326,8 @@ Proof.
   unfold subtype in Hs.
   assert (contravariant_inv z s v (E1 & E2) E3
             T1 (typ_meet T2 T3)) as Hi2
-    by (rewrite type_equal_contravariant_inv' with (T3 := T2); auto).
+    by (rewrite type_equal_contravariant_inv' with (T3 := T2);
+        try symmetry; auto).
   inversion Hi2; subst; auto.
 Qed.
 
@@ -3055,7 +3369,7 @@ Qed.
 
 Lemma type_equal_contravariant_inv :
   forall z s v E1 E2 T1 T2 T3,
-    type_equal v E1 E2 T2 T3 (con_output_kind z) ->
+    type_equal v E1 E2 nil nil T2 T3 (con_output_kind z) ->
     kinding (E1 & E2) empty T1 (con_input_kind z) ->
     valid_contravariant_context z ->
     valid_tenv v E1 ->
@@ -3065,7 +3379,7 @@ Lemma type_equal_contravariant_inv :
 Proof.
   introv Hte Hk Hz He1 He2.
   replace E1 with (E1 & empty) by apply concat_empty_r.
-  apply type_equal_contravariant_inv';
+  apply type_equal_contravariant_inv' with (Q2 := nil);
     autorewrite with rew_env_concat; auto with kinding.
   introv Hb' Hz' Hk' Hi'.
   rewrite <- concat_empty_r with (E := E1).
@@ -3080,7 +3394,7 @@ Qed.
 
 Lemma subtype_contravariant_inv :
   forall z s v E1 E2 T1 T2 T3,
-    subtype v E1 E2 T2 T3 (con_output_kind z) ->
+    subtype v E1 E2 nil nil T2 T3 (con_output_kind z) ->
     kinding (E1 & E2) empty T1 (con_input_kind z) ->
     valid_contravariant_context z ->
     valid_tenv v E1 ->
@@ -3092,15 +3406,17 @@ Proof.
   unfold subtype in Hs.
   assert (contravariant_inv z s v E1 E2
             T1 (typ_meet T2 T3)) as Hi2
-    by (rewrite type_equal_contravariant_inv with (T3 := T2); auto).
+    by (rewrite type_equal_contravariant_inv with (T3 := T2);
+          try symmetry; auto).
   inversion Hi2; subst; auto.
 Qed.
 
 Lemma invert_subtype_arrow_left : forall v E1 E2 T1 T2 T3 T4,
-    subtype v E1 E2 (typ_arrow T1 T2) (typ_arrow T3 T4) knd_type ->
+    subtype v E1 E2 nil nil
+      (typ_arrow T1 T2) (typ_arrow T3 T4) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    subtype v (E1 & E2) empty T3 T1 knd_type.
+    subtype v (E1 & E2) empty nil nil T3 T1 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (contravariant_inv ctx_arrow_left true v E1 E2
@@ -3114,11 +3430,12 @@ Qed.
 
 Lemma invert_subtype_arrow_right_row_contravariant :
   forall E1 E2 T1 T2 T3 T4,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_arrow T1 T2) (typ_arrow T3 T4) knd_type ->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    subtype version_row_subtyping (E1 & E2) empty T4 T2 knd_type.
+    subtype version_row_subtyping (E1 & E2) empty nil nil
+      T4 T2 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (contravariant_inv ctx_arrow_right_row true
@@ -3131,10 +3448,10 @@ Proof.
 Qed.
 
 Lemma invert_subtype_ref_contravariant : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_ref T1) (typ_ref T2) knd_type ->
+    subtype v E1 E2 nil nil (typ_ref T1) (typ_ref T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    subtype v (E1 & E2) empty T2 T1 knd_type.
+    subtype v (E1 & E2) empty nil nil T2 T1 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (contravariant_inv ctx_ref_contra true v E1 E2 T1 (typ_ref T1))
@@ -3146,11 +3463,12 @@ Qed.
 
 Lemma invert_subtype_prod_left_row_contravariant :
   forall E1 E2 T1 T2 T3 T4,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_prod T1 T2) (typ_prod T3 T4) knd_type ->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    subtype version_row_subtyping (E1 & E2) empty T3 T1 knd_type.
+    subtype version_row_subtyping (E1 & E2) empty nil nil
+      T3 T1 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (contravariant_inv ctx_prod_left_row true
@@ -3164,11 +3482,12 @@ Qed.
 
 Lemma invert_subtype_prod_right_row_contravariant :
   forall E1 E2 T1 T2 T3 T4,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_prod T1 T2) (typ_prod T3 T4) knd_type ->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    subtype version_row_subtyping (E1 & E2) empty T4 T2 knd_type.
+    subtype version_row_subtyping (E1 & E2) empty nil nil
+      T4 T2 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (contravariant_inv ctx_prod_right_row true
@@ -3182,11 +3501,12 @@ Qed.
 
 Lemma invert_subtype_constructor_row_contravariant :
   forall c cs E1 E2 T1 T2,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_constructor c T1) (typ_constructor c T2) (knd_row cs)->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    subtype version_row_subtyping (E1 & E2) empty T2 T1 knd_type.
+    subtype version_row_subtyping (E1 & E2) empty nil nil
+      T2 T1 knd_type.
 Proof.
   introv Hs He1 He2.
   assert (contravariant_inv (ctx_constructor_row c cs) true
@@ -3205,11 +3525,12 @@ Qed.
 (** Invariant subtyping inversions *)
 
 Lemma invert_subtype_arrow_left_row : forall E1 E2 T1 T2 T3 T4,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_arrow T1 T2) (typ_arrow T3 T4) knd_type ->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    type_equal version_row_subtyping (E1 & E2) empty T1 T3 knd_type.
+    type_equal version_row_subtyping (E1 & E2) empty nil nil
+      T1 T3 knd_type.
 Proof.
   introv Hs He1 He2.
   apply subtype_antisymmetric;
@@ -3220,11 +3541,12 @@ Qed.
 
 Lemma invert_subtype_arrow_right_row :
   forall E1 E2 T1 T2 T3 T4,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_arrow T1 T2) (typ_arrow T3 T4) knd_type ->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    type_equal version_row_subtyping (E1 & E2) empty T2 T4 knd_type.
+    type_equal version_row_subtyping (E1 & E2) empty nil nil
+      T2 T4 knd_type.
 Proof.
   introv Hs He1 He2.
   apply subtype_antisymmetric;
@@ -3234,10 +3556,10 @@ Proof.
 Qed.
 
 Lemma invert_subtype_ref : forall v E1 E2 T1 T2,
-    subtype v E1 E2 (typ_ref T1) (typ_ref T2) knd_type ->
+    subtype v E1 E2 nil nil (typ_ref T1) (typ_ref T2) knd_type ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
-    type_equal v (E1 & E2) empty T1 T2 knd_type.
+    type_equal v (E1 & E2) empty nil nil T1 T2 knd_type.
 Proof.
   introv Hs He1 He2.
   apply subtype_antisymmetric;
@@ -3248,11 +3570,12 @@ Qed.
 
 Lemma invert_subtype_prod_left_row :
   forall E1 E2 T1 T2 T3 T4,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_prod T1 T2) (typ_prod T3 T4) knd_type ->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    type_equal version_row_subtyping (E1 & E2) empty T1 T3 knd_type.
+    type_equal version_row_subtyping (E1 & E2) empty nil nil
+      T1 T3 knd_type.
 Proof.
   introv Hs He1 He2.
   apply subtype_antisymmetric;
@@ -3263,11 +3586,12 @@ Qed.
 
 Lemma invert_subtype_prod_right_row :
   forall E1 E2 T1 T2 T3 T4,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_prod T1 T2) (typ_prod T3 T4) knd_type ->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    type_equal version_row_subtyping (E1 & E2) empty T2 T4 knd_type.
+    type_equal version_row_subtyping (E1 & E2) empty nil nil
+      T2 T4 knd_type.
 Proof.
   introv Hs He1 He2.
   apply subtype_antisymmetric;
@@ -3278,11 +3602,12 @@ Qed.
 
 Lemma invert_subtype_constructor_row :
   forall c cs E1 E2 T1 T2,
-    subtype version_row_subtyping E1 E2
+    subtype version_row_subtyping E1 E2 nil nil
       (typ_constructor c T1) (typ_constructor c T2) (knd_row cs)->
     valid_tenv version_row_subtyping E1 ->
     valid_tenv_extension version_row_subtyping E1 E2 ->
-    type_equal version_row_subtyping (E1 & E2) empty T1 T2 knd_type.
+    type_equal version_row_subtyping (E1 & E2) empty nil nil
+      T1 T2 knd_type.
 Proof.
   introv Hs He1 He2.
   apply subtype_antisymmetric;

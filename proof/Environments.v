@@ -7,8 +7,8 @@
    type environments and store types. *)
 
 Set Implicit Arguments.
-Require Import List LibLN Cofinite Disjoint Utilities
-        Definitions Opening.
+Require Import List PeanoNat LibLN
+        Cofinite Disjoint Utilities Definitions Opening.
 
 (* *************************************************************** *)
 (** * Type environments *)
@@ -1123,4 +1123,56 @@ Proof.
   - apply binds_empty_inv in Hb; contradiction.
   - destruct (binds_push_inv Hb) as [[Hl Hbnd]|[Hl Hbnd]];
       subst; auto.
+Qed.
+
+(* *************************************************************** *)
+(** * Properties of equation environments *)
+
+Lemma in_qenv_concat_l : forall Q1 Q2 T1 T2 K,
+    in_qenv Q1 T1 T2 K ->
+    in_qenv (Q1 ++ Q2) T1 T2 K.
+Proof.
+  introv Hin.
+  induction Hin; simpl; auto. 
+Qed.
+
+Lemma in_qenv_concat_r : forall Q1 Q2 T1 T2 K,
+    in_qenv Q2 T1 T2 K ->
+    in_qenv (Q1 ++ Q2) T1 T2 K.
+Proof.
+  introv Hin.
+  induction Q1 as [|[[T1' T2'] K']]; simpl; auto.
+Qed.
+
+Lemma in_qenv_concat_inv : forall Q1 Q2 T1 T2 K (C : Prop),
+    in_qenv (Q1 ++ Q2) T1 T2 K ->
+    (in_qenv Q1 T1 T2 K -> C) ->
+    (in_qenv Q2 T1 T2 K -> C) ->
+    C.
+Proof.
+  introv Hin Hc1 Hc2.
+  induction Q1 as [|[[T1' T2'] K']]; simpl in *; auto.
+  inversion Hin; subst; auto.
+Qed.
+
+Lemma in_qenv_nil_inv : forall T1 T2 K,
+    in_qenv nil T1 T2 K -> False.
+Proof.
+  introv Hin.
+  inversion Hin.
+Qed.
+
+Lemma in_qenv_middle_inv :
+  forall Q1 Q2 T1 T2 K T1' T2' K' (C : Prop),
+    in_qenv (Q1 ++ (T1, T2, K) :: Q2) T1' T2' K' ->
+    (in_qenv (Q1 ++ Q2) T1' T2' K' -> C) ->
+    (T1 = T1' -> T2 = T2' -> K = K' -> C) ->
+    C.
+Proof.    
+  introv Hin Hc1 Hc2.
+  apply in_qenv_concat_inv
+    with (Q1 := Q1) (Q2 := (T1, T2, K) :: Q2)
+         (T1 := T1') (T2 := T2') (K := K');
+    auto using in_qenv_concat_l; introv Hin2.
+  inversion Hin2; subst; auto using in_qenv_concat_r.
 Qed.

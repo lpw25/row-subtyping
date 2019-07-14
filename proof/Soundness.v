@@ -151,7 +151,7 @@ Proof.
     apply typing_constructor with (T1 := T0); auto.
     subst_subtype (typ_constructor c2 T0).
     subst_subtype ((typ_proj CSet.universe (CSet.singleton c2) T2)).
-    assert (subtype v E empty T5 T1 knd_row_all) as Hs2
+    assert (subtype v E empty nil nil T5 T1 knd_row_all) as Hs2
       by (apply invert_coercible_variant; auto).
     rewrite Hs2.
     sreflexivity.
@@ -172,7 +172,7 @@ Proof.
       eauto using typing_coercible with wellformed.
     apply typing_constructor with (T1 := T0); auto.
     subst_subtype (typ_constructor c1 T0).
-    assert (subtype v E empty T5 T1 knd_row_all) as Hs2
+    assert (subtype v E empty nil nil T5 T1 knd_row_all) as Hs2
       by (apply invert_coercible_variant; auto).
     rewrite Hs2.
     apply subtype_proj_subset with (cs3 := CSet.cosingleton c2);
@@ -378,13 +378,13 @@ Proof.
     apply invert_subtype_constructor_bot
       with (v := v) (E1 := E) (E2 := empty) (c := c0)
            (cs := CSet.singleton c0) (T1 := T0); auto.
-    assert (subtype v E empty (typ_constructor c0 T0)
+    assert (subtype v E empty nil nil (typ_constructor c0 T0)
              (typ_proj CSet.universe (CSet.singleton c0) T4)
              (knd_row (CSet.singleton c0)))
       as Hs1 by assumption.
-    assert (subtype v E empty T4 T1 knd_row_all)
+    assert (subtype v E empty nil nil T4 T1 knd_row_all)
       as Hs2 by auto using invert_coercible_variant.
-    assert (subtype v E empty
+    assert (subtype v E empty nil nil
               (typ_proj CSet.universe (CSet.cosingleton c) T1)
               (typ_bot (knd_row (CSet.cosingleton c)))
               (knd_row (CSet.cosingleton c)))
@@ -407,13 +407,14 @@ Proof.
     apply invert_subtype_constructor_bot
       with (v := v) (E1 := E) (E2 := empty) (c := c)
            (cs := CSet.singleton c) (T1 := T0); auto.
-    assert (subtype v E empty (typ_constructor c T0)
+    assert (subtype v E empty nil nil (typ_constructor c T0)
              (typ_proj CSet.universe (CSet.singleton c) T3)
              (knd_row (CSet.singleton c)))
       as Hs1 by assumption.
-    assert (subtype v E empty T3 T1 knd_row_all)
+    assert (subtype v E empty nil nil T3 T1 knd_row_all)
       as Hs2 by auto using invert_coercible_variant.
-    assert (subtype v E empty T1 (typ_bot knd_row_all) knd_row_all)
+    assert (subtype v E empty nil nil
+              T1 (typ_bot knd_row_all) knd_row_all)
       as Hs3 by assumption.
     rewrite Hs1.
     rewrite Hs2.
