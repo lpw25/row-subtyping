@@ -22,7 +22,7 @@ Proof.
   induction Hk; introv Heq He1 He2; subst;
     eauto using binds_tenv_weakening,
       type_environment_concat_inv_l;
-    constructor;
+    try constructor;
     match goal with
     | IH : forall E5 : LibEnv.env rng,
         E1 & E4 & ?E6 = E1 & E5 ->
@@ -36,6 +36,7 @@ Proof.
           auto using type_environment_extend
     | _ => auto
     end.
+  - apply_fresh kinding_mu as X; auto.
 Qed.
 
 Lemma kinding_weakening_l : forall E1 E2 E3 T K,
@@ -114,8 +115,22 @@ Lemma kinding_weakening_rec : forall E1 E2 E3 E4 T K,
 Proof.
   introv Hk He1 He2.
   remember (E2 & E4) as E24.
-  induction Hk; subst;
+  generalize dependent E4.
+  induction Hk; introv Heq He2; subst;
     eauto using binds_tenv_weakening, kinding_weakening_assoc.
+  - apply_fresh kinding_mu as X; auto.
+    match goal with
+    | IH : forall X : var,
+        X \notin L ->
+        type_environment E1 ->
+        forall E5 : LibEnv.env rng,
+          E2 & E4 & X ~ rng_only_upper (typ_top K) K = E2 & E5 ->
+          type_environment_extension E1 (E2 & E3 & E5) ->
+          kinding E1 (E2 & E3 & E5) (typ_open_var T X) K |- _ =>
+      rewrite <- concat_assoc;
+        apply IH; autorewrite with rew_env_concat;
+          auto using type_environment_extend
+    end.    
 Qed.
 
 Lemma kinding_weakening_rec_l : forall E1 E2 E3 T K,
@@ -178,7 +193,8 @@ Proof.
   generalize dependent E2.
   generalize dependent E3.
   induction Hk; introv Heq He; subst; eauto using binds_tenv_extend;
-    constructor; autorewrite with rew_env_concat in *; auto.
+    try constructor; autorewrite with rew_env_concat in *; auto.
+  - apply_fresh kinding_mu as X; auto using concat_assoc.
 Qed.
 
 Lemma kinding_extend_empty : forall E1 E2 T K,
@@ -199,6 +215,16 @@ Proof.
   introv Hks He.
   remember (E2 & E3) as E23.
   induction Hks; subst; auto using kinding_extend.
+Qed.
+
+Lemma kindings_extend_empty : forall E1 E2 Ts Ks,
+   kindings E1 E2 Ts Ks -> 
+   type_environment_extension E1 E2 ->
+   kindings (E1 & E2) empty Ts Ks.
+Proof.
+  introv Hk He.
+  apply kindings_extend;
+    autorewrite with rew_env_concat; auto.
 Qed.
 
 (* *************************************************************** *)

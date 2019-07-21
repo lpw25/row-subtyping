@@ -35,6 +35,7 @@ Inductive typ : Type :=
   | typ_ref   : typ -> typ
   | typ_unit : typ
   | typ_prod : typ -> typ -> typ
+  | typ_mu : knd -> typ -> typ
   | typ_top : knd -> typ
   | typ_bot : knd -> typ
   | typ_meet : typ -> typ -> typ
@@ -72,30 +73,49 @@ Fixpoint sch_arity (M : sch) : nat :=
 
 (** Opening a type. *)
 
-Fixpoint typ_open (T : typ) (Us : list typ) : typ :=
+Fixpoint typ_var_open (k : nat) (Us : list typ) (i : nat) (T : typ) : typ :=
+  match k with
+  | 0 => List.nth i Us T
+  | S k =>
+    match i with
+    | 0 => T
+    | S i => typ_var_open k Us i T
+    end
+  end.
+
+Fixpoint typ_open_rec (k : nat) (T : typ) (Us : list typ)
+  {struct T} : typ :=
   match T with
-  | typ_bvar i => List.nth i Us (typ_bvar i)
+  | typ_bvar i => typ_var_open k Us i (typ_bvar i)
   | typ_fvar x => typ_fvar x 
-  | typ_constructor c T => typ_constructor c (typ_open T Us)
+  | typ_constructor c T =>
+    typ_constructor c (typ_open_rec k T Us)
   | typ_or cs1 cs2 T1 T2 =>
-    typ_or cs1 cs2 (typ_open T1 Us) (typ_open T2 Us)
-  | typ_proj cs1 cs2 T => typ_proj cs1 cs2 (typ_open T Us)
-  | typ_variant T => typ_variant (typ_open T Us)
+    typ_or cs1 cs2 (typ_open_rec k T1 Us) (typ_open_rec k T2 Us)
+  | typ_proj cs1 cs2 T =>
+    typ_proj cs1 cs2 (typ_open_rec k T Us)
+  | typ_variant T => typ_variant (typ_open_rec k T Us)
   | typ_arrow T1 T2 =>
-    typ_arrow (typ_open T1 Us) (typ_open T2 Us)
-  | typ_ref T => typ_ref (typ_open T Us)
+    typ_arrow (typ_open_rec k T1 Us) (typ_open_rec k T2 Us)
+  | typ_ref T => typ_ref (typ_open_rec k T Us)
   | typ_unit => typ_unit
   | typ_prod T1 T2 =>
-    typ_prod (typ_open T1 Us) (typ_open T2 Us)
+    typ_prod (typ_open_rec k T1 Us) (typ_open_rec k T2 Us)
+  | typ_mu K T => typ_mu K (typ_open_rec (S k) T Us)
   | typ_top K => typ_top K
   | typ_bot K => typ_bot K
   | typ_meet T1 T2 =>
-    typ_meet (typ_open T1 Us) (typ_open T2 Us)
+    typ_meet (typ_open_rec k T1 Us) (typ_open_rec k T2 Us)
   | typ_join T1 T2 =>
-    typ_join (typ_open T1 Us) (typ_open T2 Us)
+    typ_join (typ_open_rec k T1 Us) (typ_open_rec k T2 Us)
   end.
 
+Definition typ_open T Us := typ_open_rec 0 T Us.
+
 Definition typ_open_vars T Xs := typ_open T (typ_fvars Xs).
+
+Notation typ_open_var T X :=
+  (typ_open_vars T (X :: nil)).
 
 (** Opening a range. *)
 
@@ -150,6 +170,9 @@ Inductive type : typ -> Prop :=
       type T1 -> 
       type T2 -> 
       type (typ_prod T1 T2)
+  | type_mu : forall L T K,
+      (forall X, X \notin L -> type (typ_open_var T X)) -> 
+      type (typ_mu K T)
   | type_top : forall cs,
       type (typ_top cs)
   | type_bot : forall cs,
@@ -255,19 +278,19 @@ Inductive trm : Type :=
   | trm_get : trm -> trm
   | trm_set : trm -> trm -> trm.
 
-Fixpoint var_open (k : nat) (us : list trm) (i : nat) (t : trm) : trm :=
+Fixpoint trm_var_open (k : nat) (us : list trm) (i : nat) (t : trm) : trm :=
   match k with
   | 0 => List.nth i us t
   | S k =>
     match i with
     | 0 => t
-    | S i => var_open k us i t
+    | S i => trm_var_open k us i t
     end
   end.
 
 Fixpoint trm_open_rec (k : nat) (us : list trm) (t : trm) {struct t} : trm :=
   match t with
-  | trm_bvar i  => var_open k us i (trm_bvar i)
+  | trm_bvar i  => trm_var_open k us i (trm_bvar i)
   | trm_fvar x => trm_fvar x 
   | trm_abs t1 => trm_abs (trm_open_rec (S k) us t1) 
   | trm_let t1 t2 =>
@@ -447,50 +470,53 @@ Definition eq_knd k1 k2 :=
   | knd_row _, _ => false
   end.
 
-Fixpoint eq_typ t1 t2 : bool :=
-  match t1, t2 with
+Fixpoint eq_typ T1 T2 : bool :=
+  match T1, T2 with
   | typ_bvar n1, typ_bvar n2 =>
     Nat.eqb n1 n2
   | typ_bvar _, _ => false
-  | typ_fvar v1, typ_fvar v2 =>
-    var_compare v1 v2
+  | typ_fvar X1, typ_fvar X2 =>
+    var_compare X1 X2
   | typ_fvar _, _ => false
-  | typ_constructor c1 t1, typ_constructor c2 t2 =>
-    Nat.eqb c1 c2 && eq_typ t1 t2
+  | typ_constructor c1 T1, typ_constructor c2 T2 =>
+    Nat.eqb c1 c2 && eq_typ T1 T2
   | typ_constructor _ _, _ => false
-  | typ_or csa1 csb1 ta1 tb1, typ_or csa2 csb2 ta2 tb2 =>
+  | typ_or csa1 csb1 Ta1 Tb1, typ_or csa2 csb2 Ta2 Tb2 =>
     CSet.equal csa1 csa2 && CSet.equal csb1 csb2
-    && eq_typ ta1 ta2 && eq_typ tb1 tb2
+    && eq_typ Ta1 Ta2 && eq_typ Tb1 Tb2
   | typ_or _ _ _ _, _ => false
-  | typ_proj csa1 csb1 t1, typ_proj csa2 csb2 t2 =>
+  | typ_proj csa1 csb1 T1, typ_proj csa2 csb2 T2 =>
     CSet.equal csa1 csa2 && CSet.equal csb1 csb2
-    && eq_typ t1 t2
+    && eq_typ T1 T2
   | typ_proj _ _ _, _ => false
-  | typ_variant t1, typ_variant t2 =>
-    eq_typ t1 t2
+  | typ_variant T1, typ_variant T2 =>
+    eq_typ T1 T2
   | typ_variant _, _ => false
-  | typ_arrow ta1 tb1, typ_arrow ta2 tb2 =>
-    eq_typ ta1 ta2 && eq_typ tb1 tb2
+  | typ_arrow Ta1 Tb1, typ_arrow Ta2 Tb2 =>
+    eq_typ Ta1 Ta2 && eq_typ Tb1 Tb2
   | typ_arrow _ _, _ => false
-  | typ_ref t1, typ_ref t2 =>
-    eq_typ t1 t2
+  | typ_ref T1, typ_ref T2 =>
+    eq_typ T1 T2
   | typ_ref _, _ => false
   | typ_unit, typ_unit => true
   | typ_unit, _ => false
-  | typ_prod ta1 tb1, typ_prod ta2 tb2 =>
-    eq_typ ta1 ta2 && eq_typ tb1 tb2
+  | typ_prod Ta1 Tb1, typ_prod Ta2 Tb2 =>
+    eq_typ Ta1 Ta2 && eq_typ Tb1 Tb2
   | typ_prod _ _, _ => false
-  | typ_top k1, typ_top k2 =>
-    eq_knd k1 k2
+  | typ_mu K1 T1, typ_mu K2 T2 =>
+    eq_knd K1 K2 && eq_typ T1 T2
+  | typ_mu _ _, _ => false
+  | typ_top K1, typ_top K2 =>
+    eq_knd K1 K2
   | typ_top _, _ => false
-  | typ_bot k1, typ_bot k2 =>
-    eq_knd k1 k2
+  | typ_bot K1, typ_bot K2 =>
+    eq_knd K1 K2
   | typ_bot _, _ => false
-  | typ_meet ta1 tb1, typ_meet ta2 tb2 =>
-    eq_typ ta1 ta2 && eq_typ tb1 tb2
+  | typ_meet Ta1 Tb1, typ_meet Ta2 Tb2 =>
+    eq_typ Ta1 Ta2 && eq_typ Tb1 Tb2
   | typ_meet _ _, _ => false
-  | typ_join ta1 tb1, typ_join ta2 tb2 =>
-    eq_typ ta1 ta2 && eq_typ tb1 tb2
+  | typ_join Ta1 Tb1, typ_join Ta2 Tb2 =>
+    eq_typ Ta1 Ta2 && eq_typ Tb1 Tb2
   | typ_join _ _, _ => false
   end.
 
@@ -567,6 +593,13 @@ Inductive kinding : tenv -> tenv -> typ -> knd -> Prop :=
       kinding (E1 & E2) empty T1 knd_type -> 
       kinding (E1 & E2) empty T2 knd_type -> 
       kinding E1 E2 (typ_prod T1 T2) knd_type
+  | kinding_mu : forall L E1 E2 T K,
+      kind K ->
+      (forall X,
+        X \notin L ->
+        kinding E1 (E2 & X ~ rng_all K)
+          (typ_open_var T X) K) ->
+      kinding E1 E2 (typ_mu K T) K
   | kinding_top : forall E1 E2 K,
       kind K ->
       kinding E1 E2 (typ_top K) K
@@ -741,7 +774,10 @@ Inductive type_equal_core'
   | type_equal_core_prod_join : forall T1 T2 T3 T4,
       type_equal_core' version_full_subtyping knd_type
         (typ_prod (typ_join T1 T3) (typ_join T2 T4))
-        (typ_join (typ_prod T1 T2) (typ_prod T3 T4)).
+        (typ_join (typ_prod T1 T2) (typ_prod T3 T4))
+  | type_equal_core_unroll : forall v T1 K,
+      type_equal_core' v K
+        (typ_mu K T1) (typ_open T1 ((typ_mu K T1) :: nil)).
 
 Notation type_equal_core v T1 T2 K :=
   (type_equal_core' v K T1 T2).

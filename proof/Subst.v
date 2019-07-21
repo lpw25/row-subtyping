@@ -42,8 +42,9 @@ Fixpoint typ_subst Zs Us (T : typ) {struct T} : typ :=
   | typ_unit => typ_unit
   | typ_prod T1 T2 =>
       typ_prod (typ_subst Zs Us T1) (typ_subst Zs Us T2)
-  | typ_top cs => typ_top cs
-  | typ_bot cs => typ_bot cs
+  | typ_mu K T1 => typ_mu K (typ_subst Zs Us T1)
+  | typ_top K => typ_top K
+  | typ_bot K => typ_bot K
   | typ_meet T1 T2 =>
       typ_meet (typ_subst Zs Us T1) (typ_subst Zs Us T2)
   | typ_join T1 T2 =>
@@ -52,7 +53,6 @@ Fixpoint typ_subst Zs Us (T : typ) {struct T} : typ :=
 
 Definition typ_subst_list Zs Us Ts :=
   List.map (fun T => typ_subst Zs Us T) Ts.
-
 
 (** Length of type list not affected by substitution *)
 
@@ -133,13 +133,38 @@ Proof.
   case_var; auto.
 Qed.
 
-Lemma typ_var_subst_open : forall Xs Us Ts X,
+Lemma typ_var_subst_open : forall Xs Us k Ts X,
   types Us ->
   typ_var_subst Xs Us X =
-  typ_open (typ_var_subst Xs Us X) Ts.
+  typ_open_rec k (typ_var_subst Xs Us X) Ts.
 Proof.
   introv Ht.
-  auto using typ_open_type, type_var_subst.
+  auto using typ_open_rec_type, type_var_subst.
+Qed.
+
+Lemma typ_subst_open_var : forall Xs Us k Ts n T,
+  typ_subst Xs Us
+    (typ_var_open k Ts n T) =
+  typ_var_open k (typ_subst_list Xs Us Ts) n
+    (typ_subst Xs Us T).
+Proof.
+  intros.
+  generalize dependent n.
+  induction k; intros; simpl.
+  - apply typ_subst_nth.
+  - destruct n; auto.
+Qed.
+
+Lemma typ_subst_open_rec : forall Xs Us k T Ts,
+  types Us -> 
+  typ_subst Xs Us (typ_open_rec k T Ts) = 
+   typ_open_rec k (typ_subst Xs Us T) (typ_subst_list Xs Us Ts).
+Proof.
+  introv Ht.
+  generalize dependent k.
+  induction T; intros; simpl; f_equal; auto.
+  - apply typ_subst_open_var.
+  - apply typ_var_subst_open; auto.
 Qed.
 
 Lemma typ_subst_open : forall Xs Us T Ts,
@@ -147,10 +172,10 @@ Lemma typ_subst_open : forall Xs Us T Ts,
   typ_subst Xs Us (typ_open T Ts) = 
    typ_open (typ_subst Xs Us T) (typ_subst_list Xs Us Ts).
 Proof.
-  introv Ht. 
-  induction T; simpl; f_equal; auto.
-  - simpl; rewrite typ_subst_nth; auto.
-  - apply typ_var_subst_open; auto.
+  introv Ht.
+  unfold typ_open.
+  apply typ_subst_open_rec.
+  assumption.
 Qed.
 
 (** Substitution and open_vars for distinct names commute. *)
@@ -254,9 +279,19 @@ Proof.
   introv Htu.
   split.
   - introv Ht.
-    induction T; simpl in Ht; inversion Ht; auto.
+    remember (typ_subst Zs Us T) as Ts.
+    generalize dependent T.
+    induction Ht; intros To Heq;
+      subst; destruct To; simpl in Heq;
+        inversion Heq; subst; auto.
+    + apply_fresh type_mu as Y.
+      assert (Y \notin L) by auto.
+      eauto using typ_subst_open_vars.
   - introv Ht.
-    induction Ht; simpl in *; auto using typ_var_subst_type. 
+    induction Ht; simpl; auto.
+    + apply typ_var_subst_type; auto.
+    + apply_fresh type_mu as Y.
+      rewrite typ_subst_open_vars; auto.
 Qed.
 
 (** List of types are stable by type substitution *)
@@ -820,7 +855,41 @@ Proof.
       apply binds_push_neq; auto.
 Qed.
 
-Lemma tenv_subst_type_environment_extension :
+Lemma tenv_subst_binds_rng : forall X T1 T2 K E Zs Us,
+    binds X (Rng T1 T2 K) E ->
+    binds X
+      (Rng (typ_subst Zs Us T1) (typ_subst Zs Us T2) K)
+      (tenv_subst Zs Us E).
+Proof.
+  introv Hb.
+  apply tenv_subst_binds with (Zs := Zs) (Us := Us) in Hb.
+  auto.
+Qed.
+
+Lemma tenv_subst_type_environment_extension : forall E1 E2 Xs Us,
+    types Us ->
+    type_environment_extension E1 E2 ->
+    type_environment_extension (tenv_subst Xs Us E1)
+      (tenv_subst Xs Us E2).
+Proof.
+  introv Hts He.
+  induction He; autorewrite with rew_tenv_subst; auto.
+  apply type_environment_extension_push;
+    rewrite ?rng_subst_range;
+      autorewrite with rew_tenv_dom; auto.
+Qed.
+
+Lemma tenv_subst_type_environment : forall E1 Xs Us,
+    types Us ->
+    type_environment E1 ->
+    type_environment (tenv_subst Xs Us E1).
+Proof.
+  unfold type_environment; introv Hts He.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  apply tenv_subst_type_environment_extension; assumption.
+Qed.
+
+Lemma tenv_subst_type_environment_extension_singles :
   forall E1 E2 E3 Xs Rs Us,
     types Us ->
     type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
@@ -835,19 +904,27 @@ Proof.
       autorewrite with rew_tenv_dom; auto.
 Qed. 
 
-Lemma tenv_subst_type_environment : forall E1 E2 Xs Rs Us,
+Lemma tenv_subst_type_environment_extension_singles_rec :
+  forall E1 E2 E3 Xs Rs Us,
+    types Us ->
+    type_environment_extension E1 (E2 & Xs ~* Rs & E3) ->
+    type_environment_extension (tenv_subst Xs Us E1)
+      (tenv_subst Xs Us (E2 & E3)).
+Proof.
+  introv Hts He.
+  apply type_environment_remove in He.
+  apply tenv_subst_type_environment_extension; assumption.
+Qed. 
+
+Lemma tenv_subst_type_environment_singles : forall E1 E2 Xs Rs Us,
     types Us ->
     type_environment (E1 & Xs ~* Rs & E2) ->
     type_environment (tenv_subst Xs Us (E1 & E2)).
 Proof.
-  introv Hts He.
-  apply type_environment_remove in He.
-  remember (E1 & E2) as E12.
-  clear HeqE12.
-  induction He; autorewrite with rew_tenv_subst; auto.
-  apply type_environment_extension_push;
-    rewrite ?rng_subst_range;
-      autorewrite with rew_tenv_dom; auto.
+  unfold type_environment; introv Hts He.
+  rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
+  apply tenv_subst_type_environment_extension_singles_rec
+    with (Rs := Rs); auto.
 Qed. 
 
 (* *************************************************************** *)
@@ -1260,8 +1337,9 @@ Qed.
 
 Lemma trm_subst_var_open : forall xs us k n ts t,
     terms us ->
-    trm_subst xs us (var_open k ts n t)
-    = var_open k (trm_subst_list xs us ts) n (trm_subst xs us t).
+    trm_subst xs us (trm_var_open k ts n t)
+    = trm_var_open k (trm_subst_list xs us ts) n
+        (trm_subst xs us t).
 Proof.
   introv Ht.
   generalize dependent n.
@@ -1421,4 +1499,3 @@ Proof.
     introv Hf1 Hf2.
     rewrite trm_subst_open_vars; simpl; auto.
 Qed.
-

@@ -383,6 +383,11 @@ Inductive covariant_inv :
         v E1 E2 T1 (typ_constructor c T2)
   | covariant_inv_unit : forall s v E1 E2 T1,
       covariant_inv ctx_unit s v E1 E2 T1 typ_unit
+  | covariant_inv_mu : forall z s v E1 E2 T1 T2 K,
+      covariant_inv z s v E1 E2 T1
+        (typ_open T2 ((typ_mu K T2) :: nil)) ->
+      K = cov_output_kind z ->
+      covariant_inv z s v E1 E2 T1 (typ_mu K T2)
   | covariant_inv_bot : forall z v E1 E2 T1 T2,
       type_equal v (E1 & E2) empty nil nil T1
         (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
@@ -579,6 +584,23 @@ Proof.
   inversion Hc; subst; eauto.
 Qed.
 
+Lemma covariant_inv_mu_inv :
+  forall z s v E1 E2 T1 T2 K (P : Prop),
+    covariant_inv z s v E1 E2 T1 (typ_mu K T2) ->
+    (s = false ->
+     type_equal v (E1 & E2) empty nil nil T1
+       (typ_bot (cov_input_kind z)) (cov_input_kind z) ->
+     P) ->
+    (K = cov_output_kind z ->
+     covariant_inv z s v E1 E2 T1
+        (typ_open T2 ((typ_mu K T2) :: nil)) ->
+     P) ->
+    P.
+Proof.
+  introv Hc Hp1 Hp2.
+  inversion Hc; subst; eauto.
+Qed.
+
 Lemma covariant_inv_bot_inv :
   forall z s v E1 E2 T1 K (P : Prop),
     covariant_inv z s v E1 E2 T1 (typ_bot K) ->
@@ -674,6 +696,8 @@ Ltac invert_covariant_inv :=
     subst; discriminate_ctx_prod_mismatches
   | H : covariant_inv _ _ _ _ _ _ typ_unit |- _ =>
     apply (covariant_inv_unit_inv H); clear H; intros
+  | H : covariant_inv _ _ _ _ _ _ (typ_mu _ _) |- _ =>
+    apply (covariant_inv_mu_inv H); clear H; intros
   | H : covariant_inv _ _ _ _ _ _ (typ_fvar _) |- _ =>
     apply (covariant_inv_var_inv H); clear H; intros;
     equate_multiple_bindings
@@ -860,6 +884,8 @@ Ltac construct_covariant_inv :=
     apply covariant_inv_prod_right
   | |- covariant_inv _ _ _ _ _ _ (typ_ref _) =>
     apply covariant_inv_ref
+  | |- covariant_inv _ _ _ _ _ _ (typ_mu _ _) =>
+    apply covariant_inv_mu
   | Hb : binds ?X (Rng ?Tl ?Tu _) _
     |- covariant_inv _ _ _ _ _ _ (typ_fvar ?X) =>
     apply covariant_inv_var with (T2 := Tl) (T3 := Tu)
@@ -1019,6 +1045,11 @@ Proof.
   - inversion Hk3; subst.
     assert (not (CSet.In c0 cs1)) by csetdec.
     contradiction.
+  - subst_equal T0.
+    rewrite type_equal_join_identity by auto with kinding.
+    replace (orb s false) with s by ring.
+    auto.
+  - auto using kinding_unroll with wellformed.
   - subst_equal T1.
     rewrite type_equal_join_commutative by auto with kinding.
     rewrite type_equal_join_identity by auto with kinding.
@@ -1200,6 +1231,8 @@ Ltac solve_covariant_inv_side_conditions :=
       inversion Hk'; subst;
       csetdec
     end
+  | |- cov_output_kind ?z = cov_output_kind ?z =>
+    reflexivity
   | |- CSet.In _ _ =>
     invert_kindings_cov;
     csetdec
@@ -2291,6 +2324,11 @@ Inductive contravariant_inv :
         T2 T1 knd_type ->
       contravariant_inv (ctx_constructor_row c cs) s
         version_row_subtyping E1 E2 T1 (typ_constructor c T2)
+  | contravariant_inv_mu : forall z s v E1 E2 T1 T2 K,
+      contravariant_inv z s v E1 E2 T1
+        (typ_open T2 ((typ_mu K T2) :: nil)) ->
+      K = con_output_kind z ->
+      contravariant_inv z s v E1 E2 T1 (typ_mu K T2)
   | contravariant_inv_bot : forall z v E1 E2 T1 T2,
       type_equal v (E1 & E2) empty nil nil
         T1 (typ_top (con_input_kind z)) (con_input_kind z) ->
@@ -2474,6 +2512,23 @@ Proof.
   inversion Hc; subst; eauto.
 Qed.
 
+Lemma contravariant_inv_mu_inv :
+  forall z s v E1 E2 T1 T2 K (P : Prop),
+    contravariant_inv z s v E1 E2 T1 (typ_mu K T2) ->
+    (s = false ->
+     type_equal v (E1 & E2) empty nil nil T1
+       (typ_top (con_input_kind z)) (con_input_kind z) ->
+     P) ->
+    (K = con_output_kind z ->
+     contravariant_inv z s v E1 E2 T1
+        (typ_open T2 ((typ_mu K T2) :: nil)) ->
+     P) ->
+    P.
+Proof.
+  introv Hc Hp1 Hp2.
+  inversion Hc; subst; eauto.
+Qed.
+
 Lemma contravariant_inv_bot_inv :
   forall z s v E1 E2 T1 K (P : Prop),
     contravariant_inv z s v E1 E2 T1 (typ_bot K) ->
@@ -2534,6 +2589,8 @@ Ltac invert_contravariant_inv :=
     apply (contravariant_inv_prod_inv H); clear H; intros;
     subst; discriminate_ctx_prod_row_mismatches;
     discriminate_version
+  | H : contravariant_inv _ _ _ _ _ _ (typ_mu _ _) |- _ =>
+    apply (contravariant_inv_mu_inv H); clear H; intros
   | H : contravariant_inv _ _ _ _ _ _ (typ_fvar _) |- _ =>
     apply (contravariant_inv_var_inv H); clear H; intros;
     equate_multiple_bindings
@@ -2728,6 +2785,8 @@ Ltac construct_contravariant_inv :=
     apply contravariant_inv_prod_right
   | |- contravariant_inv _ _ _ _ _ _ (typ_ref _) =>
     apply contravariant_inv_ref
+  | |- contravariant_inv _ _ _ _ _ _ (typ_mu _ _) =>
+    apply contravariant_inv_mu
   | Hb : binds ?X (Rng ?Tl ?Tu _) _
     |- contravariant_inv _ _ _ _ _ _ (typ_fvar ?X) =>
     apply contravariant_inv_var with (T2 := Tl) (T3 := Tu)
@@ -2885,6 +2944,11 @@ Proof.
   - inversion Hk3; subst.
     assert (not (CSet.In c0 cs1)) by csetdec.
     contradiction.
+  - subst_equal T0.
+    rewrite type_equal_meet_identity by auto with kinding.
+    replace (orb s false) with s by ring.
+    auto.
+  - auto using kinding_unroll with wellformed.
   - subst_equal T1.
     rewrite type_equal_meet_commutative by auto with kinding.
     rewrite type_equal_meet_identity by auto with kinding.
@@ -3056,6 +3120,8 @@ Ltac solve_contravariant_inv_side_conditions :=
       inversion Hk'; subst;
       csetdec
     end
+  | |- con_output_kind ?z = con_output_kind ?z =>
+    reflexivity
   | |- CSet.In _ _ =>
     invert_kindings_con;
     csetdec

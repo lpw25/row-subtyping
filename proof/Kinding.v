@@ -126,6 +126,31 @@ Proof.
 Qed.
 
 (* *************************************************************** *)
+(** Kinding of an unrolling *)
+
+Lemma kinding_unroll : forall E1 E2 T1 K,
+    kinding E1 E2 (typ_mu K T1) K ->
+    type_environment E1 ->
+    type_environment_extension E1 E2 ->
+    kinding E1 E2 (typ_open T1 (typ_mu K T1 :: nil)) K.
+Proof.
+  introv Hk He1 He2.
+  inversion Hk; subst.
+  pick_fresh X.
+  rewrite typ_subst_intro with (Xs := cons X nil);
+    auto with wellformed.
+  rewrite <- tenv_subst_fresh
+    with (E := E1) (Xs := cons X nil) (Us := cons (typ_mu K T1) nil);
+    auto.
+  rewrite <- tenv_subst_fresh
+    with (E := E2) (Xs := cons X nil) (Us := cons (typ_mu K T1) nil);
+    auto.
+  apply kinding_typ_subst_rec_single with (R := rng_all K); auto.
+  rewrite tenv_subst_fresh; auto.
+  rewrite tenv_subst_fresh; auto.
+Qed.
+  
+(* *************************************************************** *)
 (** Kinding from valid type environments *)
 
 Lemma valid_range_from_valid_tenv_rec : forall X v E1 E2 E3 R,

@@ -34,6 +34,16 @@ Proof.
   auto.
 Qed.
 
+Lemma singleton_subset : forall A (X : A) P,
+    X \in P ->
+    subset \{ X } P.
+Proof.
+  unfold subset; introv Hin1 Hin2.
+  rewrite in_singleton in Hin2.
+  rewrite Hin2.
+  assumption.
+Qed.
+
 (* **************************************************** *)
 (** Lemmas about List.map *)
 
@@ -64,6 +74,16 @@ Proof.
   generalize dependent M.
   generalize dependent n.
   induction Xs; introv Hf Hs; destruct n; auto; simpl in *.
+Qed.
+
+Lemma fresh_in : forall L X n Xs,
+    fresh L n Xs ->
+    X \in L ->
+    fresh \{X} n Xs.
+Proof.
+  introv Hf Hin.
+  apply fresh_subset with (L := L); auto.
+  apply singleton_subset; assumption.
 Qed.
 
 Lemma fresh_disjoint : forall L n Xs,

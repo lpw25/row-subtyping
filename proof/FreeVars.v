@@ -22,8 +22,9 @@ Fixpoint typ_fv (T : typ) : vars :=
   | typ_ref T1 => typ_fv T1
   | typ_unit => \{}
   | typ_prod T1 T2 => (typ_fv T1) \u (typ_fv T2)
-  | typ_top cs => \{}
-  | typ_bot cs => \{}
+  | typ_mu K T1 => typ_fv T1
+  | typ_top K => \{}
+  | typ_bot K => \{}
   | typ_meet T1 T2 => (typ_fv T1) \u (typ_fv T2)
   | typ_join T1 T2 => (typ_fv T1) \u (typ_fv T2)
   end.
@@ -233,23 +234,55 @@ Proof.
     eauto.
 Qed.
 
+Lemma typ_open_rec_fv_inv : forall k Us T,
+    subset (typ_fv T) (typ_fv (typ_open_rec k T Us)).
+Proof.
+  intros.
+  generalize dependent k.
+  induction T; intros; simpl;
+    auto using subset_empty_l, subset_refl, subset_union_2.
+Qed.
+
 Lemma typ_open_fv_inv : forall Us T,
     subset (typ_fv T) (typ_fv (typ_open T Us)).
 Proof.
   intros.
-  induction T; simpl;
-    auto using subset_empty_l, subset_refl, subset_union_2.
+  unfold typ_open.
+  apply typ_open_rec_fv_inv.
+Qed.
+
+Lemma typ_var_open_fv : forall k n Us T,
+    subset (typ_fv (typ_var_open k Us n T))
+           (typ_fv T \u typ_fv_list Us).
+Proof.
+  intros.
+  generalize dependent n.
+  induction k; intros; simpl.
+  - apply typ_fv_nth.
+  - destruct n.
+    + apply subset_union_weak_l.
+    + auto.
+Qed.
+
+Lemma typ_open_rec_fv : forall k Us T,
+    subset (typ_fv (typ_open_rec k T Us))
+           (typ_fv T \u typ_fv_list Us).
+Proof.
+  intros.
+  generalize dependent k.
+  induction T; intros; simpl;
+    try rewrite union_distribute with (R := typ_fv_list Us);
+    auto using subset_empty_l, subset_refl, subset_union_weak_l,
+      subset_union_2.
+  apply typ_var_open_fv.
 Qed.
 
 Lemma typ_open_fv : forall Us T,
     subset (typ_fv (typ_open T Us)) (typ_fv T \u typ_fv_list Us).
 Proof.
   intros.
-  induction T; simpl;
-    try rewrite union_distribute with (R := typ_fv_list Us);
-    auto using subset_empty_l, subset_refl, subset_union_weak_l,
-      subset_union_2.
-  apply typ_fv_nth.
+  unfold typ_open.
+  apply typ_open_rec_fv.
 Qed.
 
 Lemma typ_open_fresh_fv : forall Xs n Us T,

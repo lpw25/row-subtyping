@@ -14,8 +14,8 @@ Require Import List LibLN Cofinite Disjoint Utilities
 
 (** Open with nil is the identity. *)
 
-Lemma var_open_nil : forall k n t,
-    var_open k nil n t = t.
+Lemma trm_var_open_nil : forall k n t,
+    trm_var_open k nil n t = t.
 Proof.
   intros.
   generalize dependent n.
@@ -29,7 +29,7 @@ Proof.
   generalize dependent k.
   induction t; intros; simpl;
     rewrite? IHt; rewrite? IHt1; rewrite? IHt2; rewrite? IHt3;
-    rewrite? var_open_nil; auto.
+    rewrite? trm_var_open_nil; auto.
 Qed.
 
 Lemma trm_open_nil : forall t,
@@ -42,9 +42,9 @@ Qed.
 (** Substitution on indices is identity on well-formed
     terms. *)
 
-Lemma var_open_below_domain : forall n k us t,
+Lemma trm_var_open_below_domain : forall n k us t,
     n < k ->
-    var_open k us n t = t.
+    trm_var_open k us n t = t.
 Proof.
   unfold lt.
   introv Hle.
@@ -54,9 +54,9 @@ Proof.
   - destruct n; simpl; auto with arith.
 Qed.
 
-Lemma var_open_above_domain : forall n k us t,
+Lemma trm_var_open_above_domain : forall n k us t,
     n >= k + length us ->
-    var_open k us n t = t.
+    trm_var_open k us n t = t.
 Proof.
   unfold gt, lt.
   introv Hle.
@@ -66,16 +66,16 @@ Proof.
   - destruct n; simpl; auto with arith.
 Qed.
     
-Lemma var_open_rec_core :forall n j vs i us,
+Lemma trm_var_open_rec_core :forall n j vs i us,
     j + length vs <= i ->
-    var_open j vs n (trm_bvar n)
-    = {i ~> us}(var_open j vs n (trm_bvar n)) ->
-    trm_bvar n = var_open i us n (trm_bvar n).
+    trm_var_open j vs n (trm_bvar n)
+    = {i ~> us}(trm_var_open j vs n (trm_bvar n)) ->
+    trm_bvar n = trm_var_open i us n (trm_bvar n).
 Proof.
   introv Hlt Heq.
   destruct (Compare_dec.le_lt_dec (j + length vs) n).
-  - rewrite var_open_above_domain in Heq; auto.
-  - rewrite var_open_below_domain; auto.
+  - rewrite trm_var_open_above_domain in Heq; auto.
+  - rewrite trm_var_open_below_domain; auto.
     Omega.omega.
 Qed.    
 
@@ -87,7 +87,7 @@ Proof.
   induction t; introv Hl Heq; simpl in *;
     assert (S j + length vs <= S i) by Omega.omega;
     assert (S (S j) + length vs <= S (S i)) by Omega.omega;
-    inversion Heq; f_equal; eauto using var_open_rec_core.
+    inversion Heq; f_equal; eauto using trm_var_open_rec_core.
 Qed.
 
 Lemma trm_open_rec : forall t us,
@@ -144,31 +144,101 @@ Qed.
 
 (** Open with nil is the identity. *)
 
+Lemma typ_var_open_nil : forall k n T,
+    typ_var_open k nil n T = T.
+Proof.
+  intros.
+  generalize dependent n.
+  induction k; destruct n; simpl; auto.
+Qed.
+
+Lemma typ_open_rec_nil : forall T k,
+    typ_open_rec k T nil = T.
+Proof.
+  intros.
+  generalize dependent k.
+  induction T; intros; simpl;
+    rewrite? IHT; rewrite? IHT1; rewrite? IHT2;
+    rewrite? typ_var_open_nil; auto.
+Qed.
+
 Lemma typ_open_nil : forall T,
     typ_open T nil = T.
 Proof.
-  intros.
-  induction T; simpl;
-    rewrite? IHT; rewrite? IHT1; rewrite? IHT2; auto.
-  - destruct n; auto.
-Qed.
-
-Lemma typ_open_vars_nil : forall T,
-    typ_open_vars T nil = T.
-Proof.
-  intros.
-  unfold typ_open_vars.
-  apply typ_open_nil.
+  unfold typ_open.
+  auto using typ_open_rec_nil.
 Qed.
 
 (** Open on a type is the identity. *)
+
+Lemma typ_var_open_below_domain : forall n k Us T,
+    n < k ->
+    typ_var_open k Us n T = T.
+Proof.
+  unfold lt.
+  introv Hle.
+  generalize dependent n.
+  induction k; introv Hle.
+  - inversion Hle.
+  - destruct n; simpl; auto with arith.
+Qed.
+
+Lemma typ_var_open_above_domain : forall n k Us T,
+    n >= k + length Us ->
+    typ_var_open k Us n T = T.
+Proof.
+  unfold gt, lt.
+  introv Hle.
+  generalize dependent n.
+  induction k; introv Hle; simpl.
+  - auto using nth_overflow.
+  - destruct n; simpl; auto with arith.
+Qed.
+    
+Lemma typ_var_open_rec_core :forall n j Vs i Us,
+    j + length Vs <= i ->
+    typ_var_open j Vs n (typ_bvar n)
+    = typ_open_rec i (typ_var_open j Vs n (typ_bvar n)) Us ->
+    typ_bvar n = typ_var_open i Us n (typ_bvar n).
+Proof.
+  introv Hlt Heq.
+  destruct (Compare_dec.le_lt_dec (j + length Vs) n).
+  - rewrite typ_var_open_above_domain in Heq; auto.
+  - rewrite typ_var_open_below_domain; auto.
+    Omega.omega.
+Qed.    
+
+Lemma typ_open_rec_core :forall t j Vs i Us,
+    j + length Vs <= i ->
+    typ_open_rec j t Vs =
+      typ_open_rec i (typ_open_rec j t Vs) Us ->
+    t = typ_open_rec i t Us.
+Proof.
+  induction t; introv Hl Heq; simpl in *;
+    assert (S j + length Vs <= S i) by Omega.omega;
+    assert (S (S j) + length Vs <= S (S i)) by Omega.omega;
+    inversion Heq; f_equal; eauto using typ_var_open_rec_core.
+Qed.
+
+Lemma typ_open_rec_type : forall T Us,
+  type T -> forall k, T = typ_open_rec k T Us.
+Proof.
+  introv Htyp.
+  induction Htyp; intros;
+    unfold typ_open in *; simpl; f_equal; auto.
+  - pick_fresh_gen L X.
+    apply typ_open_rec_core
+      with (j := 0) (Vs := (typ_fvar X)::nil);
+      simpl; try Omega.omega; eauto.
+Qed.
 
 Lemma typ_open_type : forall T Us,
   type T -> T = typ_open T Us.
 Proof.
   introv Htyp.
-  induction Htyp; simpl; rewrite <- ? IHHtyp;
-    rewrite <- ? IHHtyp1; rewrite <- ? IHHtyp2; auto.
+  unfold typ_open.
+  apply typ_open_rec_type.
+  assumption.
 Qed.
 
 (* Bounds of ranges are types *)

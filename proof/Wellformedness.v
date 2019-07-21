@@ -18,6 +18,7 @@ Lemma wellformed_kinding : forall E1 E2 T K,
 Proof.
   introv Hk.
   induction Hk; auto.
+  - apply_fresh type_mu as X; auto.
 Qed.
 
 Hint Extern 1 (type ?T) =>

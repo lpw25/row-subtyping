@@ -40,7 +40,7 @@ Qed.
 (* Lemma for applying the inductive hypothesis in
    the contractive recursive cases. *)
 
-Lemma kinding_typ_subst_rec :
+Lemma kinding_typ_subst_ind :
   forall E1 E2 E3 Xs Us Rs T K,
   (type_environment (E1 & Xs ~* Rs & E2 & E3) ->
    type_environment_extension
@@ -71,8 +71,59 @@ Proof.
   rewrite tenv_subst_concat.
   apply kindings_extend;
     autorewrite with rew_env_concat;
-    eauto using tenv_subst_type_environment,
-      tenv_subst_type_environment_extension with wellformed.
+    eauto using tenv_subst_type_environment_singles,
+      tenv_subst_type_environment_extension_singles
+        with wellformed.
+Qed.
+
+Lemma kinding_typ_subst_push :
+  forall E1 E2 E3 Xs Us Rs X L T K,
+    (forall X : var,
+      X \notin L ->
+      type_environment (E1 & Xs ~* Rs & E2) ->
+      type_environment_extension (E1 & Xs ~* Rs & E2)
+        (E3 & X ~ rng_all K) ->
+      (forall E4 : LibEnv.env rng,
+          E1 & Xs ~* Rs & E2 = E1 & Xs ~* Rs & E4 ->
+          kindings (tenv_subst Xs Us (E1 & E4))
+            (tenv_subst Xs Us
+               (E3 & X ~ rng_all K)) Us
+            (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+          kinding (tenv_subst Xs Us (E1 & E4))
+            (tenv_subst Xs Us
+               (E3 & X ~ rng_all K))
+            (typ_subst Xs Us (typ_open_var T X)) K)) ->
+    type_environment (E1 & Xs ~* Rs & E2) ->
+    type_environment_extension (E1 & Xs ~* Rs & E2) E3 ->
+    length Xs = length Rs ->
+    kind K ->
+    kindings (tenv_subst Xs Us (E1 & E2))
+      (tenv_subst Xs Us E3) Us
+      (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+    X \notin (L \u from_list Xs \u dom (E1 & E2 & E3)) ->
+    kinding (tenv_subst Xs Us (E1 & E2))
+      (tenv_subst Xs Us E3 & X ~ rng_all K)
+      (typ_open_var (typ_subst Xs Us T) X) K.
+Proof.
+  introv IH He1 He2 Hl Hknd Hks Hn.
+  rewrite typ_subst_open_vars; auto with wellformed.
+  replace (rng_all K) with (rng_subst Xs Us (rng_all K))
+    by reflexivity.
+  rewrite <- tenv_subst_single.  
+  rewrite <- tenv_subst_concat.
+  apply IH; auto.
+  + apply type_environment_extension_push;
+      autorewrite with rew_tenv_dom; auto.
+  + rewrite tenv_subst_concat with (E2 := X ~ rng_all K).
+    apply kindings_weakening_rec_l;
+      eauto using tenv_subst_type_environment_singles
+        with wellformed.
+    rewrite tenv_subst_single.
+    apply type_environment_extension_push;
+      try rewrite rng_subst_range;
+      autorewrite with rew_tenv_dom;
+      eauto using tenv_subst_type_environment_extension_singles
+        with wellformed.
 Qed.
 
 Lemma kinding_typ_subst : forall E1 E2 E3 Xs Rs Us T K,
@@ -89,7 +140,7 @@ Proof.
   remember (E1 & Xs ~* Rs & E2) as E4.
   generalize dependent E2.
   induction Hk; introv Heq Hks; subst; simpl;
-    eauto using kinding_typ_subst_rec.
+    eauto using kinding_typ_subst_ind.
   - rewrite <- rngs_kinds_subst_list in Hks.
     destruct kinding_typ_subst_var
       with (E1 := E1) (E2 := E3)
@@ -101,6 +152,8 @@ Proof.
     rewrite Heq.
     eapply tenv_subst_binds in Hb.
     eauto.
+  - apply_fresh kinding_mu as X;
+      eauto using kinding_typ_subst_push.
 Qed.
 
 Lemma kinding_typ_subst_l : forall E1 E2 Xs Rs Us T K,
@@ -133,6 +186,127 @@ Proof.
   rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us) in Hrs.
   rewrite <- tenv_subst_empty with (Xs := Xs) (Us := Us).
   apply kinding_typ_subst with Rs; auto.
+Qed.
+
+Lemma kinding_typ_subst_rec_ind : forall E1 E2 E3 Xs Rs Us T K,
+  kinding (E1 & (E2 & Xs ~* Rs & E3)) empty T K ->
+  length Xs = length Rs ->
+  type_environment E1 ->
+  type_environment_extension E1 (E2 & Xs ~* Rs & E3) ->
+  kindings (tenv_subst Xs Us E1) (tenv_subst Xs Us (E2 & E3))
+    Us (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+  kinding (tenv_subst Xs Us E1 & tenv_subst Xs Us (E2 & E3))
+    empty (typ_subst Xs Us T) K.
+Proof.
+  introv Hk Hl He1 He2 Hks.
+  rewrite <- tenv_subst_concat.
+  rewrite concat_assoc.
+  autorewrite with rew_env_concat in Hk.
+  apply type_environment_extend
+    with (E2 := E2 & Xs ~* Rs & E3) in He1 as He4; auto.
+  autorewrite with rew_env_concat in He4.
+  apply kinding_typ_subst_empty with (Rs := Rs); auto.
+  rewrite <- concat_assoc.
+  rewrite tenv_subst_concat.
+  apply kindings_extend_empty; auto.
+  eauto using tenv_subst_type_environment_extension_singles_rec
+    with wellformed.
+Qed.
+
+Lemma kinding_typ_subst_rec_push :
+  forall E1 E2 E3 Xs Us Rs X L T K,
+    (forall X : var,
+      X \notin L ->
+      type_environment E1 ->
+      type_environment_extension E1
+        (E2 & Xs ~* Rs & E3 & X ~ rng_all K) ->
+      (forall E4 : LibEnv.env rng,
+          E2 & Xs ~* Rs & E3 & X ~ rng_all K
+          = E2 & Xs ~* Rs & E4 ->
+          kindings (tenv_subst Xs Us E1)
+            (tenv_subst Xs Us (E2 & E4)) Us
+            (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+          kinding (tenv_subst Xs Us E1)
+            (tenv_subst Xs Us (E2 & E4))
+            (typ_subst Xs Us (typ_open_var T X)) K)) ->
+    type_environment E1 ->
+    type_environment_extension E1 (E2 & Xs ~* Rs & E3) ->
+    length Xs = length Rs ->
+    kind K ->
+    kindings (tenv_subst Xs Us E1)
+      (tenv_subst Xs Us (E2 & E3)) Us
+      (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+    X \notin (L \u from_list Xs \u dom (E1 & E2 & E3)) ->
+    kinding (tenv_subst Xs Us E1)
+      (tenv_subst Xs Us (E2 & E3) & X ~ rng_all K)
+      (typ_open_var (typ_subst Xs Us T) X) K.
+Proof.
+  introv IH He1 He2 Hl Hknd Hks Hn.
+  rewrite typ_subst_open_vars; auto with wellformed.
+  replace (rng_all K) with (rng_subst Xs Us (rng_all K))
+    by reflexivity.
+  rewrite <- tenv_subst_single.  
+  rewrite <- tenv_subst_concat.
+  rewrite <- concat_assoc.
+  apply IH; rewrite? concat_assoc; try reflexivity; try assumption.
+  + auto.
+  + apply type_environment_extension_push;
+      autorewrite with rew_tenv_dom; auto.
+  + rewrite tenv_subst_concat.
+    apply kindings_weakening_rec_l;
+      auto using tenv_subst_type_environment with wellformed.
+    rewrite tenv_subst_single.
+    apply type_environment_extension_push;
+      try rewrite rng_subst_range;
+      autorewrite with rew_tenv_dom;
+      eauto using tenv_subst_type_environment_extension_singles_rec
+        with wellformed.
+Qed.
+
+Lemma kinding_typ_subst_rec : forall E1 E2 E3 Xs Rs Us T K,
+    kinding E1 (E2 & Xs ~* Rs & E3) T K ->
+    length Xs = length Rs ->
+    type_environment E1 ->
+    type_environment_extension E1 (E2 & Xs ~* Rs & E3) ->
+    kindings (tenv_subst Xs Us E1) (tenv_subst Xs Us (E2 & E3))
+      Us (rngs_kinds (rng_subst_list Xs Us Rs)) ->
+    kinding (tenv_subst Xs Us E1) (tenv_subst Xs Us (E2 & E3))
+            (typ_subst Xs Us T) K.
+Proof.
+  introv Hk Hl He1 He2 Hks.
+  remember (E2 & Xs ~* Rs & E3) as E23.
+  generalize dependent E3.
+  induction Hk; introv Heq23 Hks; subst; simpl;
+    eauto using kinding_typ_subst_rec_ind.
+  - destruct (type_environment_middle_singles_inv He2)
+      as [He3 [Hf Hr]]; auto.
+    assert (X \in dom E1) by eauto using get_some_inv.
+    assert (fresh (dom E1) (length Rs) Xs) by auto.
+    assert (fresh \{X} (length Rs) Xs) by eauto using fresh_in.
+    rewrite typ_var_subst_fresh by auto.
+    eauto using tenv_subst_binds_rng.
+  - apply_fresh kinding_mu as X; auto.
+    eauto using kinding_typ_subst_rec_push.
+Qed.
+
+Lemma kinding_typ_subst_rec_single : forall E1 E2 X R U T K,
+  kinding E1 (E2 & X ~ R) T K ->
+  X \notin dom E1 \u dom E2 ->
+  type_environment E1 ->
+  type_environment_extension E1 (E2 & X ~ R) ->
+  kinding
+    (tenv_subst (X :: nil) (U :: nil) E1)
+    (tenv_subst (X :: nil) (U :: nil) E2)
+    U (rng_kind (rng_subst (X :: nil) (U :: nil) R))->
+  kinding
+    (tenv_subst (X :: nil) (U :: nil) E1)
+    (tenv_subst (X :: nil) (U :: nil) E2)
+    (typ_subst (X :: nil) (U :: nil) T) K.
+Proof.
+  introv Hk1 Hn He1 He2 Hk2.
+  rewrite <- concat_empty_r with (E := E2).
+  apply kinding_typ_subst_rec with (Rs := (R :: nil)%list);
+    autorewrite with rew_env_concat; simpl; auto.
 Qed.
 
 (* *************************************************************** *)
@@ -233,16 +407,19 @@ Proof.
   apply kindings_extend;
     autorewrite with rew_env_concat;
     eauto using tenv_subst_type_environment,
-      tenv_subst_type_environment_extension with wellformed.
+      tenv_subst_type_environment_extension_singles with wellformed.
 Qed.  
 
 Lemma type_equal_core_typ_subst :
   forall v Xs Us T1 T2 K,
   type_equal_core v T1 T2 K ->
+  types Us ->
   type_equal_core v (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
 Proof.
-  introv Hte.
+  introv Hte Hts.
   destruct Hte; simpl; auto.
+  - rewrite typ_subst_open; auto.
+    apply type_equal_core_unroll.
 Qed.
 
 Lemma ranging_typ_subst_var :
@@ -307,7 +484,7 @@ Proof.
     auto using type_environment_extend.
   rewrite tenv_subst_concat.
   apply rangings_extend;
-    eauto using tenv_subst_type_environment_extension
+    eauto using tenv_subst_type_environment_extension_singles
     with wellformed.
   rewrite tenv_subst_empty.
   rewrite concat_empty_r.
@@ -359,7 +536,7 @@ Proof.
   - eauto using type_equal_typ_subst_rec.
   - eauto using type_equal_typ_subst_rec.
   - apply type_equal_of_core; eauto using type_equal_core_typ_subst,
-      kinding_typ_subst, rangings_kindings.
+      kinding_typ_subst, rangings_kindings with wellformed.
   - apply type_equal_rec; eauto using kinding_typ_subst,
       rangings_kindings, qenv_subst_in.
   - eauto using kinding_typ_subst, rangings_kindings.
@@ -504,7 +681,8 @@ Proof.
   autorewrite with rew_tenv_subst.
   apply rangings_extend; rewrite? concat_assoc; auto.
   rewrite <- tenv_subst_concat.
-  eauto using tenv_subst_type_environment_extension with wellformed.
+  eauto using tenv_subst_type_environment_extension_singles
+    with wellformed.
 Qed.
 
 Lemma valid_tenv_extension_typ_subst : forall v E1 E2 E3 Xs Rs Us,
@@ -568,8 +746,9 @@ Proof.
   rewrite <- sch_subst_instance_vars; auto with wellformed.
   apply valid_tenv_extension_and_type_typ_subst with Rs;
     eauto using rangings_weakening_rec_empty,
-      tenv_subst_type_environment,
-        tenv_subst_type_environment_extension with wellformed.
+      tenv_subst_type_environment_singles,
+        tenv_subst_type_environment_extension_singles
+      with wellformed.
 Qed.
 
 Lemma valid_scheme_typ_subst : forall v E1 E2 Xs Rs Us M,
@@ -709,7 +888,7 @@ Proof.
   apply scheme_aux_subset with (L2 := L \u from_list Zs) in Hs;
     auto using subset_union_weak_l.
   apply type_environment_push_ranges with (L \u from_list Zs);
-    eauto using tenv_subst_type_environment,
+    eauto using tenv_subst_type_environment_singles,
       type_environment_remove with wellformed;
     autorewrite with rew_sch_arity;
     autorewrite with rew_tenv_subst;
