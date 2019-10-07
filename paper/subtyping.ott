@@ -1,0 +1,638 @@
+metavar termvar, x, f ::=
+metavar typevar, a ::=
+metavar constructor, c ::=
+metavar location, l ::=
+indexvar index, i ::=
+
+grammar
+cset, cs :: 'cset_' ::=
+  | 0                    ::  :: Empty
+      {{ tex \emptyset }}
+  | U                    ::  :: Universe
+      {{ tex \mathcal{U} }}
+  | { c }                ::  :: Singleton
+      {{ tex \{ [[c]] \} }}
+  | - { c }              ::  :: Cosingleton
+      {{ tex \neg \{ [[c]] \} }}
+  | cs \/ cs'            ::  :: Union
+      {{ tex [[cs]] \cup [[cs']] }}
+  | cs /\ cs'            ::  :: Intersection
+      {{ tex [[cs]] \cap [[cs']] }}
+  | ( cs )               :: M:: Parens
+
+kind, K :: 'knd_' ::=
+  | *                     ::  :: Type
+  | cs                    ::  :: Row
+
+type, T :: 'typ_' ::=
+  | a                     ::  :: Var
+  | c of T                ::  :: Constructor
+  | T cs | cs' T'         ::  :: Or
+      {{ tex [[T]] {}_{[[cs]]}|_{[[cs']]} [[T']] }}
+  | T < cs / cs' >        ::  :: Project
+      {{ tex [[T]] \langle [[cs]] / [[cs']] \rangle }}
+  | [ T ]                 ::  :: Variant
+  | T -> T'               ::  :: Arrow
+      {{ tex [[T]] \to [[T']] }}
+  | T ref                 ::  :: Ref
+  | unit                  ::  :: Unit
+  | T * T'                ::  :: Prod
+      {{ tex [[T]] \times [[T']] }}
+  | top K                 ::  :: Top
+      {{ tex \top_{[[K]]} }}
+  | bot K                 ::  :: Bottom
+      {{ tex \bot_{[[K]]} }}
+  | T /\ T'               ::  :: Meet
+      {{ tex [[T]] \sqcap [[T']] }}
+  | T \/ T'               ::  :: Join
+      {{ tex [[T]] \sqcup [[T']] }}
+  | ( T )                 :: M:: Parens
+  | T | T'                :: M:: OrImplicit 
+      {{ tex [[T]] | [[T']] }}
+  | T < cs >              :: M:: ProjectImplicit
+      {{ tex [[T]] \langle [[cs]] \rangle }}
+  | top                   :: M:: TopImplicit
+      {{ tex \top }}
+  | bot                   :: M:: BottomImplicit
+      {{ tex \bot }}
+  | [ T1 / a1 , ... , Ti / ai ] T :: M:: Instantiate
+
+range, R :: 'rng_' ::=
+  | T -- T' : K           ::  :: Range
+      {{ tex [[T]] \text{--} [[T']] : [[K]] }}
+  | > T : K               :: M:: Lower
+  | < T : K               :: M:: Upper
+  | = T : K               :: M:: Exact
+  | K                     :: M:: Kind
+
+type_env, D {{ tex \Delta }} :: 'tenv_' ::=
+  | empty                           ::  :: Empty
+  | D, a : R                        ::  :: Push
+  | a1 : R1 , ... , ai : Ri         :: M:: Singles
+  | D , D'                          :: M:: Concat
+
+scheme, M :: 'sch_' ::=
+  | ( a1 : R1 , ... , ai : Ri ) . T   ::  :: Scheme
+  | T                                 :: M:: Type
+
+env, G {{ tex \Gamma }} :: 'env_' ::=
+  | empty                 ::  :: Empty
+  | G , x : M             ::  :: Push
+
+store_type, P {{ tex \Sigma }} :: 'store_typ_' ::=
+  | empty                 ::  :: Empty
+  | P , l : T             ::  :: Push
+
+term, t :: 'trm_' ::=
+  | x                                             ::  :: Var
+  | fn x . t                                      ::  :: Abs
+      {{ tex \lambda [[x]] . [[t]] }}
+  | t t'                                          ::  :: App
+  | let x = t in t'                               ::  :: Let
+  | c t                                           ::  :: Constructor
+  | match t with c _ as x -> t' | x' -> t'' end   ::  :: Match
+      {{ tex \ottkw{match} \, [[t]] \, \ottkw{with}
+             \, [[c]] \, \_ \, \ottkw{as} \, [[x]] \to [[t']]
+             \, | \, [[x']] \to [[t'']] \ottkw{end} }}
+  | match t with c x -> t' end                    ::  :: Destruct
+      {{ tex \ottkw{match} \, [[t]] \, \ottkw{with}
+             \, [[c]] \, [[x]] \to [[t']] \ottkw{end} }}
+  | match t with end                              ::  :: Absurd
+  | fix f x . t                                   ::  :: Fix
+      {{ tex \ottkw{fix} \, [[f]] \, [[x]] . [[t]] }}
+  | ()                                            ::  :: Unit
+  | t ; t'                                        ::  :: Seq
+  | ( t , t' )                                    ::  :: Prod
+  | fst t                                         ::  :: Fst
+  | snd t                                         ::  :: Snd
+  | l                                             ::  :: Location
+  | ref t                                         ::  :: Ref
+  | ! t                                           ::  :: Get
+  | t := t'                                       ::  :: Set
+  | [ t / x ] t'                                  :: M:: Subst
+  | ( t )                                         :: M:: Parens
+
+store, V {{ tex \sigma }} :: 'store_' ::=
+  | empty                 ::  :: Empty
+  | V + l :-> t           ::  :: Push
+      {{ tex [[V]] + [[l]] \mapsto [[t]] }}
+
+formula :: formula_ ::=  
+  | judgement             ::   :: judgement
+  | formula1 .. formulai  ::   :: dots
+  | cs != 0               ::   :: nonempty
+      {{ tex [[cs]] \neq \emptyset }}
+  | a : R in D            ::   :: in_type_env
+      {{ tex [[a]] : [[R]] \in [[D]] }}
+  | cs /\ cs' = 0         ::   :: disjoint
+      {{ tex [[cs]] \cap [[cs']] = \emptyset }}
+  | cs < cs'              ::   :: subset
+      {{ tex [[cs]] \subseteq [[cs']] }}
+  | x : M in G            ::   :: in_env
+      {{ tex [[x]] : [[M]] \in [[G]] }}
+  | l : T in P            ::   :: in_store_env
+      {{ tex [[l]] : [[T]] \in [[P]] }}
+  | l not in V            ::   :: not_in_store
+      {{ tex [[l]] \notin [[V]] }}
+  | l :-> t in V          ::   :: binding_in_store
+      {{ tex [[l]] \mapsto [[t]] \in [[V]] }}
+  | l in V                ::   :: in_store
+      {{ tex [[l]] \in [[V]] }}
+  | value t               ::   :: value
+  | c == c'               ::   :: equal
+      {{ tex [[c]] = [[c']] }}
+  | c != c'               ::   :: not_equal
+      {{ tex [[c]] \neq [[c']] }}
+
+terminals :: 'terminals_' ::=
+  | |-                    ::  :: turnstile   {{ tex \bm\vdash }}
+  | empty                 ::  :: empty       {{ tex \varepsilon }}
+
+defns
+Typing :: '' ::=
+
+  defn
+  |- K :: :: kind :: 'knd_' by
+
+    ------ :: type
+     |- *
+
+     cs != 0
+    --------- :: row
+     |- cs
+
+  defn
+  D |- T : K :: :: kinding :: 'kinding_' by
+
+     a : T' -- T'' : K in D
+    ------------------------- :: var
+     D |- a : K
+
+     D |- T : *
+    --------------------- :: constructor
+     D |- c of T : { c }
+
+     D |- T : cs
+     D |- T' : cs'
+     cs /\ cs' = 0
+    -------------------------------- :: or
+     D |- T cs | cs' T' : cs \/ cs'
+
+     D |- T : cs
+     cs' != 0
+     cs' < cs
+    --------------------------- :: proj
+     D |- T < cs / cs' > : cs'
+
+     D |- T : U
+    ---------------- :: variant
+     D |- [ T ] : *
+
+     D |- T : *
+     D |- T' : *
+    ------------------ :: arrow
+     D |- T -> T' : *
+
+     D |- T : *
+    ---------------- :: ref
+     D |- T ref : *
+
+    --------------- :: unit
+     D |- unit : *
+
+     D |- T : *
+     D |- T' : *
+    ------------------ :: prod
+     D |- T * T' : *
+
+     |- K
+    ---------------- :: top
+     D |- top K : K
+
+     |- K
+    ---------------- :: bottom
+     D |- bot K : K
+
+     D |- T : K
+     D |- T' : K
+    ------------------ :: meet
+     D |- T /\ T' : K
+
+     D |- T : K
+     D |- T' : K
+    ------------------ :: join
+     D |- T \/ T' : K
+
+  defn
+  T = T' :: :: core_equality :: 'type_equal_core_' by
+
+    ---------------------------------- :: or_commutative
+     T | T' = T' | T
+
+    --------------------------------- :: or_associative
+     T | (T' | T'') = (T | T') | T''
+
+    ------------------------------------ :: or_bottom
+     bot cs | bot cs' = bot (cs \/ cs')
+
+    ------------------------------------ :: or_top
+     top cs | top cs' = top (cs \/ cs')
+
+    -------------------------------------- :: or_proj
+     (T <cs>) | (T <cs'>) = T <cs \/ cs'>
+
+    --------------- :: proj_id
+     T <cs/cs> = T
+
+    ------------------------------------- :: proj_compose
+     T <cs/cs'> <cs'/cs''> = T <cs/cs''>
+
+      cs'' < cs
+    ------------------------------------ :: proj_or_l
+     (T cs | cs' T') <cs''> = T <cs''>
+
+      cs'' < cs'
+    ------------------------------------ :: proj_or_r
+     (T cs | cs' T') <cs''> = T' <cs''>
+
+      cs'' < cs
+      cs''' < cs'
+    ------------------------------------------------------------ :: proj_or_both
+     (T cs | cs' T') <cs'' \/ cs'''> = (T <cs''>) | (T' <cs'''>)
+
+    ------------------- :: meet_commutative
+     T /\ T' = T' /\ T
+
+    ------------------------------------- :: meet_associative
+     T /\ (T' /\ T'') = (T /\ T') /\ T''
+
+    ------------ :: meet_identity
+     T /\ T = T
+
+    -------------------- :: meet_absorption
+     T /\ (T \/ T') = T
+
+    -------------------------------------------- :: meet_distribution
+     T /\ (T' \/ T'') = (T /\ T') \/ (T /\ T'')
+
+    ------------------- :: join_commutative
+     T \/ T' = T' \/ T
+
+    ------------------------------------- :: join_associative
+     T \/ (T' \/ T'') = (T \/ T') \/ T''
+
+    ------------ :: join_identity
+     T \/ T = T
+
+    -------------------- :: join_absorption
+     T \/ (T /\ T') = T
+
+    -------------------------------------------- :: join_distribution
+     T \/ (T' /\ T'') = (T \/ T') /\ (T \/ T'')
+
+    ------------------------------------------------------ :: or_meet
+     (T /\ T') | (T'' /\ T''') = (T | T'') /\ (T' | T''')
+
+    ------------------------------------------------------ :: or_join
+     (T \/ T') | (T'' \/ T''') = (T | T'') \/ (T' | T''')
+
+    ---------------------------------------- :: proj_meet
+     (T /\ T') <cs> = (T <cs>) /\ (T' <cs>)
+
+    ---------------------------------------- :: proj_join
+     (T \/ T') <cs> = (T <cs>) \/ (T' <cs>)
+
+    ------------------------- :: variant_meet
+     [T /\ T'] = [T] /\ [T']
+
+    ------------------------- :: variant_join
+     [T \/ T'] = [T] \/ [T']
+
+    -------------------------------------- :: constructor_meet
+     c of (T /\ T') = (c of T) /\ c of T'
+
+    -------------------------------------- :: constructor_join
+     c of (T \/ T') = (c of T) \/ c of T'
+
+    --------------------------------------------------------- :: arrow_meet
+     (T \/ T') -> (T'' /\ T''') = (T -> T'') /\ (T' -> T''')
+
+    --------------------------------------------------------- :: arrow_join
+     (T /\ T') -> (T'' \/ T''') = (T -> T'') \/ (T' -> T''')
+
+    ------------------------------------------------------ :: prod_meet
+     (T /\ T') * (T'' /\ T''') = (T * T'') /\ (T' * T''')
+
+    ------------------------------------------------------ :: prod_join
+     (T \/ T') * (T'' \/ T''') = (T * T'') \/ (T' * T''')
+
+  defn
+  D |- T = T' : K :: :: equality :: 'type_equal_' by
+
+     D |- T : K
+     D |- T' : K
+     T = T'
+    ------------------------ :: of_core
+     D |- T = T' : K
+
+
+     a : T' -- T'' : K in D
+    ------------------------ :: lower
+     D |- T' = T' /\ a : K
+
+     a : T' -- T'' : K in D
+    ------------------------ :: upper
+     D |- a = a /\ T'' : K
+
+
+  defn
+  D |- T <: T' : K :: :: subtyping :: '' by
+
+     D |- T = T /\ T' : K     
+    ------------------------ :: subtype
+     D |- T <: T' : K
+
+
+  defn
+  D |- R :: :: range :: '' by
+
+     D |- T <: T' : K
+    ------------------ :: range
+     D |- T -- T' : K
+
+  defn
+  D |- D' :: :: type_environment :: 'type_env_' by
+
+    ---------- :: empty
+     D |- empty
+
+     D |- D'
+     D, D' |- R
+    ------------- :: push
+     D |- D', a : R
+
+  defn
+  D |- M :: :: scheme :: '' by
+
+     D |- a1 : R1, ... , ai : Ri
+     D , a1 : R1, ... , ai : Ri |- T : *
+    -------------------------------------- :: scheme
+     D |- ( a1 : R1 , ... , ai : Ri ) . T
+
+  defn
+  D |- T : R :: :: ranging :: '' by
+
+    D |- T' -- T'' : K
+    D |- T' <: T : K
+    D |- T <: T'' : K
+   ----------------------- :: ranging
+    D |- T : T' -- T : K
+
+  defn
+  D |- G :: :: environment :: 'env_' by
+
+    ------------ :: empty
+     D |- empty
+
+     D |- G
+     D |- M
+    --------------- :: push
+     D |- G, x : M
+
+  defn
+  D |- P :: :: store_type :: 'store_type_' by
+
+    ------------ :: empty
+     D |- empty
+
+     D |- P
+     D |- T : *
+    --------------- :: push
+     D |- P, l : T
+
+  defn
+  D ; P ; G |- t : T :: :: typing :: 'typing_' by
+
+     D; P; G |- t : T
+     D |- T <: T' : *
+    ------------------- :: subsumption
+     D; P; G |- t : T'
+    
+     x : (a1 : R1, ... , ai : Ri) . T in G
+     D |- T1 : R1 ... D |- Ti : Ri
+    ---------------------------------------------- :: var
+     D; P; G |- x : [ T1 / a1 , ... , Ti / ai ] T
+
+     D |- T : *
+     D; P; G, x : T |- t : T'
+    ------------------------------- :: abs
+     D; P; G |- fn x . t : T -> T'
+    
+     D; P; G |- t : T -> T'
+     D; P; G |- t' : T
+    ------------------------ :: app
+     D; P; G |- t t' : T'
+
+     value t
+     D |- a1 : R1, ... , ai : Ri
+     D, a1 : R1, ... , ai : Ri ; P; G |- t : T
+     D; P; G, x : (a1 : R1, ... , ai : Ri) . T |- t' : T'
+    ------------------------------------------------------ :: let_val
+     D; P; G |- let x = t in t' : T'
+
+     D; P; G |- t : T
+     D; P; G, x : T |- t' : T'
+    --------------------------------- :: let
+     D; P; G |- let x = t in t' : T'
+
+     D; P; G |- t : T
+    ------------------------------------------ :: constructor
+     D; P; G |- c t : [ (c of T) | bot ]
+
+     D; P; G |- t : [ T ]
+     D; P; G, x : [ T <{c}> | bot ] |- t' : T'
+     D; P; G, x : [ T <-{c}> | bot ] |- t'' : T'
+    ------------------------------------------------------------ :: match
+     D; P; G |- match t with c _ as x -> t' | x' -> t'' end : T'
+
+     D; P; G |- t : [ (c of T) | bot ]
+     D; P; G, x : T |- t' : T'
+    -------------------------------------------- :: destruct
+     D; P; G |- match t with c x -> t' end : T'
+
+     D; P; G |- t : [ bot ]
+     D |- T'' : *
+    ----------------------------------- :: absurd
+     D; P; G |- match t with end : T''
+
+     D |- T : *
+     D |- T' : *
+     D; P; G, f : T -> T', x : T |- t : T''
+    ---------------------------------------- :: fix
+     D; P; G |- fix f x . t : T''
+
+    ---------------------- :: unit
+     D; P; G |- () : unit
+
+     D; P; G |- t : unit
+     D; P; G |- t' : T
+    ---------------------- :: seq
+     D; P; G |- t; t' : T
+
+     D; P; G |- t : T
+     D; P; G |- t' : T'
+    ----------------------------- :: prod
+     D; P; G |- (t, t') : T * T'
+
+     D; P; G |- t : T * T'
+    ---------------------- :: fst
+     D; P; G |- fst t : T
+
+     D; P; G |- t : T * T'
+    ----------------------- :: snd
+     D; P; G |- snd t : T'
+
+     l : T in P
+    ------------------ :: loc
+     D; P; G |- l : T
+
+     D; P; G |- t : T
+    -------------------------- :: ref
+     D; P; G |- ref t : T ref
+
+     D; P; G |- t : T ref
+    ---------------------- :: get
+     D; P; G |- !t : T
+
+     D; P; G |- t : T ref
+     D; P; G |- t' : T
+    --------------------------- :: set
+     D; P; G |- t := t' : unit
+
+defns
+Semantics :: '' ::=
+
+  defn
+  < t , V > --> < t' , V' > :: :: reduction
+  :: 'red_' {{ tex \langle [[t]] , \, [[V]] \rangle \longrightarrow \langle [[t']] , \, [[V']] \rangle }} by
+
+   < t, V > --> < t', V' >
+  ------------------------------------------------------- :: let_1
+   < let x = t in t'', V > --> < let x = t' in t'', V' >
+
+   value t
+  ------------------------------------------------ :: let_2
+   < let x = t in t', V > --> < [ t / x ] t', V >
+
+   < t, V > --> < t', V' >
+  --------------------------------- :: app_1
+   < t t'', V > --> < t' t'', V' >
+
+   value t
+   < t', V > --> < t'', V' >
+  ------------------------------- :: app_2
+   < t t', V > --> < t t'', V' >
+
+   value t'
+  --------------------------------------------- :: app_3
+   < (fn x . t) t', V > --> < [t' / x] t, V >
+
+   value t'
+  --------------------------------------------------------------------- :: app_4
+   < (fix f x . t) t', V > --> < [(fix f x . t) / f] [t' / x] t, V >
+
+   < t, V > --> < t', V' >
+  ----------------------------- :: constructor
+   < c t, V > --> < c t', V' >
+
+   < t, V > --> < t', V' >
+  ------------------------------------------------------------------------------------------------------- :: match_1
+   < match t with c _ as x -> t'' | x' -> t''' end , V > --> < match t' with c _ as x -> t'' | x' -> t''' end, V' >
+
+   c1 == c2
+   value t
+  ------------------------------------------------------------------------------------ :: match_2
+   < match c1 t with c2 _ as x -> t' | x' -> t'' end , V > --> < [ c1 t / x ] t', V >
+
+   c1 != c2
+   value t
+  -------------------------------------------------------------------------------------- :: match_3
+   < match c1 t with c2 _ as x -> t' | x' -> t'' end , V > --> < [ c1 t / x' ] t'', V >
+
+   < t, V > --> < t', V' >
+  ------------------------------------------------------------------------------ :: destruct_1
+   < match t with c x -> t'' end , V > --> < match t' with c x -> t'' end, V' >
+
+   c1 == c2
+   value t
+  ---------------------------------------------------------------- :: destruct_2
+   < match c1 t with c2 x -> t' end , V > --> < [ t / x ] t', V >
+
+   < t, V > --> < t', V' >
+  -------------------------------------------------------- :: absurd
+   < match t with end , V > --> < match t' with end, V' >
+
+   < t, V > --> < t', V' >
+  -------------------------------------- :: seq_1
+   < t ; t'' , V > --> < t' ; t'', V' >
+
+  ---------------------------- :: seq_2
+   < (); t , V > --> < t, V >
+
+   < t, V > --> < t', V' >
+  ---------------------------------------- :: prod_1
+   < (t, t'') , V > --> < (t', t''), V' >
+
+   value t
+   < t', V > --> < t'', V' >
+  -------------------------------------- :: prod_2
+   < (t, t') , V > --> < (t, t''), V' >
+
+   < t, V > --> < t', V' >
+  ---------------------------------- :: fst_1
+   < fst t, V > --> < fst t', V' >
+
+   value t
+   value t'
+  --------------------------------- :: fst_2
+   < fst (t, t'), V > --> < t, V >
+
+   < t, V > --> < t', V' >
+  ---------------------------------- :: snd_1
+   < snd t, V > --> < snd t', V' >
+
+   value t
+   value t'
+  --------------------------------- :: snd_2
+   < snd (t, t'), V > --> < t', V >
+
+   < t, V > --> < t', V' >
+  ---------------------------------- :: ref_1
+   < ref t, V > --> < ref t', V' >
+
+   value t
+   l not in V
+  ----------------------------------------- :: ref_2
+   < ref t, V > --> < l, V + l :-> t >
+
+   < t, V > --> < t', V' >
+  ----------------------------- :: get_1
+   < ! t, V > --> < ! t', V' >
+
+   l :-> t in V
+  ------------------------ :: get_2
+   < !l, V > --> < t, V >
+
+   < t, V > --> < t', V' >
+  --------------------------------------- :: set_1
+   < t := t'', V > --> < t' := t'', V' >
+
+   value t
+   < t', V > --> < t'', V' >
+  ------------------------------------- :: set_2
+   < t := t', V > --> < t := t'', V' >
+
+   value t
+   l in V
+  --------------------------------------- :: set_3
+   < l := t, V > --> < (), V + l :-> t >

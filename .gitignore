@@ -48,3 +48,12 @@ prototype/lexer.ml
 prototype/parserMessages.ml
 prototype/prototype
 prototype/parser.new-messages
+
+### Paper ###
+paper/subtyping-gen.tex
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.pdf
+

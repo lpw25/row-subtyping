@@ -1,0 +1,71 @@
+\documentclass{article}
+\usepackage{supertabular}
+\usepackage{bm}
+\usepackage{mathpartir}
+\usepackage{amsmath,amssymb}
+\usepackage{supertabular}
+\usepackage{geometry}
+\usepackage{ifthen}
+\usepackage{alltt}%hack
+\geometry{a4paper,dvips,twoside,left=22.5mm,right=22.5mm,top=20mm,bottom=30mm}
+\usepackage{color}
+
+\input{subtyping-gen.tex}
+
+\renewcommand{\ottusedrule}[1]{#1 \and}
+\renewenvironment{ottdefnblock}[3][]
+  { \framebox{ \mbox{#2} } \quad \begin{mathpar}#3 }
+  { \end{mathpar} }
+
+\title{Algebraic subtyping with invariance}
+\author{Leo White}
+\date{}
+\begin{document}
+\maketitle
+\begin{abstract}
+  Dolan's \emph{Algebraic subtyping} described for the first time a type
+  system combining parametric polymorphism and subtyping with type
+  inference, principal types and decidable type subsumption. This system
+  has a restriction that type constructors must not be invariant -- they
+  must be either co- or contra-variant in each type parameter. However,
+  existing languages support invariant type constructors and could not
+  easily remove them.
+
+  This paper gives a new presentation of algebriac subtyping that does
+  not require this restriction. Using \emph{type ranges} it allows the
+  type system to have invariance. By adjusting which contexts are
+  invariant, our system becomes a spectrum of type systems with
+  traditional Hindley-Milner at one end (all contexts are invariant) and
+  the original algebraic subtyping at the other (no contexts are
+  invariant). We formalise this presentation in Coq and prove it sound
+  and its type inference principal.
+\end{abstract}
+
+\section{Introduction}
+
+\section{Language}
+\subsection{Grammar}
+\subsubsection{Meta-variables}
+\ottmetavars
+\subsubsection{Productions}
+\ottgrammar
+
+\section{Type inference}
+
+\section{Type subsumption}
+
+\section{Recursive Types}
+
+\section{Simplifying type schemes}
+
+\section{A spectrum of type systems}
+
+\section{Related work}
+
+\appendix
+\section{Typing judgements}
+\ottdefnsTyping
+\section{Operational semantics}
+\ottdefnsSemantics
+\section{Judgements for recursive types}
+\end{document}
