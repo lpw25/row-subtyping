@@ -636,151 +636,148 @@ Inductive version : Type :=
 
 (** Core of the equality relation on types *)
 
-(* inputs: tenv(1), tenv(2), typ(1), typ(2), knd
+(* inputs: typ(1), typ(2)
    subjects:
    outputs: *)
-Inductive type_equal_core'
-  : version -> knd -> typ -> typ -> Prop :=
+Inductive type_equal_core
+  : version -> typ -> typ -> Prop :=
   | type_equal_core_or_commutative :
-      forall v T1 T2 cs1 cs2 cs12,
-      type_equal_core' v (knd_row cs12)
+      forall v T1 T2 cs1 cs2,
+      type_equal_core v
         (typ_or cs1 cs2 T1 T2) (typ_or cs2 cs1 T2 T1)
   | type_equal_core_or_associative :
-      forall v T1 T2 T3 cs1 cs2 cs3 cs12 cs23 cs123,
-      type_equal_core' v (knd_row cs123)
+      forall v T1 T2 T3 cs1 cs2 cs3 cs12 cs23,
+      type_equal_core v
         (typ_or cs1 cs23 T1 (typ_or cs2 cs3 T2 T3))
         (typ_or cs12 cs3 (typ_or cs1 cs2 T1 T2) T3)
   | type_equal_core_or_bot : forall v cs1 cs2 cs12,
-      type_equal_core' v (knd_row cs12)
+      type_equal_core v
         (typ_or cs1 cs2 (typ_bot (knd_row cs1))
                 (typ_bot (knd_row cs2)))
         (typ_bot (knd_row cs12))
   | type_equal_core_or_top : forall v cs1 cs2 cs12,
-      type_equal_core' v (knd_row cs12)
+      type_equal_core v
         (typ_or cs1 cs2 (typ_top (knd_row cs1))
                 (typ_top (knd_row cs2)))
         (typ_top (knd_row cs12))
   | type_equal_core_or_proj :
       forall v T cs1 cs2 cs3 cs23,
-      type_equal_core' v (knd_row cs23)
+      type_equal_core v
         (typ_or cs2 cs3 (typ_proj cs1 cs2 T)
                 (typ_proj cs1 cs3 T))
         (typ_proj cs1 cs23 T)
   | type_equal_core_proj_id : forall v T cs1,
-      type_equal_core' v (knd_row cs1)
+      type_equal_core v
         (typ_proj cs1 cs1 T) T
   | type_equal_core_proj_compose : forall v T cs1 cs2 cs3,
-      type_equal_core' v (knd_row cs3)
+      type_equal_core v
         (typ_proj cs2 cs3 (typ_proj cs1 cs2 T))
         (typ_proj cs1 cs3 T)
   | type_equal_core_proj_or_l :
       forall v T1 T2 cs1 cs2 cs3 cs12,
-      type_equal_core' v (knd_row cs3)
+      type_equal_core v
         (typ_proj cs12 cs3 (typ_or cs1 cs2 T1 T2))
         (typ_proj cs1 cs3 T1)
   | type_equal_core_proj_or_r :
       forall v T1 T2 cs1 cs2 cs3 cs12,
-      type_equal_core' v (knd_row cs3)
+      type_equal_core v
         (typ_proj cs12 cs3 (typ_or cs1 cs2 T1 T2))
         (typ_proj cs2 cs3 T2)
   | type_equal_core_proj_or_both :
       forall v T1 T2 cs1 cs2 cs3 cs4 cs12 cs34,
-      type_equal_core' v (knd_row cs34)
+      type_equal_core v
         (typ_proj cs12 cs34 (typ_or cs1 cs2 T1 T2))
         (typ_or cs3 cs4 (typ_proj cs1 cs3 T1)
                 (typ_proj cs2 cs4 T2))
-  | type_equal_core_meet_commutative : forall v T1 T2 K,
-      type_equal_core' v K (typ_meet T1 T2) (typ_meet T2 T1)
-  | type_equal_core_meet_associative : forall v T1 T2 T3 K,
-      type_equal_core' v K
+  | type_equal_core_meet_commutative : forall v T1 T2,
+      type_equal_core v (typ_meet T1 T2) (typ_meet T2 T1)
+  | type_equal_core_meet_associative : forall v T1 T2 T3,
+      type_equal_core v
         (typ_meet T1 (typ_meet T2 T3))
         (typ_meet (typ_meet T1 T2) T3)
   | type_equal_core_meet_identity : forall v T1 K,
-      type_equal_core' v K (typ_meet T1 (typ_top K)) T1
-  | type_equal_core_meet_absorption : forall v T1 T2 K,
-      type_equal_core' v K (typ_meet T1 (typ_join T1 T2)) T1
+      type_equal_core v (typ_meet T1 (typ_top K)) T1
+  | type_equal_core_meet_absorption : forall v T1 T2,
+      type_equal_core v (typ_meet T1 (typ_join T1 T2)) T1
   | type_equal_core_meet_distribution :
-      forall v T1 T2 T3 K,
-      type_equal_core' v K
+      forall v T1 T2 T3,
+      type_equal_core v
         (typ_meet T1 (typ_join T2 T3))
         (typ_join (typ_meet T1 T2) (typ_meet T1 T3))
-  | type_equal_core_join_commutative : forall v T1 T2 K,
-      type_equal_core' v K (typ_join T1 T2) (typ_join T2 T1)
-  | type_equal_core_join_associative : forall v T1 T2 T3 K,
-      type_equal_core' v K
+  | type_equal_core_join_commutative : forall v T1 T2,
+      type_equal_core v (typ_join T1 T2) (typ_join T2 T1)
+  | type_equal_core_join_associative : forall v T1 T2 T3,
+      type_equal_core v
         (typ_join T1 (typ_join T2 T3))
         (typ_join (typ_join T1 T2) T3)
   | type_equal_core_join_identity : forall v T1 K,
-      type_equal_core' v K (typ_join T1 (typ_bot K)) T1
-  | type_equal_core_join_absorption : forall v T1 T2 K,
-      type_equal_core' v K (typ_join T1 (typ_meet T1 T2)) T1
+      type_equal_core v (typ_join T1 (typ_bot K)) T1
+  | type_equal_core_join_absorption : forall v T1 T2,
+      type_equal_core v (typ_join T1 (typ_meet T1 T2)) T1
   | type_equal_core_join_distribution :
-      forall v T1 T2 T3 K,
-      type_equal_core' v K
+      forall v T1 T2 T3,
+      type_equal_core v
         (typ_join T1 (typ_meet T2 T3))
         (typ_meet (typ_join T1 T2) (typ_join T1 T3))
   | type_equal_core_or_meet :
-      forall v T1 T2 T3 T4 cs1 cs2 cs12,
-      type_equal_core' v (knd_row cs12)
+      forall v T1 T2 T3 T4 cs1 cs2,
+      type_equal_core v
         (typ_or cs1 cs2 (typ_meet T1 T3) (typ_meet T2 T4))
         (typ_meet (typ_or cs1 cs2 T1 T2)
                   (typ_or cs1 cs2 T3 T4))
   | type_equal_core_or_join :
-      forall v T1 T2 T3 T4 cs1 cs2 cs12,
-      type_equal_core' v (knd_row cs12)
+      forall v T1 T2 T3 T4 cs1 cs2,
+      type_equal_core v
         (typ_or cs1 cs2 (typ_join T1 T3) (typ_join T2 T4))
         (typ_join (typ_or cs1 cs2 T1 T2)
                   (typ_or cs1 cs2 T3 T4))
   | type_equal_core_proj_meet : forall v T1 T2 cs1 cs2,
-      type_equal_core' v (knd_row cs2)
+      type_equal_core v
         (typ_proj cs1 cs2 (typ_meet T1 T2))
         (typ_meet (typ_proj cs1 cs2 T1)
                   (typ_proj cs1 cs2 T2))
   | type_equal_core_proj_join : forall v T1 T2 cs1 cs2,
-      type_equal_core' v (knd_row cs2)
+      type_equal_core v
         (typ_proj cs1 cs2 (typ_join T1 T2))
         (typ_join (typ_proj cs1 cs2 T1)
                   (typ_proj cs1 cs2 T2))
   | type_equal_core_variant_meet : forall v T1 T2,
-      type_equal_core' v knd_type
+      type_equal_core v
         (typ_variant (typ_meet T1 T2))
         (typ_meet (typ_variant T1) (typ_variant T2))
   | type_equal_core_variant_join : forall v T1 T2,
-      type_equal_core' v knd_type
+      type_equal_core v
         (typ_variant (typ_join T1 T2))
         (typ_join (typ_variant T1) (typ_variant T2))
-  | type_equal_core_constructor_meet : forall c T1 T2 cs,
-      type_equal_core' version_full_subtyping (knd_row cs)
+  | type_equal_core_constructor_meet : forall c T1 T2,
+      type_equal_core version_full_subtyping
         (typ_constructor c (typ_meet T1 T2))
         (typ_meet (typ_constructor c T1)
                   (typ_constructor c T2))
-  | type_equal_core_constructor_join : forall c T1 T2 cs,
-      type_equal_core' version_full_subtyping (knd_row cs)
+  | type_equal_core_constructor_join : forall c T1 T2,
+      type_equal_core version_full_subtyping
         (typ_constructor c (typ_join T1 T2))
         (typ_join (typ_constructor c T1)
                   (typ_constructor c T2))
   | type_equal_core_arrow_meet : forall T1 T2 T3 T4,
-      type_equal_core' version_full_subtyping knd_type
+      type_equal_core version_full_subtyping
         (typ_arrow (typ_join T1 T3) (typ_meet T2 T4))
         (typ_meet (typ_arrow T1 T2) (typ_arrow T3 T4))
   | type_equal_core_arrow_join : forall T1 T2 T3 T4,
-      type_equal_core' version_full_subtyping knd_type
+      type_equal_core version_full_subtyping
         (typ_arrow (typ_meet T1 T3) (typ_join T2 T4))
         (typ_join (typ_arrow T1 T2) (typ_arrow T3 T4))
   | type_equal_core_prod_meet : forall T1 T2 T3 T4,
-      type_equal_core' version_full_subtyping knd_type
+      type_equal_core version_full_subtyping
         (typ_prod (typ_meet T1 T3) (typ_meet T2 T4))
         (typ_meet (typ_prod T1 T2) (typ_prod T3 T4))
   | type_equal_core_prod_join : forall T1 T2 T3 T4,
-      type_equal_core' version_full_subtyping knd_type
+      type_equal_core version_full_subtyping
         (typ_prod (typ_join T1 T3) (typ_join T2 T4))
         (typ_join (typ_prod T1 T2) (typ_prod T3 T4))
   | type_equal_core_unroll : forall v T1 K,
-      type_equal_core' v K
+      type_equal_core v
         (typ_mu K T1) (typ_open T1 ((typ_mu K T1) :: nil)).
-
-Notation type_equal_core v T1 T2 K :=
-  (type_equal_core' v K T1 T2).
 
 (* Reflexive, symetric, transitive, congruence closure
    of type_equal_core plus variable bounds *)
@@ -874,9 +871,9 @@ Inductive type_equal'
         ((typ_join T1 T2, typ_join T1' T2', K) :: Q2)
         K T2 T2' ->
       type_equal' v E1 E2 Q1 Q2 K (typ_join T1 T2) (typ_join T1' T2')
-  | type_equal_of_core : forall v T1 T1' K,
-      type_equal_core v T1 T1' K ->
-      forall E1 E2 Q1 Q2,
+  | type_equal_of_core : forall v T1 T1',
+      type_equal_core v T1 T1' ->
+      forall E1 E2 Q1 Q2 K,
       kinding E1 E2 T1 K ->
       kinding E1 E2 T1' K ->
       type_equal' v E1 E2 Q1 Q2 K T1 T1'
@@ -1432,7 +1429,7 @@ Definition progress := forall v E P V t T,
 Hint Constructors kind kinds type types range ranges
   ranges_and_type scheme_aux scheme schemes term terms
   type_environment_extension environment store store_type in_qenv
-  kinding kindings type_equal_core' type_equal'
+  kinding kindings type_equal_core type_equal'
   valid_range valid_tenv_rec
   valid_tenv_extension_and_type valid_scheme valid_schemes
   valid_env ranging rangings valid_instance valid_env

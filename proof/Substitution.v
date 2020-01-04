@@ -411,10 +411,10 @@ Proof.
 Qed.  
 
 Lemma type_equal_core_typ_subst :
-  forall v Xs Us T1 T2 K,
-  type_equal_core v T1 T2 K ->
+  forall v Xs Us T1 T2,
+  type_equal_core v T1 T2 ->
   types Us ->
-  type_equal_core v (typ_subst Xs Us T1) (typ_subst Xs Us T2) K.
+  type_equal_core v (typ_subst Xs Us T1) (typ_subst Xs Us T2).
 Proof.
   introv Hte Hts.
   destruct Hte; simpl; auto.

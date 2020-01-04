@@ -12,13 +12,13 @@ Require Import LibLN Utilities Cofinite Disjoint Definitions
 (* ****************************************************** *)
 (** Lifted versions of core equality constructors *)
 
-Definition type_equal_or_commutative v T1 T2 cs1 cs2 cs12 :=
+Definition type_equal_or_commutative v T1 T2 cs1 cs2 :=
   type_equal_of_core
-    (type_equal_core_or_commutative v T1 T2 cs1 cs2 cs12).
+    (type_equal_core_or_commutative v T1 T2 cs1 cs2).
 
-Definition type_equal_or_associative v T1 T2 T3 cs1 cs2 cs3 cs12 cs23 cs123 :=
+Definition type_equal_or_associative v T1 T2 T3 cs1 cs2 cs3 cs12 cs23 :=
   type_equal_of_core
-    (type_equal_core_or_associative v T1 T2 T3 cs1 cs2 cs3 cs12 cs23 cs123).
+    (type_equal_core_or_associative v T1 T2 T3 cs1 cs2 cs3 cs12 cs23).
 
 Definition type_equal_or_bot v cs1 cs2 cs12 :=
   type_equal_of_core
@@ -52,53 +52,53 @@ Definition type_equal_proj_or_both v T1 T2 cs1 cs2 cs3 cs4 cs12 cs34 :=
   type_equal_of_core
     (type_equal_core_proj_or_both v T1 T2 cs1 cs2 cs3 cs4 cs12 cs34).
 
-Definition type_equal_meet_commutative v T1 T2 K :=
+Definition type_equal_meet_commutative v T1 T2 :=
   type_equal_of_core
-    (type_equal_core_meet_commutative v T1 T2 K).
+    (type_equal_core_meet_commutative v T1 T2).
 
-Definition type_equal_meet_associative v T1 T2 T3 K :=
+Definition type_equal_meet_associative v T1 T2 T3 :=
   type_equal_of_core
-    (type_equal_core_meet_associative v T1 T2 T3 K).
+    (type_equal_core_meet_associative v T1 T2 T3).
 
 Definition type_equal_meet_identity v T1 K :=
   type_equal_of_core
     (type_equal_core_meet_identity v T1 K).
 
-Definition type_equal_meet_absorption v T1 T2 K :=
+Definition type_equal_meet_absorption v T1 T2 :=
   type_equal_of_core
-    (type_equal_core_meet_absorption v T1 T2 K).
+    (type_equal_core_meet_absorption v T1 T2).
 
-Definition type_equal_meet_distribution v T1 T2 T3 K :=
+Definition type_equal_meet_distribution v T1 T2 T3 :=
   type_equal_of_core
-    (type_equal_core_meet_distribution v T1 T2 T3 K).
+    (type_equal_core_meet_distribution v T1 T2 T3).
 
-Definition type_equal_join_commutative v T1 T2 K :=
+Definition type_equal_join_commutative v T1 T2 :=
   type_equal_of_core
-    (type_equal_core_join_commutative v T1 T2 K).
+    (type_equal_core_join_commutative v T1 T2).
 
-Definition type_equal_join_associative v T1 T2 T3 K :=
+Definition type_equal_join_associative v T1 T2 T3 :=
   type_equal_of_core
-    (type_equal_core_join_associative v T1 T2 T3 K).
+    (type_equal_core_join_associative v T1 T2 T3).
 
 Definition type_equal_join_identity v T1 K :=
   type_equal_of_core
     (type_equal_core_join_identity v T1 K).
 
-Definition type_equal_join_absorption v T1 T2 K :=
+Definition type_equal_join_absorption v T1 T2 :=
   type_equal_of_core
-    (type_equal_core_join_absorption v T1 T2 K).
+    (type_equal_core_join_absorption v T1 T2).
 
-Definition type_equal_join_distribution v T1 T2 T3 K :=
+Definition type_equal_join_distribution v T1 T2 T3 :=
   type_equal_of_core
-    (type_equal_core_join_distribution v T1 T2 T3 K).
+    (type_equal_core_join_distribution v T1 T2 T3).
 
-Definition type_equal_or_meet v T1 T2 T3 T4 cs1 cs2 cs12 :=
+Definition type_equal_or_meet v T1 T2 T3 T4 cs1 cs2 :=
   type_equal_of_core
-    (type_equal_core_or_meet v T1 T2 T3 T4 cs1 cs2 cs12).
+    (type_equal_core_or_meet v T1 T2 T3 T4 cs1 cs2).
 
-Definition type_equal_or_join v T1 T2 T3 T4 cs1 cs2 cs12 :=
+Definition type_equal_or_join v T1 T2 T3 T4 cs1 cs2 :=
   type_equal_of_core
-    (type_equal_core_or_join v T1 T2 T3 T4 cs1 cs2 cs12).
+    (type_equal_core_or_join v T1 T2 T3 T4 cs1 cs2).
 
 Definition type_equal_proj_meet v T1 T2 cs1 cs2 :=
   type_equal_of_core
@@ -116,13 +116,13 @@ Definition type_equal_variant_join v T1 T2 :=
   type_equal_of_core
     (type_equal_core_variant_join v T1 T2).
 
-Definition type_equal_constructor_meet c T1 T2 cs :=
+Definition type_equal_constructor_meet c T1 T2 :=
   type_equal_of_core
-    (type_equal_core_constructor_meet c T1 T2 cs).
+    (type_equal_core_constructor_meet c T1 T2).
 
-Definition type_equal_constructor_join c T1 T2 cs :=
+Definition type_equal_constructor_join c T1 T2 :=
   type_equal_of_core
-    (type_equal_core_constructor_join c T1 T2 cs).
+    (type_equal_core_constructor_join c T1 T2).
 
 Definition type_equal_arrow_meet T1 T2 T3 T4 :=
   type_equal_of_core

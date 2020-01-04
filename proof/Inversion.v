@@ -1056,16 +1056,6 @@ Proof.
     assumption.
 Qed.
 
-Ltac invert_cov_output_kind_equality Heq :=
-  match type of Heq with
-  | knd_row ?cs1 = cov_output_kind (ctx_constructor ?c ?cs2) =>
-    inversion Heq; subst
-  | knd_row ?cs1 = cov_output_kind ?z =>
-    destruct z; try discriminate;
-    inversion HeqK; subst
-  | _ => idtac
-  end.
-
 Ltac invert_kindings_cov :=
   repeat
     match goal with
@@ -1075,7 +1065,21 @@ Ltac invert_kindings_cov :=
       inversion H; subst; clear H
     | H : kinding _ _ (typ_proj _ _ _) _ |- _ =>
       inversion H; subst; clear H
-    end.
+    | H : kinding _ _ (typ_join _ _) _ |- _ =>
+      inversion H; subst; clear H
+    | H : kinding _ _ (typ_bot _) _ |- _ =>
+      inversion H; subst; clear H
+    | H : kinding _ _ (typ_mu _ _) _ |- _ =>
+      inversion H; subst; clear H
+    end;
+  match goal with
+  | HeqK : knd_row ?cs1 = cov_output_kind (ctx_constructor ?c ?cs2) |- _ =>
+    inversion Heq; subst
+  | HeqK : knd_row ?cs1 = cov_output_kind ?z |- _ =>
+    destruct z; try discriminate;
+    inversion HeqK; subst
+  | _ => idtac
+  end.
 
 Ltac unroll_recursive_eqns :=
   repeat match goal with
@@ -1243,7 +1247,7 @@ Ltac solve_covariant_inv_side_conditions :=
 Lemma type_equal_core_covariant_inv_l :
   forall z s v E1 E2 T1 T2 T3,
     covariant_inv z s v E1 E2 T1 T2 ->
-    type_equal_core v T2 T3 (cov_output_kind z) ->
+    type_equal_core v T2 T3 ->
     valid_covariant_context z ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
@@ -1253,9 +1257,11 @@ Lemma type_equal_core_covariant_inv_l :
     covariant_inv z s v E1 E2 T1 T3.
 Proof.
   introv Hi Hte Hz He1 He2 Hk1 Hk2 Hk3.
-  remember (cov_output_kind z) as K.
-  destruct Hte; invert_covariant_inv;
-    invert_cov_output_kind_equality HeqK; subst;
+  destruct Hte; invert_covariant_inv; subst;
+    construct_covariant_inv; solve_covariant_inv_side_conditions.
+  - invert_kindings_cov.
+    construct_covariant_inv; solve_covariant_inv_side_conditions.
+  - invert_kindings_cov.
     construct_covariant_inv; solve_covariant_inv_side_conditions.
   - invert_kindings_cov.
     assert (not (CSet.In c0 cs2)) by csetdec.
@@ -1286,7 +1292,7 @@ Qed.
 Lemma type_equal_core_covariant_inv_r :
   forall z s v E1 E2 T1 T2 T3,
     covariant_inv z s v E1 E2 T1 T2 ->
-    type_equal_core v T3 T2 (cov_output_kind z) ->
+    type_equal_core v T3 T2 ->
     valid_covariant_context z ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
@@ -1296,9 +1302,15 @@ Lemma type_equal_core_covariant_inv_r :
     covariant_inv z s v E1 E2 T1 T3.
 Proof.
   introv Hi Hte Hz He1 He2 Hk1 Hk2 Hk3.
-  remember (cov_output_kind z) as K.
-  destruct Hte; invert_covariant_inv;
-    invert_cov_output_kind_equality HeqK; subst;
+  destruct Hte; invert_covariant_inv; subst;
+    construct_covariant_inv; solve_covariant_inv_side_conditions.
+  - invert_kindings_cov.
+    construct_covariant_inv; solve_covariant_inv_side_conditions.
+  - invert_kindings_cov.
+    construct_covariant_inv; solve_covariant_inv_side_conditions.
+  - invert_kindings_cov.
+    construct_covariant_inv; solve_covariant_inv_side_conditions.
+  - invert_kindings_cov.
     construct_covariant_inv; solve_covariant_inv_side_conditions.
   - apply covariant_inv_join
       with (s1 := s) (s2 := false)
@@ -1321,7 +1333,9 @@ Proof.
     subst_equal T4.
     rewrite type_equal_join_associative by auto with kinding.
     treflexivity.
-  - rewrite type_equal_join_identity
+  - invert_kindings_cov.
+    construct_covariant_inv; solve_covariant_inv_side_conditions.
+    rewrite type_equal_join_identity
       by auto with kinding wellformed.
     treflexivity.
   - apply covariant_inv_join
@@ -1366,7 +1380,10 @@ Proof.
     subst_equal <- T1.
     rewrite type_equal_meet_absorption
       by auto with kinding.
+    invert_kindings_cov.
     treflexivity.
+  - invert_kindings_cov.
+    easy.
 Qed.
 
 Lemma type_equal_covariant_inv' :
@@ -2955,16 +2972,6 @@ Proof.
     assumption.
 Qed.
 
-Ltac invert_con_output_kind_equality Heq :=
-  match type of Heq with
-  | knd_row ?cs1 = con_output_kind (ctx_constructor_row ?c ?cs2) =>
-    inversion Heq; subst
-  | knd_row ?cs1 = con_output_kind ?z =>
-    destruct z; try discriminate;
-    inversion HeqK; subst
-  | _ => idtac
-  end.
-
 Ltac invert_kindings_con :=
   repeat
     match goal with
@@ -2974,7 +2981,21 @@ Ltac invert_kindings_con :=
       inversion H; subst; clear H
     | H : kinding _ _ (typ_proj _ _ _) _ |- _ =>
       inversion H; subst; clear H
-    end.
+    | H : kinding _ _ (typ_join _ _) _ |- _ =>
+      inversion H; subst; clear H
+    | H : kinding _ _ (typ_bot _) _ |- _ =>
+      inversion H; subst; clear H
+    | H : kinding _ _ (typ_mu _ _) _ |- _ =>
+      inversion H; subst; clear H
+    end;
+  match goal with
+  | HeqK : knd_row ?cs1 = con_output_kind (ctx_constructor_row ?c ?cs2) |- _ =>
+    inversion HeqK; subst
+  | HeqK : knd_row ?cs1 = con_output_kind ?z |- _ =>
+    destruct z; try discriminate;
+    inversion HeqK; subst
+  | _ => idtac
+  end.
 
 Ltac solve_contravariant_inv_side_conditions :=
   try match goal with
@@ -3132,7 +3153,7 @@ Ltac solve_contravariant_inv_side_conditions :=
 Lemma type_equal_core_contravariant_inv_l :
   forall z s v E1 E2 T1 T2 T3,
     contravariant_inv z s v E1 E2 T1 T2 ->
-    type_equal_core v T2 T3 (con_output_kind z) ->
+    type_equal_core v T2 T3 ->
     valid_contravariant_context z ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
@@ -3142,9 +3163,11 @@ Lemma type_equal_core_contravariant_inv_l :
     contravariant_inv z s v E1 E2 T1 T3.
 Proof.
   introv Hi Hte Hz He1 He2 Hk1 Hk2 Hk3.
-  remember (con_output_kind z) as K.
-  destruct Hte; invert_contravariant_inv;
-    invert_con_output_kind_equality HeqK; subst;
+  destruct Hte; invert_contravariant_inv; subst;
+    construct_contravariant_inv; solve_contravariant_inv_side_conditions.
+  - invert_kindings_con.
+    construct_contravariant_inv; solve_contravariant_inv_side_conditions.
+  - invert_kindings_con.
     construct_contravariant_inv; solve_contravariant_inv_side_conditions.
   - invert_kindings_con.
     assert (not (CSet.In c0 cs2)) by csetdec.
@@ -3176,7 +3199,7 @@ Qed.
 Lemma type_equal_core_contravariant_inv_r :
   forall z s v E1 E2 T1 T2 T3,
     contravariant_inv z s v E1 E2 T1 T2 ->
-    type_equal_core v T3 T2 (con_output_kind z) ->
+    type_equal_core v T3 T2 ->
     valid_contravariant_context z ->
     valid_tenv v E1 ->
     valid_tenv_extension v E1 E2 ->
@@ -3186,9 +3209,15 @@ Lemma type_equal_core_contravariant_inv_r :
     contravariant_inv z s v E1 E2 T1 T3.
 Proof.
   introv Hi Hte Hz He1 He2 Hk1 Hk2 Hk3.
-  remember (con_output_kind z) as K.
-  destruct Hte; invert_contravariant_inv;
-    invert_con_output_kind_equality HeqK; subst;
+  destruct Hte; invert_contravariant_inv; subst;
+    construct_contravariant_inv; solve_contravariant_inv_side_conditions.
+  - invert_kindings_con.
+    construct_contravariant_inv; solve_contravariant_inv_side_conditions.
+  - invert_kindings_con.
+    construct_contravariant_inv; solve_contravariant_inv_side_conditions.
+  - invert_kindings_con.
+    construct_contravariant_inv; solve_contravariant_inv_side_conditions.
+  - invert_kindings_con.
     construct_contravariant_inv; solve_contravariant_inv_side_conditions.
   - apply contravariant_inv_join
       with (s1 := s) (s2 := false)
@@ -3211,7 +3240,9 @@ Proof.
     subst_equal T4.
     rewrite type_equal_meet_associative by auto with kinding.
     treflexivity.
-  - rewrite type_equal_meet_identity
+  - invert_kindings_con.
+    construct_contravariant_inv; solve_contravariant_inv_side_conditions.
+    rewrite type_equal_meet_identity
       by auto with kinding wellformed.
     treflexivity.
   - apply contravariant_inv_join
@@ -3257,6 +3288,8 @@ Proof.
     rewrite type_equal_join_absorption
       by auto with kinding.
     treflexivity.
+  - invert_kindings_con.
+    easy.
 Qed.
 
 Lemma type_equal_contravariant_inv' :
