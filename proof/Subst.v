@@ -1261,6 +1261,7 @@ Fixpoint trm_subst (zs : list var) (us : list trm) (t : trm)
   | trm_absurd t1 => trm_absurd (trm_subst zs us t1)
   | trm_fix t1 => trm_fix (trm_subst zs us t1)
   | trm_unit => trm_unit
+  | trm_seq t1 t2 => trm_seq (trm_subst zs us t1) (trm_subst zs us t2)
   | trm_prod t1 t2 => trm_prod (trm_subst zs us t1) (trm_subst zs us t2)
   | trm_fst t1 => trm_fst (trm_subst zs us t1)
   | trm_snd t1 => trm_snd (trm_subst zs us t1)

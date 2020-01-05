@@ -282,6 +282,18 @@ Lemma typing_with_envs_ind :
         valid_store_type E P ->
         C v E D P trm_unit typ_unit) ->
     (forall (v : version) (E : tenv) 
+            (D : env) (P : styp) (T : typ) 
+            (t1 t2 : trm),
+        valid_tenv v E ->
+        valid_tenv_extension v E empty ->
+        valid_env v E D ->
+        valid_store_type E P ->
+        typing v E D P t1 typ_unit ->
+        C v E D P t1 typ_unit ->
+        typing v E D P t2 T ->
+        C v E D P t2 T ->
+        C v E D P (trm_seq t1 t2) T) ->
+    (forall (v : version) (E : tenv) 
             (D : env) (P : styp) (T1 T2 : typ) 
             (t1 t2 : trm),
         valid_tenv v E ->
@@ -361,6 +373,7 @@ Lemma typing_with_envs_ind :
 Proof.
   introv H1 H2 H3 H4 H5 H6 H7 H8 H9 H10.
   introv H11 H12 H13 H14 H15 H16 H17 H18 H19 H20.
+  introv H21.
   introv Htwe.
   destruct Htwe as [He Hd Hp Ht].
   induction Ht;
@@ -371,9 +384,10 @@ Proof.
      | apply H9 with (L := L) (T1 := T1) (T2 := T2) (T3 := T3)
      | apply H10 with (L := L) (T1 := T1) (T2 := T2)
      | apply H11 with (T1 := T1) | apply H12 with (L := L)
-     | apply H13 | apply H14 | apply H15 with (T2 := T2)
-     | apply H16 with (T1 := T1) | apply H17 | apply H18
-     | apply H19 | apply H20 with (T1 := T1) ];
+     | apply H13 | apply H14 | apply H15
+     | apply H16 with (T2 := T2)
+     | apply H17 with (T1 := T1) | apply H18 | apply H19
+     | apply H20 | apply H21 with (T1 := T1) ];
     clear H1 H2 H3 H4 H5 H6 H7 H8 H9 H10
           H11 H12 H13 H14 H15 H16 H17 H18 H19 H20;
     auto.
@@ -678,6 +692,21 @@ Lemma typing_unit_inv :
     C.
 Proof. solve_inv. Qed.
 
+Lemma typing_seq_inv :
+  forall v E D P t1 t2 T (C : Prop),
+    typing v E D P (trm_seq t1 t2) T ->
+    valid_tenv v E ->
+    valid_env v E D ->
+    valid_store_type E P ->
+    (forall T1,
+      coercible v E T1 T ->
+      typing v E D P (trm_seq t1 t2) T1 ->
+      typing v E D P t1 typ_unit ->
+      typing v E D P t2 T1 ->
+      C) ->
+    C.
+Proof. solve_inv. Qed.
+
 Lemma typing_prod_inv :
   forall v E D P t1 t2 T (C : Prop),
     typing v E D P (trm_prod t1 t2) T ->
@@ -800,6 +829,8 @@ Ltac invert_typing Ht He Hd Hp :=
     apply (typing_fix_inv Ht He Hd Hp); intros
   | typing _ _ _ _ trm_unit _ =>
     apply (typing_unit_inv Ht He Hd Hp); intros
+  | typing _ _ _ _ (trm_seq _ _) _ =>
+    apply (typing_seq_inv Ht He Hd Hp); intros
   | typing _ _ _ _ (trm_prod _ _) _ =>
     apply (typing_prod_inv Ht He Hd Hp); intros
   | typing _ _ _ _ (trm_fst _) _ =>

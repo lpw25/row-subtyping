@@ -270,6 +270,7 @@ Inductive trm : Type :=
   | trm_absurd : trm -> trm
   | trm_fix : trm -> trm
   | trm_unit : trm
+  | trm_seq : trm -> trm -> trm
   | trm_prod : trm -> trm -> trm
   | trm_fst : trm -> trm
   | trm_snd : trm -> trm
@@ -309,6 +310,8 @@ Fixpoint trm_open_rec (k : nat) (us : list trm) (t : trm) {struct t} : trm :=
   | trm_absurd t1 => trm_absurd (trm_open_rec k us t1)
   | trm_fix t1 => trm_fix (trm_open_rec (S (S k)) us t1)
   | trm_unit => trm_unit
+  | trm_seq t1 t2 =>
+      trm_seq (trm_open_rec k us t1) (trm_open_rec k us t2)
   | trm_prod t1 t2 =>
       trm_prod (trm_open_rec k us t1) (trm_open_rec k us t2)
   | trm_fst t1 => trm_fst (trm_open_rec k us t1)
@@ -372,6 +375,10 @@ Inductive term : trm -> Prop :=
       term (trm_fix t)
   | term_unit :
       term trm_unit
+  | term_seq : forall t1 t2,
+      term t1 -> 
+      term t2 -> 
+      term (trm_seq t1 t2)
   | term_prod : forall t1 t2,
       term t1 -> 
       term t2 -> 
@@ -1212,6 +1219,10 @@ Inductive typing
       typing v E D P (trm_fix t1) (typ_arrow T1 T2)
   | typing_unit : forall v E D P,
       typing v E D P trm_unit typ_unit
+  | typing_seq : forall v E D P t1 t2 T,
+      typing v E D P t1 typ_unit ->
+      typing v E D P t2 T ->
+      typing v E D P (trm_seq t1 t2) T
   | typing_prod : forall v E D P T1 T2 t1 t2,
       typing v E D P t1 T1 ->
       typing v E D P t2 T2 ->
@@ -1350,6 +1361,11 @@ Inductive red : trm -> sto -> trm -> sto -> Prop :=
   | red_absurd : forall V V' t t',
       red t V t' V' ->
       red (trm_absurd t) V (trm_absurd t') V'
+  | red_seq_1 : forall V V' t1 t1' t2,
+      red t1 V t1' V' -> 
+      red (trm_seq t1 t2) V (trm_seq t1' t2) V'
+  | red_seq_2 : forall V t,
+      red (trm_seq trm_unit t) V t V
   | red_prod_1 : forall V V' t1 t1' t2,
       red t1 V t1' V' -> 
       red (trm_prod t1 t2) V (trm_prod t1' t2) V'

@@ -71,6 +71,7 @@ Fixpoint trm_fv (t : trm) {struct t} : vars :=
   | trm_absurd t1 => trm_fv t1
   | trm_fix t1 => trm_fv t1
   | trm_unit => \{}
+  | trm_seq t1 t2 => (trm_fv t1) \u (trm_fv t2)
   | trm_prod t1 t2 => (trm_fv t1) \u (trm_fv t2)
   | trm_fst t1 => trm_fv t1
   | trm_snd t1 => trm_fv t1

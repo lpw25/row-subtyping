@@ -210,6 +210,18 @@ Proof.
     splits; auto.
     eauto using typing_coercible.
   - invert_typing Ht He Hd Hp.
+    assert (typing v E D P t1 typ_unit) as Ht2 by auto.
+    destruct (IHHr Hst _ Hp Hs _ Ht2)
+      as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
+    exists P'.
+    splits; auto.
+    eauto using typing_coercible, typing_extend_store_type
+      with wellformed.
+  - invert_typing Ht He Hd Hp.
+    exists P.
+    splits; auto.
+    eauto using typing_coercible.
+  - invert_typing Ht He Hd Hp.
     assert (typing v E D P t1 T1) as Ht2 by auto.
     destruct (IHHr Hst _ Hp Hs _ Ht2)
       as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
@@ -421,6 +433,12 @@ Proof.
     rewrite Hs3.
     rewrite type_equal_proj_bot; auto with csetdec.
     sreflexivity.
+  - inversion Htrm; subst.
+    assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
+      as IH1 by auto.   
+    destruct IH1 as [Hv1|[t1' [V1' He1]]]; eauto.
+    eapply invert_value_unit; try eassumption;
+      intros; subst; eauto.
   - inversion Htrm; subst.
     assert (value t1 \/ (exists t1' V1', red t1 V t1' V1'))
       as IH1 by auto.
