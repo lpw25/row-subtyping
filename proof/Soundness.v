@@ -37,6 +37,20 @@ Proof.
   generalize dependent T.
   generalize dependent P.
   induction Hr; introv Hp Hs Ht.
+  - invert_typing Ht He Hd Hp.
+    + assert (value t1) as Hvl by assumption.
+      exfalso.
+      apply (values_do_not_reduce Hvl Hr).
+    + assert (typing v E D P t1 T1) as Ht2 by auto.
+      destruct (IHHr Hst _ Hp Hs _ Ht2)
+        as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
+      exists P'.
+      splits; auto.
+      apply typing_let with (L := L \u dom D \u dom E) (T1 := T1);
+        eauto using output_typing.
+      introv Hn.
+      apply typing_extend_store_type with (P := P);
+        eauto using typing_coercible with wellformed.
   - exists P.
     splits; auto.
     invert_typing Ht He Hd Hp.
@@ -52,20 +66,6 @@ Proof.
       rewrite trm_subst_single_intro with (x := x);
         auto with wellformed.
       apply typing_trm_subst_empty_l with (T2 := T1);
-        eauto using typing_coercible with wellformed.
-  - invert_typing Ht He Hd Hp.
-    + assert (value t1) as Hvl by assumption.
-      exfalso.
-      apply (values_do_not_reduce Hvl Hr).
-    + assert (typing v E D P t1 T1) as Ht2 by auto.
-      destruct (IHHr Hst _ Hp Hs _ Ht2)
-        as [P' [Hex [Hv' [Hst' [Ht' Hs']]]]].
-      exists P'.
-      splits; auto.
-      apply typing_let with (L := L \u dom D \u dom E) (T1 := T1);
-        eauto using output_typing.
-      introv Hn.
-      apply typing_extend_store_type with (P := P);
         eauto using typing_coercible with wellformed.
   - invert_typing Ht He Hd Hp.
     assert (typing v E D P t1 (typ_arrow T1 T2)) as Ht2 by auto.
@@ -467,5 +467,10 @@ Proof.
       destruct IH2 as [Hv2|[t2' [V2' He2]]]; eauto.
     eapply invert_value_ref with (t := t1); try eassumption;
       intros; subst.
-    eauto.
+    eapply typing_loc_inv with (l := l); try eassumption;
+      intros.
+    destruct Hs as [? ? ? ? ? Hsl].
+    destruct (Hsl l).
+    + exfalso; eauto using binds_fresh_inv.
+    + eauto 6 using binds_in_dom.
 Qed.

@@ -1303,16 +1303,17 @@ Inductive typing_store
    subject:
    outputs: trm(2), sto(2) *)
 Inductive red : trm -> sto -> trm -> sto -> Prop :=
-  | red_let_1 : forall V t1 t2,
-      value t1 -> 
-      red (trm_let t1 t2) V (t2 ^^ t1) V
-  | red_let_2 : forall V V' t1 t1' t2,
+  | red_let_1 : forall V V' t1 t1' t2,
       red t1 V t1' V' -> 
       red (trm_let t1 t2) V (trm_let t1' t2) V'
+  | red_let_2 : forall V t1 t2,
+      value t1 -> 
+      red (trm_let t1 t2) V (t2 ^^ t1) V
   | red_app_1 : forall V V' t1 t1' t2,
       red t1 V t1' V' -> 
       red (trm_app t1 t2) V (trm_app t1' t2) V'
   | red_app_2 : forall V V' t1 t2 t2', 
+      value t1 ->
       red t2 V t2' V' ->
       red (trm_app t1 t2) V (trm_app t1 t2') V'
   | red_app_3 : forall V t1 t2, 
@@ -1392,6 +1393,7 @@ Inductive red : trm -> sto -> trm -> sto -> Prop :=
       red (trm_set t1 t2) V (trm_set t1 t2') V'
   | red_set_3 : forall V l t2,
       value t2 ->
+      l \in dom V ->
       red (trm_set (trm_loc l) t2) V trm_unit (V & l ~ t2).
 
 (* ***************************************************** *)
